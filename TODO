@@ -1,0 +1,9 @@
+- add arrow head to parallel arrows
+- undo/redo with Action log
+- space concept: space can contain space (space has name) it's like note just name of space is shown.
+on click of space that space loads to canvas. in the future user can select note/space from some search window
+and insert in current space
+- inverted index implementation for quick search by note content
+- fork/clone (text/size) functionality
+- two types of items: paper note (yellow rectangle), note (white background rounded corners)
+- sqllite load/save
