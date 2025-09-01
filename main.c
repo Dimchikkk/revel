@@ -24,7 +24,7 @@ typedef struct {
     GList *notes;
     GList *connections;
     GtkWidget *drawing_area;
-    GtkWidget *fixed;
+    GtkWidget *overlay; // Changed from fixed to overlay
 } CanvasData;
 
 /* Utility to get connection point coordinates */
@@ -210,13 +210,20 @@ static void on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
                 gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(note->text_view), GTK_WRAP_WORD);
                 gtk_widget_set_size_request(note->text_view, note->width, note->height);
 
-                gtk_fixed_put(GTK_FIXED(data->fixed), note->text_view, note->x, note->y);
+                gtk_overlay_add_overlay(GTK_OVERLAY(data->overlay), note->text_view);
+                gtk_widget_set_halign(note->text_view, GTK_ALIGN_START);
+                gtk_widget_set_valign(note->text_view, GTK_ALIGN_START);
+                gtk_widget_set_margin_start(note->text_view, note->x);
+                gtk_widget_set_margin_top(note->text_view, note->y);
 
                 // Store canvas data reference
                 g_object_set_data(G_OBJECT(note->text_view), "canvas_data", data);
 
-                g_signal_connect(note->text_view, "focus-out-event", G_CALLBACK(finish_edit), note);
-                
+                // Use event controller for focus handling (GTK4)
+                GtkEventController *focus_controller = gtk_event_controller_focus_new();
+                g_signal_connect(focus_controller, "leave", G_CALLBACK(finish_edit), note);
+                gtk_widget_add_controller(note->text_view, focus_controller);
+
                 GtkEventController *key_controller = gtk_event_controller_key_new();
                 g_signal_connect(key_controller, "key-pressed", G_CALLBACK(on_textview_key_press), note);
                 gtk_widget_add_controller(note->text_view, key_controller);
@@ -256,7 +263,8 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
 
             // Move text_view if exists (editing or not)
             if (note->text_view) {
-                gtk_fixed_move(GTK_FIXED(data->fixed), note->text_view, note->x, note->y);
+                gtk_widget_set_margin_start(note->text_view, note->x);
+                gtk_widget_set_margin_top(note->text_view, note->y);
             }
 
             gtk_widget_queue_draw(data->drawing_area);
@@ -307,19 +315,23 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *add_btn = gtk_button_new_with_label("New Note");
     gtk_box_append(GTK_BOX(toolbar), add_btn);
 
-    GtkWidget *fixed = gtk_fixed_new();
-    gtk_box_append(GTK_BOX(vbox), fixed);
+    // Create overlay container for drawing area and text views
+    GtkWidget *overlay = gtk_overlay_new();
+    gtk_widget_set_hexpand(overlay, TRUE);
+    gtk_widget_set_vexpand(overlay, TRUE);
+    gtk_box_append(GTK_BOX(vbox), overlay);
 
     GtkWidget *drawing_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(drawing_area, 800, 600);
-    gtk_fixed_put(GTK_FIXED(fixed), drawing_area, 0, 0);
+    gtk_widget_set_hexpand(drawing_area, TRUE);
+    gtk_widget_set_vexpand(drawing_area, TRUE);
+    gtk_overlay_set_child(GTK_OVERLAY(overlay), drawing_area);
 
     // Create and initialize canvas data
     CanvasData *data = g_new0(CanvasData, 1);
     data->notes = NULL;
     data->connections = NULL;
     data->drawing_area = drawing_area;
-    data->fixed = fixed;
+    data->overlay = overlay; // Store overlay instead of fixed
 
     // Set draw function with data
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), on_draw, data, NULL);
@@ -369,9 +381,9 @@ int main(int argc, char **argv) {
     GtkApplication *app = gtk_application_new("com.example.notecanvas", G_APPLICATION_FLAGS_NONE);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), NULL);
     g_signal_connect(app, "shutdown", G_CALLBACK(on_window_destroy), NULL);
-    
+
     int status = g_application_run(G_APPLICATION(app), argc, argv);
     g_object_unref(app);
-    
+
     return status;
 }
