@@ -1,5 +1,7 @@
 - add arrow head to parallel arrows
 - undo/redo with Action log
+- fix connection / note ordering... connection should have max z-index between two notes it connects.
+while drawing it should be pushed two one array so some note with higher z-index may shadow and hide arrow
 - space concept: space can contain space (space has name) it's like note just name of space is shown.
 on click of space that space loads to canvas. in the future user can select note/space from some search window
 and insert in current space
