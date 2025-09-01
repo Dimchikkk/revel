@@ -1,17 +1,31 @@
 #include <gtk/gtk.h>
 #include <pango/pangocairo.h>
+#include <math.h>
+
+#ifndef MIN
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef ABS
+#define ABS(a) ((a) < 0 ? -(a) : (a))
+#endif
 
 typedef struct {
     int x, y, width, height;
     char *text;
     GtkWidget *text_view;   // in-place editor
     gboolean editing;
-    int z_index; // New: z-index for rendering order
+    int z_index;
 
     // Dragging
     gboolean dragging;
     int drag_offset_x;
     int drag_offset_y;
+
+    // Resizing
+    gboolean resizing;
+    int resize_edge; // 0=tl,1=tr,2=br,3=bl
+    int resize_start_x, resize_start_y;
+    int orig_x, orig_y, orig_width, orig_height;
 } Note;
 
 typedef struct {
@@ -24,16 +38,16 @@ typedef struct {
 typedef struct {
     GList *notes;
     GList *connections;
-    GList *selected_notes;  // Multi-selection support
+    GList *selected_notes;
     GtkWidget *drawing_area;
     GtkWidget *overlay;
-    int next_z_index; // Counter for assigning z-index
+    int next_z_index;
 
     // Selection rectangle
     gboolean selecting;
     int start_x, start_y;
     int current_x, current_y;
-    GdkModifierType modifier_state; // Store modifier state
+    GdkModifierType modifier_state;
 } CanvasData;
 
 /* Utility to get connection point coordinates */
@@ -62,7 +76,7 @@ static void draw_note(cairo_t *cr, Note *note, gboolean is_selected) {
     cairo_set_line_width(cr, 1.5);
     cairo_stroke(cr);
 
-    // Draw connection points
+    // Draw connection points (midpoints of edges)
     for (int i = 0; i < 4; i++) {
         int cx, cy;
         get_connection_point(note, i, &cx, &cy);
@@ -70,6 +84,15 @@ static void draw_note(cairo_t *cr, Note *note, gboolean is_selected) {
         cairo_set_source_rgb(cr, 0.3, 0.3, 0.8);
         cairo_fill(cr);
     }
+
+    // Draw resize handles (corners)
+    /* cairo_set_source_rgb(cr, 0.2, 0.2, 0.2); */
+    /* int size = 8; */
+    /* cairo_rectangle(cr, note->x - size/2, note->y - size/2, size, size); // tl */
+    /* cairo_rectangle(cr, note->x + note->width - size/2, note->y - size/2, size, size); // tr */
+    /* cairo_rectangle(cr, note->x + note->width - size/2, note->y + note->height - size/2, size, size); // br */
+    /* cairo_rectangle(cr, note->x - size/2, note->y + note->height - size/2, size, size); // bl */
+    /* cairo_fill(cr); */
 
     if (!note->editing) {
         // Draw text with Pango
@@ -80,7 +103,7 @@ static void draw_note(cairo_t *cr, Note *note, gboolean is_selected) {
 
         pango_layout_set_text(layout, note->text, -1);
         pango_layout_set_width(layout, (note->width - 10) * PANGO_SCALE);
-        pango_layout_set_wrap(layout, PANGO_WRAP_WORD);
+        pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
         pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
 
         cairo_move_to(cr, note->x + 5, note->y + 5);
@@ -158,6 +181,24 @@ static void on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     }
 }
 
+/* --- Resize support --- */
+static int pick_resize_handle(Note *note, int x, int y) {
+    int size = 8;
+    struct { int px, py; } handles[4] = {
+        {note->x, note->y}, // tl
+        {note->x + note->width, note->y}, // tr
+        {note->x + note->width, note->y + note->height}, // br
+        {note->x, note->y + note->height} // bl
+    };
+
+    for (int i = 0; i < 4; i++) {
+        if (abs(x - handles[i].px) <= size && abs(y - handles[i].py) <= size) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /* Finish editing */
 static void finish_edit(GtkWidget *widget, gpointer user_data) {
     Note *note = (Note*)user_data;
@@ -178,11 +219,16 @@ static void finish_edit(GtkWidget *widget, gpointer user_data) {
     note->editing = FALSE;
     gtk_widget_hide(note->text_view);
 
-    // Get the drawing area from the note's text view data
     CanvasData *data = g_object_get_data(G_OBJECT(note->text_view), "canvas_data");
     if (data && data->drawing_area) {
         gtk_widget_queue_draw(data->drawing_area);
     }
+}
+
+/* wrapper for focus "leave" */
+static void on_text_view_focus_leave(GtkEventController *controller, gpointer user_data) {
+    Note *note = (Note*)user_data;
+    finish_edit(NULL, note);
 }
 
 /* Handle Enter key in TextView */
@@ -256,6 +302,30 @@ static void on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
     Note *note = pick_note(data, (int)x, (int)y);
 
     if (note) {
+        // Check resize handle first
+        int rh = pick_resize_handle(note, (int)x, (int)y);
+        if (rh >= 0) {
+            // Start resizing
+            if (!(data->modifier_state & GDK_SHIFT_MASK)) {
+                clear_selection(data);
+            }
+            if (!is_note_selected(data, note)) {
+                data->selected_notes = g_list_append(data->selected_notes, note);
+            }
+
+            bring_note_to_front(data, note);
+
+            note->resizing = TRUE;
+            note->resize_edge = rh;
+            note->resize_start_x = (int)x;
+            note->resize_start_y = (int)y;
+            note->orig_x = note->x;
+            note->orig_y = note->y;
+            note->orig_width = note->width;
+            note->orig_height = note->height;
+            return;
+        }
+
         int cp = pick_connection_point(note, (int)x, (int)y);
 
         // Handle connection point click
@@ -300,11 +370,12 @@ static void on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
                 // Store canvas data reference
                 g_object_set_data(G_OBJECT(note->text_view), "canvas_data", data);
 
-                // Use event controller for focus handling (GTK4)
+                // Focus leave -> finish edit
                 GtkEventController *focus_controller = gtk_event_controller_focus_new();
-                g_signal_connect(focus_controller, "leave", G_CALLBACK(finish_edit), note);
+                g_signal_connect(focus_controller, "leave", G_CALLBACK(on_text_view_focus_leave), note);
                 gtk_widget_add_controller(note->text_view, focus_controller);
 
+                // Key handling for Enter
                 GtkEventController *key_controller = gtk_event_controller_key_new();
                 g_signal_connect(key_controller, "key-pressed", G_CALLBACK(on_textview_key_press), note);
                 gtk_widget_add_controller(note->text_view, key_controller);
@@ -361,12 +432,48 @@ static void on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
 static void on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    // Handle dragging of selected notes
-    gboolean any_note_dragging = FALSE;
+    // Handle resizing or dragging of notes
     for (GList *l = data->notes; l != NULL; l = l->next) {
         Note *note = (Note*)l->data;
+
+        if (note->resizing) {
+            int dx = (int)x - note->resize_start_x;
+            int dy = (int)y - note->resize_start_y;
+            switch (note->resize_edge) {
+                case 0: // tl
+                    note->x = note->orig_x + dx;
+                    note->y = note->orig_y + dy;
+                    note->width = note->orig_width - dx;
+                    note->height = note->orig_height - dy;
+                    break;
+                case 1: // tr
+                    note->y = note->orig_y + dy;
+                    note->width = note->orig_width + dx;
+                    note->height = note->orig_height - dy;
+                    break;
+                case 2: // br
+                    note->width = note->orig_width + dx;
+                    note->height = note->orig_height + dy;
+                    break;
+                case 3: // bl
+                    note->x = note->orig_x + dx;
+                    note->width = note->orig_width - dx;
+                    note->height = note->orig_height + dy;
+                    break;
+            }
+            if (note->width < 50) note->width = 50;
+            if (note->height < 30) note->height = 30;
+
+            if (note->text_view) {
+                gtk_widget_set_margin_start(note->text_view, note->x);
+                gtk_widget_set_margin_top(note->text_view, note->y);
+                gtk_widget_set_size_request(note->text_view, note->width, note->height);
+            }
+            gtk_widget_queue_draw(data->drawing_area);
+            return;
+        }
+
         if (note->dragging) {
-            any_note_dragging = TRUE;
             int dx = (int)x - note->x - note->drag_offset_x;
             int dy = (int)y - note->y - note->drag_offset_y;
 
@@ -384,12 +491,12 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
             }
 
             gtk_widget_queue_draw(data->drawing_area);
-            break;
+            return;
         }
     }
 
     // Handle selection rectangle
-    if (data->selecting && !any_note_dragging) {
+    if (data->selecting) {
         data->current_x = (int)x;
         data->current_y = (int)y;
         gtk_widget_queue_draw(data->drawing_area);
@@ -428,10 +535,11 @@ static void on_release(GtkGestureClick *gesture, int n_press, double x, double y
         }
     }
 
-    // Stop dragging all notes
+    // Stop dragging and resizing all notes
     for (GList *l = data->notes; l != NULL; l = l->next) {
         Note *note = (Note*)l->data;
         note->dragging = FALSE;
+        note->resizing = FALSE;
     }
 
     gtk_widget_queue_draw(data->drawing_area);
@@ -446,20 +554,49 @@ static void on_add_note(GtkButton *button, gpointer user_data) {
     note->y = 50;
     note->width = 200;
     note->height = 150;
-    note->text = g_strdup("Double-click to edit this note.\nDrag to move.");
+    note->text = g_strdup("Double-click to edit this note.\nDrag to move.\nDrag corners to resize.");
     note->text_view = NULL;
     note->editing = FALSE;
     note->dragging = FALSE;
+    note->resizing = FALSE;
     note->z_index = data->next_z_index++; // Assign and increment z-index
 
     data->notes = g_list_append(data->notes, note);
     gtk_widget_queue_draw(data->drawing_area);
 }
 
+static void on_app_shutdown(GApplication *app, gpointer user_data) {
+    CanvasData *data = g_object_get_data(G_OBJECT(app), "canvas_data");
+    if (data) {
+        // Cleanup notes
+        for (GList *l = data->notes; l != NULL; l = l->next) {
+            Note *note = (Note*)l->data;
+            if (note->text) g_free(note->text);
+            if (note->text_view && GTK_IS_WIDGET(note->text_view) && gtk_widget_get_parent(note->text_view)) {
+              gtk_widget_unparent(note->text_view);
+            }
+            g_free(note);
+        }
+        g_list_free(data->notes);
+
+        // Cleanup connections
+        for (GList *l = data->connections; l != NULL; l = l->next) {
+            g_free(l->data);
+        }
+        g_list_free(data->connections);
+
+        // Cleanup selected notes list
+        g_list_free(data->selected_notes);
+
+        g_free(data);
+        g_object_set_data(G_OBJECT(app), "canvas_data", NULL);
+    }
+}
+
 static void on_activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *window = gtk_application_window_new(app);
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
-    gtk_window_set_title(GTK_WINDOW(window), "Note Canvas with Connections and Multi-Select");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1000, 700);
+    gtk_window_set_title(GTK_WINDOW(window), "Note Canvas with Connections, Multi-Select and Resizing");
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_window_set_child(GTK_WINDOW(window), vbox);
@@ -509,40 +646,16 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     // Connect add button with data
     g_signal_connect(add_btn, "clicked", G_CALLBACK(on_add_note), data);
 
-    // Store data in window for cleanup
-    g_object_set_data(G_OBJECT(window), "canvas_data", data);
+    // Store data in app for cleanup on shutdown
+    g_object_set_data(G_OBJECT(app), "canvas_data", data);
 
-    gtk_widget_show(window);
-}
-
-static void on_window_destroy(GtkWidget *window, gpointer user_data) {
-    CanvasData *data = g_object_get_data(G_OBJECT(window), "canvas_data");
-    if (data) {
-        // Cleanup notes
-        for (GList *l = data->notes; l != NULL; l = l->next) {
-            Note *note = (Note*)l->data;
-            g_free(note->text);
-            g_free(note);
-        }
-        g_list_free(data->notes);
-
-        // Cleanup connections
-        for (GList *l = data->connections; l != NULL; l = l->next) {
-            g_free(l->data);
-        }
-        g_list_free(data->connections);
-
-        // Cleanup selected notes list
-        g_list_free(data->selected_notes);
-
-        g_free(data);
-    }
+    gtk_window_present(GTK_WINDOW(window));
 }
 
 int main(int argc, char **argv) {
     GtkApplication *app = gtk_application_new("com.example.notecanvas", G_APPLICATION_FLAGS_NONE);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), NULL);
-    g_signal_connect(app, "shutdown", G_CALLBACK(on_window_destroy), NULL);
+    g_signal_connect(app, "shutdown", G_CALLBACK(on_app_shutdown), NULL);
 
     int status = g_application_run(G_APPLICATION(app), argc, argv);
     g_object_unref(app);
