@@ -8,4 +8,6 @@ and insert in current space
 - inverted index implementation for quick search by note content
 - fork/clone (text/size) functionality
 - two types of items: paper note (yellow rectangle), note (white background rounded corners)
+- insert image from clipboard
 - sqllite load/save
+- infinite canvas
