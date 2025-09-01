@@ -6,6 +6,7 @@ typedef struct {
     char *text;
     GtkWidget *text_view;   // in-place editor
     gboolean editing;
+    int z_index; // New: z-index for rendering order
 
     // Dragging
     gboolean dragging;
@@ -23,8 +24,16 @@ typedef struct {
 typedef struct {
     GList *notes;
     GList *connections;
+    GList *selected_notes;  // Multi-selection support
     GtkWidget *drawing_area;
-    GtkWidget *overlay; // Changed from fixed to overlay
+    GtkWidget *overlay;
+    int next_z_index; // Counter for assigning z-index
+
+    // Selection rectangle
+    gboolean selecting;
+    int start_x, start_y;
+    int current_x, current_y;
+    GdkModifierType modifier_state; // Store modifier state
 } CanvasData;
 
 /* Utility to get connection point coordinates */
@@ -38,9 +47,13 @@ static void get_connection_point(Note *note, int point, int *cx, int *cy) {
 }
 
 /* Draw the note and text */
-static void draw_note(cairo_t *cr, Note *note) {
+static void draw_note(cairo_t *cr, Note *note, gboolean is_selected) {
     // Draw background
-    cairo_set_source_rgb(cr, 1, 1, 0.8);
+    if (is_selected) {
+        cairo_set_source_rgb(cr, 0.8, 0.8, 1.0); // Light blue for selected notes
+    } else {
+        cairo_set_source_rgb(cr, 1, 1, 0.8); // Light yellow for unselected notes
+    }
     cairo_rectangle(cr, note->x, note->y, note->width, note->height);
     cairo_fill_preserve(cr);
 
@@ -78,6 +91,23 @@ static void draw_note(cairo_t *cr, Note *note) {
     }
 }
 
+/* Check if note is selected */
+static gboolean is_note_selected(CanvasData *data, Note *note) {
+    for (GList *l = data->selected_notes; l != NULL; l = l->next) {
+        if (l->data == note) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* Compare function for sorting notes by z-index */
+static gint compare_notes_by_z_index(gconstpointer a, gconstpointer b) {
+    const Note *note_a = (const Note*)a;
+    const Note *note_b = (const Note*)b;
+    return note_a->z_index - note_b->z_index;
+}
+
 /* Draw canvas */
 static void on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
@@ -100,10 +130,31 @@ static void on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
         cairo_stroke(cr);
     }
 
-    // Draw notes
-    for (GList *l = data->notes; l != NULL; l = l->next) {
+    // Sort notes by z-index (lowest first) for rendering
+    GList *sorted_notes = g_list_copy(data->notes);
+    sorted_notes = g_list_sort(sorted_notes, compare_notes_by_z_index);
+
+    // Draw notes in z-index order
+    for (GList *l = sorted_notes; l != NULL; l = l->next) {
         Note *note = (Note*)l->data;
-        draw_note(cr, note);
+        draw_note(cr, note, is_note_selected(data, note));
+    }
+
+    g_list_free(sorted_notes);
+
+    // Draw selection rectangle if selecting
+    if (data->selecting) {
+        cairo_set_source_rgba(cr, 0.5, 0.5, 1.0, 0.3); // Semi-transparent blue
+        cairo_rectangle(cr,
+                       MIN(data->start_x, data->current_x),
+                       MIN(data->start_y, data->current_y),
+                       ABS(data->current_x - data->start_x),
+                       ABS(data->current_y - data->start_y));
+        cairo_fill_preserve(cr);
+
+        cairo_set_source_rgb(cr, 0.2, 0.2, 1.0); // Blue border
+        cairo_set_line_width(cr, 1);
+        cairo_stroke(cr);
     }
 }
 
@@ -146,16 +197,23 @@ static gboolean on_textview_key_press(GtkEventControllerKey *controller, guint k
     return FALSE;
 }
 
-/* Pick note at position */
+/* Pick note at position (considering z-index - highest z-index on top wins) */
 static Note* pick_note(CanvasData *data, int x, int y) {
+    Note *selected_note = NULL;
+    int highest_z_index = -1;
+
     for (GList *l = data->notes; l != NULL; l = l->next) {
         Note *note = (Note*)l->data;
         if (x >= note->x && x <= note->x + note->width &&
             y >= note->y && y <= note->y + note->height) {
-            return note;
+            // Select the note with the highest z-index at this position
+            if (note->z_index > highest_z_index) {
+                selected_note = note;
+                highest_z_index = note->z_index;
+            }
         }
     }
-    return NULL;
+    return selected_note;
 }
 
 /* Pick connection point */
@@ -169,11 +227,31 @@ static int pick_connection_point(Note *note, int x, int y) {
     return -1;
 }
 
+/* Bring note to front (highest z-index) */
+static void bring_note_to_front(CanvasData *data, Note *note) {
+    note->z_index = data->next_z_index++;
+    gtk_widget_queue_draw(data->drawing_area);
+}
+
+/* Clear selection */
+static void clear_selection(CanvasData *data) {
+    if (data->selected_notes) {
+        g_list_free(data->selected_notes);
+        data->selected_notes = NULL;
+    }
+}
+
 /* Mouse press: drag, edit, or create connection */
 static void on_button_press(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
     static Note *connection_start = NULL;
     static int connection_start_point = -1;
+
+    // Get the event to check modifier state
+    GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
+    if (event) {
+        data->modifier_state = gdk_event_get_modifier_state(event);
+    }
 
     Note *note = pick_note(data, (int)x, (int)y);
 
@@ -200,6 +278,9 @@ static void on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             gtk_widget_queue_draw(data->drawing_area);
             return;
         }
+
+        // Bring note to front when clicked
+        bring_note_to_front(data, note);
 
         // Double-click: start editing
         if (n_press == 2) {
@@ -239,37 +320,79 @@ static void on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             return;
         }
 
-        // Single click: start dragging
+        // Single click: handle selection and start dragging
         if (!note->editing) {
+            // Clear selection if not holding shift
+            if (!(data->modifier_state & GDK_SHIFT_MASK)) {
+                clear_selection(data);
+            }
+
+            // Add note to selection if not already selected
+            if (!is_note_selected(data, note)) {
+                data->selected_notes = g_list_append(data->selected_notes, note);
+            }
+
+            // Start dragging
             note->dragging = TRUE;
             note->drag_offset_x = (int)x - note->x;
             note->drag_offset_y = (int)y - note->y;
         }
     } else {
+        // Clicked on empty space - start selection rectangle
         connection_start = NULL;
         connection_start_point = -1;
+
+        // Clear selection if not holding shift
+        if (!(data->modifier_state & GDK_SHIFT_MASK)) {
+            clear_selection(data);
+        }
+
+        data->selecting = TRUE;
+        data->start_x = (int)x;
+        data->start_y = (int)y;
+        data->current_x = (int)x;
+        data->current_y = (int)y;
     }
+
+    gtk_widget_queue_draw(data->drawing_area);
 }
 
-/* Mouse motion: drag note */
+/* Mouse motion: drag note or update selection rectangle */
 static void on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
+    // Handle dragging of selected notes
+    gboolean any_note_dragging = FALSE;
     for (GList *l = data->notes; l != NULL; l = l->next) {
         Note *note = (Note*)l->data;
         if (note->dragging) {
-            note->x = (int)x - note->drag_offset_x;
-            note->y = (int)y - note->drag_offset_y;
+            any_note_dragging = TRUE;
+            int dx = (int)x - note->x - note->drag_offset_x;
+            int dy = (int)y - note->y - note->drag_offset_y;
 
-            // Move text_view if exists (editing or not)
-            if (note->text_view) {
-                gtk_widget_set_margin_start(note->text_view, note->x);
-                gtk_widget_set_margin_top(note->text_view, note->y);
+            // Move all selected notes
+            for (GList *sel = data->selected_notes; sel != NULL; sel = sel->next) {
+                Note *selected_note = (Note*)sel->data;
+                selected_note->x += dx;
+                selected_note->y += dy;
+
+                // Move text_view if exists
+                if (selected_note->text_view) {
+                    gtk_widget_set_margin_start(selected_note->text_view, selected_note->x);
+                    gtk_widget_set_margin_top(selected_note->text_view, selected_note->y);
+                }
             }
 
             gtk_widget_queue_draw(data->drawing_area);
             break;
         }
+    }
+
+    // Handle selection rectangle
+    if (data->selecting && !any_note_dragging) {
+        data->current_x = (int)x;
+        data->current_y = (int)y;
+        gtk_widget_queue_draw(data->drawing_area);
     }
 }
 
@@ -277,10 +400,41 @@ static void on_motion(GtkEventControllerMotion *controller, double x, double y, 
 static void on_release(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
+    // Finalize selection rectangle
+    if (data->selecting) {
+        data->selecting = FALSE;
+
+        // Calculate selection rectangle
+        int sel_x = MIN(data->start_x, data->current_x);
+        int sel_y = MIN(data->start_y, data->current_y);
+        int sel_width = ABS(data->current_x - data->start_x);
+        int sel_height = ABS(data->current_y - data->start_y);
+
+        // Select notes that intersect with the selection rectangle
+        for (GList *iter = data->notes; iter != NULL; iter = iter->next) {
+            Note *note = (Note*)iter->data;
+
+            // Check if note intersects with selection rectangle
+            if (note->x + note->width >= sel_x &&
+                note->x <= sel_x + sel_width &&
+                note->y + note->height >= sel_y &&
+                note->y <= sel_y + sel_height) {
+
+                // Add to selection if not already selected
+                if (!is_note_selected(data, note)) {
+                    data->selected_notes = g_list_append(data->selected_notes, note);
+                }
+            }
+        }
+    }
+
+    // Stop dragging all notes
     for (GList *l = data->notes; l != NULL; l = l->next) {
         Note *note = (Note*)l->data;
         note->dragging = FALSE;
     }
+
+    gtk_widget_queue_draw(data->drawing_area);
 }
 
 /* Add a new note */
@@ -296,6 +450,7 @@ static void on_add_note(GtkButton *button, gpointer user_data) {
     note->text_view = NULL;
     note->editing = FALSE;
     note->dragging = FALSE;
+    note->z_index = data->next_z_index++; // Assign and increment z-index
 
     data->notes = g_list_append(data->notes, note);
     gtk_widget_queue_draw(data->drawing_area);
@@ -304,7 +459,7 @@ static void on_add_note(GtkButton *button, gpointer user_data) {
 static void on_activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *window = gtk_application_window_new(app);
     gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
-    gtk_window_set_title(GTK_WINDOW(window), "Note Canvas with Connections");
+    gtk_window_set_title(GTK_WINDOW(window), "Note Canvas with Connections and Multi-Select");
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_window_set_child(GTK_WINDOW(window), vbox);
@@ -330,8 +485,12 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     CanvasData *data = g_new0(CanvasData, 1);
     data->notes = NULL;
     data->connections = NULL;
+    data->selected_notes = NULL;
     data->drawing_area = drawing_area;
-    data->overlay = overlay; // Store overlay instead of fixed
+    data->overlay = overlay;
+    data->next_z_index = 1; // Start z-index from 1
+    data->selecting = FALSE;
+    data->modifier_state = 0;
 
     // Set draw function with data
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), on_draw, data, NULL);
@@ -372,6 +531,9 @@ static void on_window_destroy(GtkWidget *window, gpointer user_data) {
             g_free(l->data);
         }
         g_list_free(data->connections);
+
+        // Cleanup selected notes list
+        g_list_free(data->selected_notes);
 
         g_free(data);
     }
