@@ -683,7 +683,7 @@ static void on_app_shutdown(GApplication *app, gpointer user_data) {
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
   gtk_window_set_default_size(GTK_WINDOW(window), 1000, 700);
-  gtk_window_set_title(GTK_WINDOW(window), "Note Canvas with Connections, Multi-Select and Resizing");
+  gtk_window_set_title(GTK_WINDOW(window), "velo2");
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
   gtk_window_set_child(GTK_WINDOW(window), vbox);
