@@ -6,9 +6,9 @@
 #include "connection.h"
 
 typedef struct {
-    GList *notes;
+    GList *elements;
     GList *connections;
-    GList *selected_notes;
+    GList *selected_elements;
     GtkWidget *drawing_area;
     GtkWidget *overlay;
     int next_z_index;
@@ -34,10 +34,13 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
 void canvas_on_leave(GtkEventControllerMotion *controller, gpointer user_data);
 void canvas_on_add_note(GtkButton *button, gpointer user_data);
 void canvas_on_app_shutdown(GApplication *app, gpointer user_data);
-Note* canvas_pick_note(CanvasData *data, int x, int y);
-gboolean canvas_is_note_selected(CanvasData *data, Note *note);
 void canvas_clear_selection(CanvasData *data);
 void canvas_update_cursor(CanvasData *data, int x, int y);
 void canvas_set_cursor(CanvasData *data, GdkCursor *cursor);
+Element* canvas_pick_element(CanvasData *data, int x, int y);
+gboolean canvas_is_element_selected(CanvasData *data, Element *element);
+void canvas_clear_selection(CanvasData *data);
+void canvas_on_add_paper_note(GtkButton *button, gpointer user_data);
+void canvas_on_add_note(GtkButton *button, gpointer user_data);
 
 #endif

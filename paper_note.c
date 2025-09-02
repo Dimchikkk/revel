@@ -1,4 +1,4 @@
-#include "note.h"
+#include "paper_note.h"
 #include "canvas.h"
 #include <pango/pangocairo.h>
 #include <math.h>
@@ -7,22 +7,22 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
-static ElementVTable note_vtable = {
-    .draw = note_draw,
-    .get_connection_point = note_get_connection_point,
-    .pick_resize_handle = note_pick_resize_handle,
-    .pick_connection_point = note_pick_connection_point,
-    .start_editing = note_start_editing,
-    .finish_editing = note_finish_editing,
-    .update_position = note_update_position,
-    .update_size = note_update_size,
-    .free = note_free
+static ElementVTable paper_note_vtable = {
+    .draw = paper_note_draw,
+    .get_connection_point = paper_note_get_connection_point,
+    .pick_resize_handle = paper_note_pick_resize_handle,
+    .pick_connection_point = paper_note_pick_connection_point,
+    .start_editing = paper_note_start_editing,
+    .finish_editing = paper_note_finish_editing,
+    .update_position = paper_note_update_position,
+    .update_size = paper_note_update_size,
+    .free = paper_note_free
 };
 
-Note* note_create(int x, int y, int width, int height, const char *text, int z_index) {
-    Note *note = g_new0(Note, 1);
-    note->base.type = ELEMENT_NOTE;
-    note->base.vtable = &note_vtable;
+PaperNote* paper_note_create(int x, int y, int width, int height, const char *text, int z_index) {
+    PaperNote *note = g_new0(PaperNote, 1);
+    note->base.type = ELEMENT_PAPER_NOTE;
+    note->base.vtable = &paper_note_vtable;
     note->base.x = x;
     note->base.y = y;
     note->base.width = width;
@@ -34,67 +34,47 @@ Note* note_create(int x, int y, int width, int height, const char *text, int z_i
     return note;
 }
 
-void note_on_text_view_focus_leave(GtkEventController *controller, gpointer user_data) {
-    Note *note = (Note*)user_data;
-    note_finish_editing((Element*)note);
+void paper_note_on_text_view_focus_leave(GtkEventController *controller, gpointer user_data) {
+    PaperNote *note = (PaperNote*)user_data;
+    paper_note_finish_editing((Element*)note);
 }
 
-gboolean note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
-    Note *note = (Note*)user_data;
+gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
+    PaperNote *note = (PaperNote*)user_data;
     if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
         if (state & GDK_CONTROL_MASK) return FALSE;
-        note_finish_editing((Element*)note);
+        paper_note_finish_editing((Element*)note);
         return TRUE;
     }
     return FALSE;
 }
 
-void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
-    Note *note = (Note*)element;
-    double radius = 12.0;
-    double x = element->x;
-    double y = element->y;
-    double width = element->width;
-    double height = element->height;
+void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
+    PaperNote *note = (PaperNote*)element;
 
-    // Create rounded rectangle path
-    cairo_new_path(cr);
-    cairo_move_to(cr, x + radius, y);
-    cairo_line_to(cr, x + width - radius, y);
-    cairo_arc(cr, x + width - radius, y + radius, radius, -M_PI/2, 0);
-    cairo_line_to(cr, x + width, y + height - radius);
-    cairo_arc(cr, x + width - radius, y + height - radius, radius, 0, M_PI/2);
-    cairo_line_to(cr, x + radius, y + height);
-    cairo_arc(cr, x + radius, y + height - radius, radius, M_PI/2, M_PI);
-    cairo_line_to(cr, x, y + radius);
-    cairo_arc(cr, x + radius, y + radius, radius, M_PI, 3*M_PI/2);
-    cairo_close_path(cr);
+    cairo_rectangle(cr, element->x, element->y, element->width, element->height);
+    cairo_clip(cr);
 
-    // Fill with white background
     if (is_selected) {
-        cairo_set_source_rgb(cr, 0.9, 0.9, 1.0); // Light blue when selected
+        cairo_set_source_rgb(cr, 0.8, 0.8, 1.0);
     } else {
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // White background
+        cairo_set_source_rgb(cr, 1, 1, 0.8);
     }
+    cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_fill_preserve(cr);
 
-    // Draw border
-    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7); // Gray border
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.3);
     cairo_set_line_width(cr, 1.5);
     cairo_stroke(cr);
 
-    // Draw connection points (only when selected)
-    if (is_selected) {
-        for (int i = 0; i < 4; i++) {
-            int cx, cy;
-            note_get_connection_point(element, i, &cx, &cy);
-            cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
-            cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
-            cairo_fill(cr);
-        }
+    for (int i = 0; i < 4; i++) {
+        int cx, cy;
+        paper_note_get_connection_point(element, i, &cx, &cy);
+        cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
+        cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
+        cairo_fill(cr);
     }
 
-    // Draw text if not editing
     if (!note->editing) {
         PangoLayout *layout = pango_cairo_create_layout(cr);
         PangoFontDescription *font_desc = pango_font_description_from_string("Sans 12");
@@ -102,31 +82,32 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         pango_font_description_free(font_desc);
 
         pango_layout_set_text(layout, note->text, -1);
-        pango_layout_set_width(layout, (element->width - 20) * PANGO_SCALE);
+        pango_layout_set_width(layout, (element->width - 10) * PANGO_SCALE);
         pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
         pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
 
         int text_width, text_height;
         pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
-        // Set text color to dark gray/black
-        cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-        
-        if (text_height <= element->height - 20) {
-            cairo_move_to(cr, element->x + 10, element->y + 10);
+        if (text_height <= element->height - 10) {
+            cairo_move_to(cr, element->x + 5, element->y + 5);
+            cairo_set_source_rgb(cr, 0, 0, 0);
             pango_cairo_show_layout(cr, layout);
         } else {
             pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
-            pango_layout_set_height(layout, (element->height - 20) * PANGO_SCALE);
-            cairo_move_to(cr, element->x + 10, element->y + 10);
+            pango_layout_set_height(layout, (element->height - 10) * PANGO_SCALE);
+            cairo_move_to(cr, element->x + 5, element->y + 5);
+            cairo_set_source_rgb(cr, 0, 0, 0);
             pango_cairo_show_layout(cr, layout);
         }
 
         g_object_unref(layout);
     }
+
+    cairo_reset_clip(cr);
 }
 
-void note_get_connection_point(Element *element, int point, int *cx, int *cy) {
+void paper_note_get_connection_point(Element *element, int point, int *cx, int *cy) {
     switch(point) {
     case 0: *cx = element->x + element->width/2; *cy = element->y; break;
     case 1: *cx = element->x + element->width; *cy = element->y + element->height/2; break;
@@ -135,7 +116,7 @@ void note_get_connection_point(Element *element, int point, int *cx, int *cy) {
     }
 }
 
-int note_pick_resize_handle(Element *element, int x, int y) {
+int paper_note_pick_resize_handle(Element *element, int x, int y) {
     int size = 8;
     struct { int px, py; } handles[4] = {
         {element->x, element->y},
@@ -152,18 +133,18 @@ int note_pick_resize_handle(Element *element, int x, int y) {
     return -1;
 }
 
-int note_pick_connection_point(Element *element, int x, int y) {
+int paper_note_pick_connection_point(Element *element, int x, int y) {
     for (int i = 0; i < 4; i++) {
         int cx, cy;
-        note_get_connection_point(element, i, &cx, &cy);
+        paper_note_get_connection_point(element, i, &cx, &cy);
         int dx = x - cx, dy = y - cy;
         if (dx * dx + dy * dy < 36) return i;
     }
     return -1;
 }
 
-void note_start_editing(Element *element, GtkWidget *overlay) {
-    Note *note = (Note*)element;
+void paper_note_start_editing(Element *element, GtkWidget *overlay) {
+    PaperNote *note = (PaperNote*)element;
     note->editing = TRUE;
 
     if (!note->text_view) {
@@ -178,11 +159,11 @@ void note_start_editing(Element *element, GtkWidget *overlay) {
         gtk_widget_set_margin_top(note->text_view, element->y);
 
         GtkEventController *focus_controller = gtk_event_controller_focus_new();
-        g_signal_connect(focus_controller, "leave", G_CALLBACK(note_on_text_view_focus_leave), note);
+        g_signal_connect(focus_controller, "leave", G_CALLBACK(paper_note_on_text_view_focus_leave), note);
         gtk_widget_add_controller(note->text_view, focus_controller);
 
         GtkEventController *key_controller = gtk_event_controller_key_new();
-        g_signal_connect(key_controller, "key-pressed", G_CALLBACK(note_on_textview_key_press), note);
+        g_signal_connect(key_controller, "key-pressed", G_CALLBACK(paper_note_on_textview_key_press), note);
         gtk_widget_add_controller(note->text_view, key_controller);
     }
 
@@ -193,8 +174,8 @@ void note_start_editing(Element *element, GtkWidget *overlay) {
     gtk_widget_grab_focus(note->text_view);
 }
 
-void note_finish_editing(Element *element) {
-    Note *note = (Note*)element;
+void paper_note_finish_editing(Element *element) {
+    PaperNote *note = (PaperNote*)element;
     if (!note->text_view) return;
 
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(note->text_view));
@@ -210,23 +191,23 @@ void note_finish_editing(Element *element) {
     gtk_widget_hide(note->text_view);
 }
 
-void note_update_position(Element *element, int x, int y) {
-    Note *note = (Note*)element;
+void paper_note_update_position(Element *element, int x, int y) {
+    PaperNote *note = (PaperNote*)element;
     if (note->text_view) {
         gtk_widget_set_margin_start(note->text_view, x);
         gtk_widget_set_margin_top(note->text_view, y);
     }
 }
 
-void note_update_size(Element *element, int width, int height) {
-    Note *note = (Note*)element;
+void paper_note_update_size(Element *element, int width, int height) {
+    PaperNote *note = (PaperNote*)element;
     if (note->text_view) {
         gtk_widget_set_size_request(note->text_view, width, height);
     }
 }
 
-void note_free(Element *element) {
-    Note *note = (Note*)element;
+void paper_note_free(Element *element) {
+    PaperNote *note = (PaperNote*)element;
     if (note->text) g_free(note->text);
     if (note->text_view && GTK_IS_WIDGET(note->text_view) && gtk_widget_get_parent(note->text_view)) {
         gtk_widget_unparent(note->text_view);

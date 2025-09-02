@@ -1,13 +1,13 @@
 #ifndef CONNECTION_H
 #define CONNECTION_H
 
-#include "note.h"
+#include "element.h"
 #include "vector.h"
 
 typedef struct {
-    Note *from;
+    Element *from;
     int from_point;
-    Note *to;
+    Element *to;
     int to_point;
 } Connection;
 

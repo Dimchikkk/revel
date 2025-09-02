@@ -11,8 +11,10 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_append(GTK_BOX(vbox), toolbar);
 
-    GtkWidget *add_btn = gtk_button_new_with_label("New Note");
-    gtk_box_append(GTK_BOX(toolbar), add_btn);
+    GtkWidget *add_paper_btn = gtk_button_new_with_label("New Paper Note");
+    GtkWidget *add_note_btn = gtk_button_new_with_label("New Note");
+    gtk_box_append(GTK_BOX(toolbar), add_paper_btn);
+    gtk_box_append(GTK_BOX(toolbar), add_note_btn);
 
     GtkWidget *overlay = gtk_overlay_new();
     gtk_widget_set_hexpand(overlay, TRUE);
@@ -39,7 +41,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     g_signal_connect(motion_controller, "leave", G_CALLBACK(canvas_on_leave), data);
     gtk_widget_add_controller(drawing_area, motion_controller);
 
-    g_signal_connect(add_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
+    g_signal_connect(add_paper_btn, "clicked", G_CALLBACK(canvas_on_add_paper_note), data);
+    g_signal_connect(add_note_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
+
     g_object_set_data(G_OBJECT(app), "canvas_data", data);
     gtk_window_present(GTK_WINDOW(window));
 }

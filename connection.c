@@ -3,8 +3,8 @@
 
 void connection_draw(Connection *conn, cairo_t *cr) {
     int x1, y1, x2, y2;
-    note_get_connection_point(conn->from, conn->from_point, &x1, &y1);
-    note_get_connection_point(conn->to, conn->to_point, &x2, &y2);
+    element_get_connection_point(conn->from, conn->from_point, &x1, &y1);
+    element_get_connection_point(conn->to, conn->to_point, &x2, &y2);
 
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
     cairo_set_line_width(cr, 2);
