@@ -1,12 +1,20 @@
 CC = gcc
-CFLAGS = -Wall `pkg-config --cflags gtk4 pangocairo`
+CFLAGS = -Wall -g `pkg-config --cflags gtk4`
 LIBS = `pkg-config --libs gtk4`
 
-main: main.o
-	$(CC) -o main main.o $(LIBS) -lm
+SRCS = main.c canvas.c note.c connection.c vector.c
+OBJS = $(SRCS:.c=.o)
+TARGET = velo2
 
-main.o: main.c
-	$(CC) $(CFLAGS) -c main.c
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LIBS) -lm
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f main main.o
+	rm -f $(OBJS) $(TARGET)
+
+.PHONY: all clean
