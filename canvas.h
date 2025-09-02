@@ -5,7 +5,10 @@
 #include "note.h"
 #include "connection.h"
 
-typedef struct {
+
+typedef struct _CanvasData CanvasData;
+
+struct _CanvasData {
     GList *elements;
     GList *connections;
     GList *selected_elements;
@@ -23,7 +26,7 @@ typedef struct {
     GdkCursor *resize_cursor;
     GdkCursor *connect_cursor;
     GdkCursor *current_cursor;
-} CanvasData;
+};
 
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay);
 void canvas_data_free(CanvasData *data);

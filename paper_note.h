@@ -3,14 +3,17 @@
 
 #include "element.h"
 
+typedef struct _CanvasData CanvasData;
+
 typedef struct {
     Element base;
     char *text;
     GtkWidget *text_view;
     gboolean editing;
+    CanvasData *canvas_data;
 } PaperNote;
 
-PaperNote* paper_note_create(int x, int y, int width, int height, const char *text, int z_index);
+PaperNote* paper_note_create(int x, int y, int width, int height, const char *text, int z_index, CanvasData* data);
 void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected);
 void paper_note_get_connection_point(Element *element, int point, int *cx, int *cy);
 int paper_note_pick_resize_handle(Element *element, int x, int y);

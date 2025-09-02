@@ -295,7 +295,7 @@ void canvas_on_leave(GtkEventControllerMotion *controller, gpointer user_data) {
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    PaperNote *paper_note = paper_note_create(50, 50, 200, 150, "Paper Note", data->next_z_index++);
+    PaperNote *paper_note = paper_note_create(50, 50, 200, 150, "Paper Note", data->next_z_index++, data);
     data->elements = g_list_append(data->elements, (Element*)paper_note);
     gtk_widget_queue_draw(data->drawing_area);
 }
@@ -303,7 +303,7 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
 void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    Note *note = note_create(100, 100, 200, 150, "Note", data->next_z_index++);
+    Note *note = note_create(100, 100, 200, 150, "Note", data->next_z_index++, data);
     data->elements = g_list_append(data->elements, (Element*)note);
     gtk_widget_queue_draw(data->drawing_area);
 }

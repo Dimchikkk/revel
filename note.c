@@ -19,7 +19,7 @@ static ElementVTable note_vtable = {
     .free = note_free
 };
 
-Note* note_create(int x, int y, int width, int height, const char *text, int z_index) {
+Note* note_create(int x, int y, int width, int height, const char *text, int z_index, CanvasData *data) {
     Note *note = g_new0(Note, 1);
     note->base.type = ELEMENT_NOTE;
     note->base.vtable = &note_vtable;
@@ -31,6 +31,7 @@ Note* note_create(int x, int y, int width, int height, const char *text, int z_i
     note->text = g_strdup(text);
     note->text_view = NULL;
     note->editing = FALSE;
+    note->canvas_data = data;
     return note;
 }
 
@@ -208,6 +209,11 @@ void note_finish_editing(Element *element) {
 
     note->editing = FALSE;
     gtk_widget_hide(note->text_view);
+
+    // Queue redraw using the stored canvas data
+    if (note->canvas_data && note->canvas_data->drawing_area) {
+        gtk_widget_queue_draw(note->canvas_data->drawing_area);
+    }
 }
 
 void note_update_position(Element *element, int x, int y) {
