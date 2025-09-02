@@ -1,16 +1,40 @@
 #include "connection.h"
+#include "vector.h"
 #include <math.h>
 
-void connection_draw(Connection *conn, cairo_t *cr) {
+static ElementVTable connection_vtable = {
+    .draw = connection_draw,
+    .get_connection_point = connection_get_connection_point,
+    .pick_resize_handle = connection_pick_resize_handle,
+    .pick_connection_point = connection_pick_connection_point,
+    .start_editing = NULL, // Connections don't support editing
+    .finish_editing = NULL,
+    .update_position = NULL, // Position is determined by connected elements
+    .update_size = NULL,
+    .free = NULL // Connections are freed by canvas
+};
+
+Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z_index) {
+    Connection *conn = g_new0(Connection, 1);
+    conn->base.type = ELEMENT_CONNECTION;
+    conn->base.vtable = &connection_vtable;
+    conn->base.z_index = z_index;
+    conn->from = from;
+    conn->from_point = from_point;
+    conn->to = to;
+    conn->to_point = to_point;
+
+    // Calculate initial position and size based on connected elements
     int x1, y1, x2, y2;
-    element_get_connection_point(conn->from, conn->from_point, &x1, &y1);
-    element_get_connection_point(conn->to, conn->to_point, &x2, &y2);
+    element_get_connection_point(from, from_point, &x1, &y1);
+    element_get_connection_point(to, to_point, &x2, &y2);
 
-    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_set_line_width(cr, 2);
+    conn->base.x = MIN(x1, x2);
+    conn->base.y = MIN(y1, y2);
+    conn->base.width = ABS(x2 - x1);
+    conn->base.height = ABS(y2 - y1);
 
-    connection_draw_parallel_arrow(cr, (Vec2){x1, y1}, (Vec2){x2, y2},
-                                  conn->from_point, conn->to_point);
+    return conn;
 }
 
 void connection_draw_arrow_head(cairo_t *cr, Vec2 base, Vec2 tip) {
@@ -115,4 +139,46 @@ void connection_parallel_arrow_mid(Vec2 start, Vec2 end, int start_pos, int end_
 
     *mid1 = mid;
     *mid2 = mid;
+}
+
+void connection_draw(Element *element, cairo_t *cr, gboolean is_selected) {
+    Connection *conn = (Connection*)element;
+    int x1, y1, x2, y2;
+    element_get_connection_point(conn->from, conn->from_point, &x1, &y1);
+    element_get_connection_point(conn->to, conn->to_point, &x2, &y2);
+
+    // Update connection position and size based on current element positions
+    conn->base.x = MIN(x1, x2);
+    conn->base.y = MIN(y1, y2);
+    conn->base.width = ABS(x2 - x1);
+    conn->base.height = ABS(y2 - y1);
+
+    // Draw connection line
+    if (is_selected) {
+        cairo_set_source_rgb(cr, 0.0, 0.4, 1.0); // Blue when selected
+        cairo_set_line_width(cr, 3);
+    } else {
+        cairo_set_source_rgb(cr, 0.2, 0.2, 0.2); // Dark gray normally
+        cairo_set_line_width(cr, 2);
+    }
+
+    connection_draw_parallel_arrow(cr, (Vec2){x1, y1}, (Vec2){x2, y2},
+                                  conn->from_point, conn->to_point);
+}
+
+void connection_get_connection_point(Element *element, int point, int *cx, int *cy) {
+    Connection *conn = (Connection*)element;
+    // Connections don't have their own connection points, return midpoint
+    *cx = conn->base.x + conn->base.width / 2;
+    *cy = conn->base.y + conn->base.height / 2;
+}
+
+int connection_pick_resize_handle(Element *element, int x, int y) {
+    // Connections can't be resized
+    return -1;
+}
+
+int connection_pick_connection_point(Element *element, int x, int y) {
+    // Connections don't have connection points to pick
+    return -1;
 }

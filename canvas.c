@@ -20,7 +20,6 @@ static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
     CanvasData *data = g_new0(CanvasData, 1);
     data->elements = NULL;
-    data->connections = NULL;
     data->selected_elements = NULL;
     data->drawing_area = drawing_area;
     data->overlay = overlay;
@@ -49,11 +48,6 @@ void canvas_data_free(CanvasData *data) {
     }
     g_list_free(data->elements);
 
-    for (GList *l = data->connections; l != NULL; l = l->next) {
-        g_free(l->data);
-    }
-    g_list_free(data->connections);
-
     g_list_free(data->selected_elements);
     if (data->undo_manager) undo_manager_free(data->undo_manager);
     g_free(data);
@@ -64,13 +58,6 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
 
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
     cairo_paint(cr);
-
-    for (GList *l = data->connections; l != NULL; l = l->next) {
-      Connection *conn = (Connection*)l->data;
-        if (!conn->hidden) {
-            connection_draw(conn, cr);
-        }
-    }
 
     GList *sorted_elements = g_list_copy(data->elements);
     sorted_elements = g_list_sort(sorted_elements, compare_elements_by_z_index);
@@ -139,18 +126,16 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
                 connection_start = element;
                 connection_start_point = cp;
             } else {
-                if (element != connection_start) {
-                    Connection *conn = g_new(Connection, 1);
-                    conn->from = connection_start;
-                    conn->from_point = connection_start_point;
-                    conn->to = element;
-                    conn->to_point = cp;
-                    conn->hidden = 0;
-                    data->connections = g_list_append(data->connections, conn);
+              if (element != connection_start) {
+                    Connection *conn = connection_create(connection_start, connection_start_point,
+                                                         element, cp, data->next_z_index++);
+                    data->elements = g_list_append(data->elements, (Element*)conn);
 
                     // Log the action
                     undo_manager_push_action(data->undo_manager, ACTION_CREATE_CONNECTION, conn, "Create Connection");
                 }
+                connection_start = NULL;
+                connection_start_point = -1;
                 connection_start = NULL;
                 connection_start_point = -1;
             }

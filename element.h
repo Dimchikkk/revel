@@ -7,8 +7,9 @@
 typedef struct Element Element;
 
 typedef enum {
-    ELEMENT_PAPER_NOTE,
-    ELEMENT_NOTE
+  ELEMENT_NOTE,
+  ELEMENT_PAPER_NOTE,
+  ELEMENT_CONNECTION
 } ElementType;
 
 typedef struct {
