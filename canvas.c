@@ -34,6 +34,13 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
     data->current_cursor = NULL;
     data->undo_manager = undo_manager_new();
 
+    // Initialize undo tracking fields
+    data->undo_original_width = 0;
+    data->undo_original_height = 0;
+    data->undo_original_x = 0;
+    data->undo_original_y = 0;
+    data->undo_original_positions = NULL;
+
     return data;
 }
 
@@ -49,6 +56,12 @@ void canvas_data_free(CanvasData *data) {
     g_list_free(data->elements);
 
     g_list_free(data->selected_elements);
+    
+    // Free undo position data
+    if (data->undo_original_positions) {
+        g_list_free_full(data->undo_original_positions, g_free);
+    }
+    
     if (data->undo_manager) undo_manager_free(data->undo_manager);
     g_free(data);
 }
@@ -117,6 +130,13 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             element->orig_y = element->y;
             element->orig_width = element->width;
             element->orig_height = element->height;
+            
+            // STORE ORIGINAL STATE FOR UNDO
+            data->undo_original_width = element->width;
+            data->undo_original_height = element->height;
+            data->undo_original_x = element->x;
+            data->undo_original_y = element->y;
+            
             return;
         }
 
@@ -162,6 +182,24 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             element->dragging = TRUE;
             element->drag_offset_x = (int)x - element->x;
             element->drag_offset_y = (int)y - element->y;
+            
+            // STORE ORIGINAL POSITIONS FOR ALL SELECTED ELEMENTS
+            if (data->undo_original_positions) {
+                g_list_free_full(data->undo_original_positions, g_free);
+                data->undo_original_positions = NULL;
+            }
+            
+            if (data->selected_elements) {
+                data->undo_original_positions = NULL;
+                for (GList *sel = data->selected_elements; sel != NULL; sel = sel->next) {
+                    Element *selected_element = (Element*)sel->data;
+                    PositionData *pos_data = g_new0(PositionData, 1);
+                    pos_data->element = selected_element;
+                    pos_data->x = selected_element->x;
+                    pos_data->y = selected_element->y;
+                    data->undo_original_positions = g_list_append(data->undo_original_positions, pos_data);
+                }
+            }
         }
     } else {
         connection_start = NULL;
@@ -277,6 +315,32 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
 
     for (GList *l = data->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
+        
+        if (element->resizing) {
+            // PUSH RESIZE UNDO ACTION
+            if (element->width != data->undo_original_width || element->height != data->undo_original_height) {
+                undo_manager_push_resize_action(data->undo_manager, element,
+                                              data->undo_original_width, data->undo_original_height,
+                                              element->width, element->height);
+            }
+        }
+        
+        if (element->dragging && data->undo_original_positions) {
+            // PUSH MOVE UNDO ACTIONS FOR ALL SELECTED ELEMENTS
+            for (GList *pos_list = data->undo_original_positions; pos_list != NULL; pos_list = pos_list->next) {
+                PositionData *pos_data = (PositionData*)pos_list->data;
+                if (pos_data->element->x != pos_data->x || pos_data->element->y != pos_data->y) {
+                    undo_manager_push_move_action(data->undo_manager, pos_data->element,
+                                                pos_data->x, pos_data->y,
+                                                pos_data->element->x, pos_data->element->y);
+                }
+            }
+            
+            // Clean up stored positions
+            g_list_free_full(data->undo_original_positions, g_free);
+            data->undo_original_positions = NULL;
+        }
+        
         element->dragging = FALSE;
         element->resizing = FALSE;
     }
@@ -310,6 +374,22 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     // Log the action
     undo_manager_push_action(data->undo_manager, ACTION_CREATE_NOTE, note, "Create Note");
 
+    gtk_widget_queue_draw(data->drawing_area);
+}
+
+void canvas_delete_selected(CanvasData *data) {
+    if (!data->selected_elements) return;
+    
+    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        
+        // Push delete action before actually hiding
+        undo_manager_push_delete_action(data->undo_manager, element);
+        
+        element->hidden = TRUE;
+    }
+    
+    canvas_clear_selection(data);
     gtk_widget_queue_draw(data->drawing_area);
 }
 

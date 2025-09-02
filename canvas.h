@@ -10,18 +10,22 @@ typedef struct _CanvasData CanvasData;
 struct _UndoManager;
 typedef struct _UndoManager UndoManager;
 
+typedef struct {
+    Element *element;
+    double x;
+    double y;
+} PositionData;
+
 struct _CanvasData {
     GList *elements;
-    GList *connections;
     GList *selected_elements;
     GtkWidget *drawing_area;
     GtkWidget *overlay;
     int next_z_index;
-
     gboolean selecting;
     int start_x, start_y;
     int current_x, current_y;
-    GdkModifierType modifier_state;
+    guint modifier_state;
 
     GdkCursor *default_cursor;
     GdkCursor *move_cursor;
@@ -30,9 +34,15 @@ struct _CanvasData {
     GdkCursor *current_cursor;
 
     UndoManager *undo_manager;
+
+    double undo_original_width;
+    double undo_original_height;
+    double undo_original_x;
+    double undo_original_y;
+    GList *undo_original_positions;
 };
 
-
+void canvas_delete_selected(CanvasData *data);
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay);
 void canvas_data_free(CanvasData *data);
 void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data);
