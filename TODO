@@ -11,3 +11,5 @@ and insert into current space
 - [improvement] put text in center of note
 - [improvement] different type of connections
 - [improvement] extend undo/redo actions
+- [improvement] clear outdated actions in log window
+- [improvement] time-travel on row click in action log window

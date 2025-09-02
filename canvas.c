@@ -56,12 +56,12 @@ void canvas_data_free(CanvasData *data) {
     g_list_free(data->elements);
 
     g_list_free(data->selected_elements);
-    
+
     // Free undo position data
     if (data->undo_original_positions) {
         g_list_free_full(data->undo_original_positions, g_free);
     }
-    
+
     if (data->undo_manager) undo_manager_free(data->undo_manager);
     g_free(data);
 }
@@ -100,7 +100,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
 }
 
 void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
-    CanvasData *data = (CanvasData*)user_data;
+  CanvasData *data = (CanvasData*)user_data;
     static Element *connection_start = NULL;
     static int connection_start_point = -1;
 
@@ -110,6 +110,11 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
     }
 
     Element *element = canvas_pick_element(data, (int)x, (int)y);
+
+    // If no visible element was found, clear any potential hidden element selection
+    if (!element && !(data->modifier_state & GDK_SHIFT_MASK)) {
+        canvas_clear_selection(data);
+    }
 
     if (element) {
         int rh = element_pick_resize_handle(element, (int)x, (int)y);
@@ -130,13 +135,13 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             element->orig_y = element->y;
             element->orig_width = element->width;
             element->orig_height = element->height;
-            
+
             // STORE ORIGINAL STATE FOR UNDO
             data->undo_original_width = element->width;
             data->undo_original_height = element->height;
             data->undo_original_x = element->x;
             data->undo_original_y = element->y;
-            
+
             return;
         }
 
@@ -182,13 +187,13 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             element->dragging = TRUE;
             element->drag_offset_x = (int)x - element->x;
             element->drag_offset_y = (int)y - element->y;
-            
+
             // STORE ORIGINAL POSITIONS FOR ALL SELECTED ELEMENTS
             if (data->undo_original_positions) {
                 g_list_free_full(data->undo_original_positions, g_free);
                 data->undo_original_positions = NULL;
             }
-            
+
             if (data->selected_elements) {
                 data->undo_original_positions = NULL;
                 for (GList *sel = data->selected_elements; sel != NULL; sel = sel->next) {
@@ -256,13 +261,13 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
                 new_height = element->orig_height + dy;
                 break;
             }
-            
+
             if (new_width < 50) new_width = 50;
             if (new_height < 30) new_height = 30;
 
             element_update_position(element, new_x, new_y);
             element_update_size(element, new_width, new_height);
-            
+
             gtk_widget_queue_draw(data->drawing_area);
             return;
         }
@@ -302,6 +307,12 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
 
         for (GList *iter = data->elements; iter != NULL; iter = iter->next) {
             Element *element = (Element*)iter->data;
+
+            // Skip hidden elements
+            if (element->hidden) {
+              continue;
+            }
+
             if (element->x + element->width >= sel_x &&
                 element->x <= sel_x + sel_width &&
                 element->y + element->height >= sel_y &&
@@ -315,7 +326,7 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
 
     for (GList *l = data->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
-        
+
         if (element->resizing) {
             // PUSH RESIZE UNDO ACTION
             if (element->width != data->undo_original_width || element->height != data->undo_original_height) {
@@ -324,7 +335,7 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
                                               element->width, element->height);
             }
         }
-        
+
         if (element->dragging && data->undo_original_positions) {
             // PUSH MOVE UNDO ACTIONS FOR ALL SELECTED ELEMENTS
             for (GList *pos_list = data->undo_original_positions; pos_list != NULL; pos_list = pos_list->next) {
@@ -335,12 +346,12 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
                                                 pos_data->element->x, pos_data->element->y);
                 }
             }
-            
+
             // Clean up stored positions
             g_list_free_full(data->undo_original_positions, g_free);
             data->undo_original_positions = NULL;
         }
-        
+
         element->dragging = FALSE;
         element->resizing = FALSE;
     }
@@ -379,16 +390,16 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
 
 void canvas_delete_selected(CanvasData *data) {
     if (!data->selected_elements) return;
-    
+
     for (GList *l = data->selected_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
-        
+
         // Push delete action before actually hiding
         undo_manager_push_delete_action(data->undo_manager, element);
-        
+
         element->hidden = TRUE;
     }
-    
+
     canvas_clear_selection(data);
     gtk_widget_queue_draw(data->drawing_area);
 }
@@ -407,6 +418,12 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
 
     for (GList *l = data->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
+
+        // Skip hidden elements
+        if (element->hidden) {
+            continue;
+        }
+
         if (x >= element->x && x <= element->x + element->width &&
             y >= element->y && y <= element->y + element->height) {
             if (element->z_index > highest_z_index) {
@@ -459,6 +476,8 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
 
         canvas_set_cursor(data, gdk_cursor_new_from_name("move", NULL));
         return;
+    } else {
+      canvas_set_cursor(data, gdk_cursor_new_from_name("default", NULL));
     }
 
     canvas_set_cursor(data, gdk_cursor_new_from_name("default", NULL));
