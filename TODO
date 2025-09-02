@@ -1,4 +1,3 @@
-- add arrow head to parallel arrows
 - undo/redo with Action log
 - fix connection / note ordering... connection should have max z-index between two notes it connects.
 while drawing it should be pushed two one array so some note with higher z-index may shadow and hide arrow
@@ -9,5 +8,7 @@ and insert in current space
 - fork/clone (text/size) functionality
 - two types of items: paper note (yellow rectangle), note (white background rounded corners)
 - insert image from clipboard
-- sqllite load/save
+- sqlite load/save
 - infinite canvas
+- drawing using pencil feature
+- change color in right click on note

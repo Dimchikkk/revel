@@ -1,3 +1,4 @@
+#include "pango/pango-layout.h"
 #include <gtk/gtk.h>
 #include <pango/pangocairo.h>
 #include <math.h>
@@ -71,16 +72,6 @@ static Vec2 vec2_add(Vec2 a, Vec2 b) {
 static Vec2 vec2_div(Vec2 v, double scalar) {
   return (Vec2){v.x / scalar, v.y / scalar};
 }
-
-/* static Vec2 vec2_from_angle(double angle) { */
-/*   return (Vec2){cos(angle), sin(angle)}; */
-/* } */
-
-/* static Vec2 vec2_rotate(Vec2 v, double angle) { */
-/*   double cos_a = cos(angle); */
-/*   double sin_a = sin(angle); */
-/*   return (Vec2){v.x * cos_a - v.y * sin_a, v.x * sin_a + v.y * cos_a}; */
-/* } */
 
 /* Parallel arrow mid-point calculation */
 static void parallel_arrow_mid(Vec2 start, Vec2 end, int start_pos, int end_pos, Vec2 *mid1, Vec2 *mid2) {
@@ -156,6 +147,31 @@ static void parallel_arrow_mid(Vec2 start, Vec2 end, int start_pos, int end_pos,
   *mid2 = mid;
 }
 
+static void draw_arrow_head(cairo_t *cr, Vec2 base, Vec2 tip) {
+  Vec2 direction = {tip.x - base.x, tip.y - base.y};
+  double length = sqrt(direction.x * direction.x + direction.y * direction.y);
+  if (length < 1e-6) return;
+
+  // Normalize
+  direction.x /= length;
+  direction.y /= length;
+
+  // Perpendicular vectors for arrow head
+  Vec2 perp1 = {-direction.y * 8, direction.x * 8};
+  Vec2 perp2 = {direction.y * 8, -direction.x * 8};
+
+  // Arrow head points
+  Vec2 back = {tip.x - direction.x * 12, tip.y - direction.y * 12};
+  Vec2 head1 = {back.x + perp1.x, back.y + perp1.y};
+  Vec2 head2 = {back.x + perp2.x, back.y + perp2.y};
+
+  cairo_move_to(cr, tip.x, tip.y);
+  cairo_line_to(cr, head1.x, head1.y);
+  cairo_line_to(cr, head2.x, head2.y);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+}
+
 /* Parallel arrow drawing */
 static void draw_parallel_arrow(cairo_t *cr, Vec2 start, Vec2 end, int start_pos, int end_pos) {
   Vec2 mid1, mid2;
@@ -167,7 +183,7 @@ static void draw_parallel_arrow(cairo_t *cr, Vec2 start, Vec2 end, int start_pos
   cairo_line_to(cr, end.x, end.y);
   cairo_stroke(cr);
 
-  // TODO: draw arrow head
+  draw_arrow_head(cr, mid2, end);
 }
 
 /* Utility to get connection point coordinates */
