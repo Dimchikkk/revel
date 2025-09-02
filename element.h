@@ -28,6 +28,7 @@ struct Element {
     ElementVTable *vtable;
     int x, y, width, height;
     int z_index;
+    gboolean hidden;
     gboolean dragging;
     int drag_offset_x, drag_offset_y;
     gboolean resizing;

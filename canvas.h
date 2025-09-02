@@ -5,8 +5,10 @@
 #include "note.h"
 #include "connection.h"
 
-
 typedef struct _CanvasData CanvasData;
+
+struct _UndoManager;
+typedef struct _UndoManager UndoManager;
 
 struct _CanvasData {
     GList *elements;
@@ -26,7 +28,10 @@ struct _CanvasData {
     GdkCursor *resize_cursor;
     GdkCursor *connect_cursor;
     GdkCursor *current_cursor;
+
+    UndoManager *undo_manager;
 };
+
 
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay);
 void canvas_data_free(CanvasData *data);

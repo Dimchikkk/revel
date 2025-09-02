@@ -2,6 +2,7 @@
 #include "paper_note.h"
 #include "note.h"
 #include <pango/pangocairo.h>
+#include "undo_manager.h"
 
 #ifndef ABS
 #define ABS(a) ((a) < 0 ? -(a) : (a))
@@ -32,6 +33,7 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
     data->resize_cursor = gdk_cursor_new_from_name("nwse-resize", NULL);
     data->connect_cursor = gdk_cursor_new_from_name("crosshair", NULL);
     data->current_cursor = NULL;
+    data->undo_manager = undo_manager_new();
 
     return data;
 }
@@ -53,6 +55,7 @@ void canvas_data_free(CanvasData *data) {
     g_list_free(data->connections);
 
     g_list_free(data->selected_elements);
+    if (data->undo_manager) undo_manager_free(data->undo_manager);
     g_free(data);
 }
 
@@ -63,7 +66,10 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     cairo_paint(cr);
 
     for (GList *l = data->connections; l != NULL; l = l->next) {
-        connection_draw((Connection*)l->data, cr);
+      Connection *conn = (Connection*)l->data;
+        if (!conn->hidden) {
+            connection_draw(conn, cr);
+        }
     }
 
     GList *sorted_elements = g_list_copy(data->elements);
@@ -71,7 +77,9 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
 
     for (GList *l = sorted_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
-        element_draw(element, cr, canvas_is_element_selected(data, element));
+        if (!element->hidden) {
+            element_draw(element, cr, canvas_is_element_selected(data, element));
+        }
     }
 
     g_list_free(sorted_elements);
@@ -137,7 +145,11 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
                     conn->from_point = connection_start_point;
                     conn->to = element;
                     conn->to_point = cp;
+                    conn->hidden = 0;
                     data->connections = g_list_append(data->connections, conn);
+
+                    // Log the action
+                    undo_manager_push_action(data->undo_manager, ACTION_CREATE_CONNECTION, conn, "Create Connection");
                 }
                 connection_start = NULL;
                 connection_start_point = -1;
@@ -297,6 +309,10 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
 
     PaperNote *paper_note = paper_note_create(50, 50, 200, 150, "Paper Note", data->next_z_index++, data);
     data->elements = g_list_append(data->elements, (Element*)paper_note);
+
+    // Log the action
+    undo_manager_push_action(data->undo_manager, ACTION_CREATE_PAPER_NOTE, paper_note, "Create Paper Note");
+
     gtk_widget_queue_draw(data->drawing_area);
 }
 
@@ -305,6 +321,10 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
 
     Note *note = note_create(100, 100, 200, 150, "Note", data->next_z_index++, data);
     data->elements = g_list_append(data->elements, (Element*)note);
+
+    // Log the action
+    undo_manager_push_action(data->undo_manager, ACTION_CREATE_NOTE, note, "Create Note");
+
     gtk_widget_queue_draw(data->drawing_area);
 }
 

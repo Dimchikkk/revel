@@ -9,6 +9,7 @@ typedef struct {
     int from_point;
     Element *to;
     int to_point;
+    gboolean hidden;
 } Connection;
 
 void connection_draw(Connection *conn, cairo_t *cr);
