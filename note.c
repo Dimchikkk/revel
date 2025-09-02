@@ -57,6 +57,7 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     double y = element->y;
     double width = element->width;
     double height = element->height;
+    element->hidden = 0;
 
     // Create rounded rectangle path
     cairo_new_path(cr);

@@ -52,6 +52,7 @@ gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, gui
 
 void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     PaperNote *note = (PaperNote*)element;
+    element->hidden = 0;
 
     cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_clip(cr);
