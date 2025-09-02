@@ -1,16 +1,13 @@
 - [new feature] undo/redo with Action log
-- [bug fix] fix connection / note ordering... connection should have max z-index between two elements it connects.
-while drawing it should be pushed two one array so some note with higher z-index may shadow and hide arrow
-- [new feature] space concept: space can contain space (space has name) it's like note just name of space is shown.
-on click of space that space loads to canvas. in the future user can select note/space from some search window
-and insert in current space
-- [new feature] inverted index implementation for quick search by note content
+- [new feature] space concept: space can contain space (space has name) visually it's like note just name of space is shown.
+on click of space that space loads to canvas. in the future iterations user can select note/space from some search window
+and insert into current space
+- [new feature] full-text inverted index implementation for quick search by element content
 - [new feature] fork, clone (text/size) functionality
-- [new feature] two types of items: paper note (yellow rectangle), note (white background rounded corners)
 - [new feature] insert image from clipboard
 - [new feature] sqlite load/save
 - [new feature] virtual infinite canvas
 - [new feature] drawing using pencil feature
-- [new feature] change color in right click on note
+- [new feature] change color in right click on element
 - [improvement] put text in center of note
 - [improvement] different type of connections
