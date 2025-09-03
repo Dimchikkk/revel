@@ -72,7 +72,7 @@ void canvas_data_free(CanvasData *data) {
 void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    cairo_set_source_rgb(cr, 0.32, 0.32, 0.36);
     cairo_paint(cr);
 
     // Draw current space name in the top-left corner

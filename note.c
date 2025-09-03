@@ -113,7 +113,7 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
         // Set text color to dark gray/black
         cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-        
+
         if (text_height <= element->height - 20) {
             cairo_move_to(cr, element->x + 10, element->y + 10);
             pango_cairo_show_layout(cr, layout);
