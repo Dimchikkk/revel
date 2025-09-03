@@ -581,7 +581,7 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
             Space *new_space = space_new(space_name, data->current_space);
 
             // Create a visual representation of the space
-            SpaceElement *space_elem = space_element_create(100, 100, 200, 150,
+            SpaceElement *space_elem = space_element_create(100, 100, 100, 50,
                                                            new_space, data->next_z_index++, data);
 
             // Add to current space

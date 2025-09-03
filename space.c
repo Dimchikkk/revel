@@ -7,8 +7,20 @@
 void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     SpaceElement *space_elem = (SpaceElement*)element;
 
-    // Draw with blue background
-    cairo_rectangle(cr, element->x, element->y, element->width, element->height);
+    // Draw rectangle with rounded corners
+    double radius = 20.0; // Corner radius
+    double x = element->x;
+    double y = element->y;
+    double width = element->width;
+    double height = element->height;
+
+    // Create rounded rectangle path
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, x + width - radius, y + radius, radius, -G_PI_2, 0);
+    cairo_arc(cr, x + width - radius, y + height - radius, radius, 0, G_PI_2);
+    cairo_arc(cr, x + radius, y + height - radius, radius, G_PI_2, G_PI);
+    cairo_arc(cr, x + radius, y + radius, radius, G_PI, 3 * G_PI_2);
+    cairo_close_path(cr);
 
     if (is_selected) {
         cairo_set_source_rgb(cr, 0.7, 0.7, 1.0);  // Light blue when selected
@@ -28,14 +40,20 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_font_description_free(font_desc);
 
     pango_layout_set_text(layout, space_elem->target_space->name, -1);
-    pango_layout_set_width(layout, (element->width - 20) * PANGO_SCALE);
+
+    // Set text width to fit within the rounded rectangle (with padding)
+    pango_layout_set_width(layout, (width - 40) * PANGO_SCALE); // 20px padding on each side
     pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
+    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
 
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
-    cairo_move_to(cr, element->x + (element->width - text_width) / 2,
-                 element->y + (element->height - text_height) / 2);
+    // Center text within the element
+    double text_x = x + (width - text_width) / 2;
+    double text_y = y + (height - text_height) / 2;
+
+    cairo_move_to(cr, text_x, text_y);
     cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);  // Black text
     pango_cairo_show_layout(cr, layout);
 
