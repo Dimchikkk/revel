@@ -31,6 +31,7 @@ PaperNote* paper_note_create(int x, int y, int width, int height, const char *te
     note->text = g_strdup(text);
     note->text_view = NULL;
     note->editing = FALSE;
+    note->base.canvas_data = data;
     return note;
 }
 
