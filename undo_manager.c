@@ -77,16 +77,15 @@ void undo_manager_free(UndoManager *manager) {
     g_free(manager);
 }
 
-// Add this function to update the log window
 static void update_log_window(UndoManager *manager) {
     if (!manager->log_store) return;
 
     // Clear the current store
     gtk_list_store_clear(manager->log_store);
 
-    // Repopulate with all actions
+    // Only show actions that are still in the undo stack (reachable)
     GtkTreeIter iter;
-    for (GList *l = manager->action_log; l != NULL; l = l->next) {
+    for (GList *l = manager->undo_stack; l != NULL; l = l->next) {
         Action *action = (Action*)l->data;
         gchar *time_str = g_date_time_format(action->timestamp, "%H:%M:%S");
 
