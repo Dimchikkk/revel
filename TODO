@@ -1,15 +1,14 @@
 - [new feature] space concept: space can contain space (space has name) visually it's like note just name of space is shown.
 on click of space that space loads to canvas. in the future iterations user can select note/space from some search window
 and insert into current space
-- [new feature] full-text inverted index implementation for quick search by element content
-- [new feature] fork, clone (text/size) functionality
-- [new feature] insert image from clipboard
 - [new feature] sqlite load/save
+- [new feature] fork, clone (text/size) functionality
+- [new feature] full-text inverted index implementation for quick search by element content
+- [new feature] insert image from clipboard
 - [new feature] virtual infinite canvas
 - [new feature] drawing using pencil feature
 - [new feature] change color in right click on element
 - [improvement] put text in center of note
 - [improvement] different type of connections
 - [improvement] extend undo/redo actions
-- [improvement] clear unreachable actions in log window
 - [improvement] time-travel on row click in action log window
