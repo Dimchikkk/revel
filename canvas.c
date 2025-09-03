@@ -19,7 +19,6 @@ static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
 
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
     CanvasData *data = g_new0(CanvasData, 1);
-    data->elements = NULL;
     data->selected_elements = NULL;
     data->drawing_area = drawing_area;
     data->overlay = overlay;
@@ -41,6 +40,9 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
     data->undo_original_y = 0;
     data->undo_original_positions = NULL;
 
+    data->current_space = space_new("root", NULL);
+    data->space_history = NULL;
+
     return data;
 }
 
@@ -50,10 +52,9 @@ void canvas_data_free(CanvasData *data) {
     if (data->resize_cursor) g_object_unref(data->resize_cursor);
     if (data->connect_cursor) g_object_unref(data->connect_cursor);
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
-        element_free((Element*)l->data);
+    if (data->current_space && data->current_space->parent == NULL) {
+        space_free(data->current_space);
     }
-    g_list_free(data->elements);
 
     g_list_free(data->selected_elements);
 
@@ -72,7 +73,42 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
     cairo_paint(cr);
 
-    GList *sorted_elements = g_list_copy(data->elements);
+        // Draw current space name in the top-left corner
+    if (data->current_space && data->current_space->name) {
+        cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);  // Dark gray text
+
+        PangoLayout *layout = pango_cairo_create_layout(cr);
+        PangoFontDescription *font_desc = pango_font_description_from_string("Sans Bold 10");
+        pango_layout_set_font_description(layout, font_desc);
+        pango_font_description_free(font_desc);
+
+        char space_info[100];
+        if (data->current_space->parent) {
+            snprintf(space_info, sizeof(space_info), "Space: %s (in %s)",
+                     data->current_space->name, data->current_space->parent->name);
+        } else {
+            snprintf(space_info, sizeof(space_info), "Space: %s", data->current_space->name);
+        }
+
+        pango_layout_set_text(layout, space_info, -1);
+
+        int text_width, text_height;
+        pango_layout_get_pixel_size(layout, &text_width, &text_height);
+
+        // Draw semi-transparent background for better readability
+        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.7);  // White with transparency
+        cairo_rectangle(cr, 10, 10, text_width + 10, text_height + 6);
+        cairo_fill(cr);
+
+        // Draw the text
+        cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);  // Dark gray text
+        cairo_move_to(cr, 15, 13);
+        pango_cairo_show_layout(cr, layout);
+
+        g_object_unref(layout);
+    }
+
+    GList *sorted_elements = g_list_copy(data->current_space->elements);
     sorted_elements = g_list_sort(sorted_elements, compare_elements_by_z_index);
 
     for (GList *l = sorted_elements; l != NULL; l = l->next) {
@@ -116,6 +152,13 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
         canvas_clear_selection(data);
     }
 
+    if (element && element->type == ELEMENT_SPACE && n_press == 2) {
+        // Switch to the space represented by this element
+        SpaceElement *space_elem = (SpaceElement*)element;
+        switch_to_space(data, space_elem->target_space);
+        return;
+    }
+
     if (element) {
         int rh = element_pick_resize_handle(element, (int)x, (int)y);
         if (rh >= 0) {
@@ -153,8 +196,8 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             } else {
               if (element != connection_start) {
                     Connection *conn = connection_create(connection_start, connection_start_point,
-                                                         element, cp, data->next_z_index++);
-                    data->elements = g_list_append(data->elements, (Element*)conn);
+                                                         element, cp, data->next_z_index++, data);
+                    data->current_space->elements = g_list_append(data->current_space->elements, (Element*)conn);
 
                     // Log the action
                     undo_manager_push_action(data->undo_manager, ACTION_CREATE_CONNECTION, conn, "Create Connection");
@@ -228,7 +271,7 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     CanvasData *data = (CanvasData*)user_data;
     canvas_update_cursor(data, (int)x, (int)y);
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
+    for (GList *l = data->current_space->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         if (element->resizing) {
@@ -305,7 +348,7 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         int sel_width = ABS(data->current_x - data->start_x);
         int sel_height = ABS(data->current_y - data->start_y);
 
-        for (GList *iter = data->elements; iter != NULL; iter = iter->next) {
+        for (GList *iter = data->current_space->elements; iter != NULL; iter = iter->next) {
             Element *element = (Element*)iter->data;
 
             // Skip hidden elements
@@ -324,7 +367,7 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         }
     }
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
+    for (GList *l = data->current_space->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         if (element->resizing) {
@@ -368,7 +411,7 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
     PaperNote *paper_note = paper_note_create(50, 50, 200, 150, "Paper Note", data->next_z_index++, data);
-    data->elements = g_list_append(data->elements, (Element*)paper_note);
+    data->current_space->elements = g_list_append(data->current_space->elements, (Element*)paper_note);
 
     // Log the action
     undo_manager_push_action(data->undo_manager, ACTION_CREATE_PAPER_NOTE, paper_note, "Create Paper Note");
@@ -380,7 +423,7 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
     Note *note = note_create(100, 100, 200, 150, "Note", data->next_z_index++, data);
-    data->elements = g_list_append(data->elements, (Element*)note);
+    data->current_space->elements = g_list_append(data->current_space->elements, (Element*)note);
 
     // Log the action
     undo_manager_push_action(data->undo_manager, ACTION_CREATE_NOTE, note, "Create Note");
@@ -416,7 +459,7 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
     Element *selected_element = NULL;
     int highest_z_index = -1;
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
+    for (GList *l = data->current_space->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         // Skip hidden elements
@@ -488,4 +531,109 @@ void canvas_set_cursor(CanvasData *data, GdkCursor *cursor) {
         gtk_widget_set_cursor(data->drawing_area, cursor);
         data->current_cursor = cursor;
     }
+}
+
+void switch_to_space(CanvasData *data, Space *space) {
+    if (!space || space == data->current_space) return;
+
+    // Add current space to history
+    data->space_history = g_list_append(data->space_history, data->current_space);
+
+    // Switch to new space
+    data->current_space = space;
+
+    // NO NEED to copy elements - we'll use space->elements directly
+    gtk_widget_queue_draw(data->drawing_area);
+}
+
+void go_back_to_parent_space(CanvasData *data) {
+    if (!data->current_space || !data->current_space->parent) {
+        // Already at root or no parent
+        return;
+    }
+
+    // Switch to parent space
+    Space *parent = data->current_space->parent;
+    switch_to_space(data, parent);
+
+    // Remove the last history entry
+    if (data->space_history) {
+        GList *last = g_list_last(data->space_history);
+        data->space_history = g_list_delete_link(data->space_history, last);
+    }
+}
+
+void canvas_on_go_back(GtkButton *button, gpointer user_data) {
+    CanvasData *data = (CanvasData*)user_data;
+    go_back_to_parent_space(data);
+}
+
+void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
+    CanvasData *data = (CanvasData*)user_data;
+
+    if (response_id == GTK_RESPONSE_OK) {
+        // Get the entry widget from dialog data
+        GtkWidget *entry = g_object_get_data(G_OBJECT(dialog), "space_name_entry");
+        const char *space_name = gtk_editable_get_text(GTK_EDITABLE(entry));
+
+        if (space_name && strlen(space_name) > 0) {
+            // Create a new space
+            Space *new_space = space_new(space_name, data->current_space);
+
+            // Create a visual representation of the space
+            SpaceElement *space_elem = space_element_create(100, 100, 200, 150,
+                                                           new_space, data->next_z_index++, data);
+
+            // Add to current space
+            data->current_space->elements = g_list_append(data->current_space->elements, (Element*)space_elem);
+
+            gtk_widget_queue_draw(data->drawing_area);
+        }
+    }
+
+    gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+void canvas_on_add_space(GtkButton *button, gpointer user_data) {
+    CanvasData *data = (CanvasData*)user_data;
+
+    GtkRoot *root = gtk_widget_get_root(data->drawing_area);
+    GtkWindow *window = GTK_WINDOW(root);
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        "Create New Space",
+        window,
+        GTK_DIALOG_MODAL,
+        "Create", GTK_RESPONSE_OK,
+        NULL,
+        NULL
+    );
+
+    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+    // Create a grid for better layout
+    GtkWidget *grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
+
+    // Label
+    GtkWidget *label = gtk_label_new("Enter space name:");
+    gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
+
+    // Entry field
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Space name");
+    gtk_grid_attach(GTK_GRID(grid), entry, 0, 0, 1, 1);
+
+    gtk_box_append(GTK_BOX(content_area), grid);
+
+    // Store the entry widget in dialog data for easy access
+    g_object_set_data(G_OBJECT(dialog), "space_name_entry", entry);
+
+    // Set focus on the entry field
+    gtk_widget_grab_focus(entry);
+
+    g_signal_connect(dialog, "response", G_CALLBACK(space_creation_dialog_response), data);
+
+    gtk_window_present(GTK_WINDOW(dialog));
 }

@@ -26,6 +26,13 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     gtk_box_append(GTK_BOX(toolbar), redo_btn);
     gtk_box_append(GTK_BOX(toolbar), log_btn);
 
+    GtkWidget *add_space_btn = gtk_button_new_with_label("New Space");
+    gtk_box_append(GTK_BOX(toolbar), add_space_btn);
+
+    // Add back button
+    GtkWidget *back_btn = gtk_button_new_with_label("Back to Parent");
+    gtk_box_append(GTK_BOX(toolbar), back_btn);
+
     GtkWidget *overlay = gtk_overlay_new();
     gtk_widget_set_hexpand(overlay, TRUE);
     gtk_widget_set_vexpand(overlay, TRUE);
@@ -56,6 +63,8 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     g_signal_connect(undo_btn, "clicked", G_CALLBACK(on_undo_clicked), data);
     g_signal_connect(redo_btn, "clicked", G_CALLBACK(on_redo_clicked), data);
     g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data);
+    g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
+    g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);
 
     g_object_set_data(G_OBJECT(app), "canvas_data", data);
     gtk_window_present(GTK_WINDOW(window));

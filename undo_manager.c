@@ -20,6 +20,7 @@ static const char* element_get_type_name(Element *element) {
         case ELEMENT_NOTE: return "Note";
         case ELEMENT_PAPER_NOTE: return "Paper Note";
         case ELEMENT_CONNECTION: return "Connection";
+        case ELEMENT_SPACE: return "Space";
         default: return "Unknown";
     }
 }

@@ -13,7 +13,7 @@ typedef enum {
     ACTION_MOVE_ELEMENT,
     ACTION_RESIZE_ELEMENT,
     ACTION_EDIT_TEXT,
-    ACTION_DELETE_ELEMENT
+    ACTION_DELETE_ELEMENT,
 } ActionType;
 
 // Data structures for different action types

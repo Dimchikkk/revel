@@ -1,4 +1,5 @@
 #include "connection.h"
+#include "element.h"
 #include "vector.h"
 #include <math.h>
 
@@ -14,7 +15,7 @@ static ElementVTable connection_vtable = {
     .free = NULL // Connections are freed by canvas
 };
 
-Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z_index) {
+Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z_index, CanvasData *data) {
     Connection *conn = g_new0(Connection, 1);
     conn->base.type = ELEMENT_CONNECTION;
     conn->base.vtable = &connection_vtable;
@@ -33,6 +34,7 @@ Connection* connection_create(Element *from, int from_point, Element *to, int to
     conn->base.y = MIN(y1, y2);
     conn->base.width = ABS(x2 - x1);
     conn->base.height = ABS(y2 - y1);
+    conn->base.canvas_data = data;
 
     return conn;
 }

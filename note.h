@@ -10,7 +10,6 @@ typedef struct {
     char *text;
     GtkWidget *text_view;
     gboolean editing;
-    CanvasData *canvas_data;
 } Note;
 
 Note* note_create(int x, int y, int width, int height, const char *text, int z_index, CanvasData* data);

@@ -3,6 +3,7 @@
 
 #include <gtk/gtk.h>
 #include "note.h"
+#include "space.h"
 #include "connection.h"
 
 typedef struct _CanvasData CanvasData;
@@ -17,7 +18,6 @@ typedef struct {
 } PositionData;
 
 struct _CanvasData {
-    GList *elements;
     GList *selected_elements;
     GtkWidget *drawing_area;
     GtkWidget *overlay;
@@ -40,6 +40,9 @@ struct _CanvasData {
     double undo_original_x;
     double undo_original_y;
     GList *undo_original_positions;
+
+    Space *current_space;
+    GList *space_history;
 };
 
 void canvas_delete_selected(CanvasData *data);
@@ -60,5 +63,9 @@ gboolean canvas_is_element_selected(CanvasData *data, Element *element);
 void canvas_clear_selection(CanvasData *data);
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data);
 void canvas_on_add_note(GtkButton *button, gpointer user_data);
+void canvas_on_add_space(GtkButton *button, gpointer user_data);
+void canvas_on_go_back(GtkButton *button, gpointer user_data);
+void space_creation_dialog_response(GtkDialog *dialog, gint response_id,
+                                    gpointer user_data);
 
 #endif

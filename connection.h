@@ -4,6 +4,8 @@
 #include "element.h"
 #include "vector.h"
 
+typedef struct _CanvasData CanvasData;
+
 typedef struct {
     Element base;
     Element *from;
@@ -12,7 +14,7 @@ typedef struct {
     int to_point;
 } Connection;
 
-Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z_index);
+Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z_index, CanvasData *data);
 void connection_draw(Element *element, cairo_t *cr, gboolean is_selected);
 void connection_get_connection_point(Element *element, int point, int *cx, int *cy);
 int connection_pick_resize_handle(Element *element, int x, int y);

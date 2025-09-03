@@ -1,8 +1,3 @@
-- [new feature] space. space is type of element. space can contain other space.
-on app load root space is loaded. space represented as note just with another background.
-on creation of new space user promt for space name. every space has uuid. by doubleclicking
-on space: current canvas space is destroyed new is loaded. there is space_stack to go back to
-the previous space. space visual representation can be resized, connected with other elements.
 - [new feature] sqlite load/save
 - [new feature] fork, clone (text/size) functionality
 - [new feature] full-text inverted index implementation for quick search by element content

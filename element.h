@@ -4,12 +4,14 @@
 #include <gtk/gtk.h>
 #include "vector.h"
 
+typedef struct _CanvasData CanvasData;
 typedef struct Element Element;
 
 typedef enum {
   ELEMENT_NOTE,
   ELEMENT_PAPER_NOTE,
-  ELEMENT_CONNECTION
+  ELEMENT_CONNECTION,
+  ELEMENT_SPACE,
 } ElementType;
 
 typedef struct {
@@ -36,6 +38,7 @@ struct Element {
     int resize_edge;
     int resize_start_x, resize_start_y;
     int orig_x, orig_y, orig_width, orig_height;
+    CanvasData *canvas_data;
 };
 
 // Interface functions

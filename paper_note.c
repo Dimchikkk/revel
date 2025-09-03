@@ -31,7 +31,6 @@ PaperNote* paper_note_create(int x, int y, int width, int height, const char *te
     note->text = g_strdup(text);
     note->text_view = NULL;
     note->editing = FALSE;
-    note->canvas_data = data;
     return note;
 }
 
@@ -193,8 +192,8 @@ void paper_note_finish_editing(Element *element) {
     gtk_widget_hide(note->text_view);
 
     // Queue redraw using the stored canvas data
-    if (note->canvas_data && note->canvas_data->drawing_area) {
-        gtk_widget_queue_draw(note->canvas_data->drawing_area);
+    if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
+        gtk_widget_queue_draw(note->base.canvas_data->drawing_area);
     }
 }
 
