@@ -1,7 +1,7 @@
 - [new feature] sqlite load/save
 - [new feature] fork, clone (text/size) functionality
 - [new feature] full-text inverted index implementation for quick search by element content
-- [new feature] insert image from clipboard
+- [new feature] insert image from clipboard (think about nested spaces, maybe images shouldn't be loaded to memory until space that holds image becomes current_space)
 - [new feature] virtual infinite canvas
 - [new feature] drawing using pencil feature
 - [new feature] change color in right click on element
@@ -9,3 +9,4 @@
 - [improvement] different type of connections
 - [improvement] extend undo/redo actions
 - [improvement] time-travel on row click in action log window
+- [improvement] lazy-loading of spaces (do not load all nested spaces, just load till some depth)
