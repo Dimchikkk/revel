@@ -1,5 +1,8 @@
-#include "canvas.h"
 #include "undo_manager.h"
+#include "canvas_core.h"
+#include "canvas_input.h"
+#include "canvas_actions.h"
+#include "canvas_spaces.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *window = gtk_application_window_new(app);
