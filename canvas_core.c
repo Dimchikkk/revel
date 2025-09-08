@@ -21,16 +21,6 @@ static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
     return element_a->z - element_b->z;
 }
 
-static gint compare_model_elements(ModelElement *a, ModelElement *b) {
-  if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
-    return 1; // a comes after b
-  } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
-    return -1; // a comes before b
-  } else {
-    return 0; // equal order
-  }
-}
-
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   CanvasData *data = g_new0(CanvasData, 1);
   data->selected_elements = NULL;
@@ -53,34 +43,36 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->model = model_new();
 
   if (data->model != NULL && data->model->db != NULL) {
-    // Get all elements from the hashmap
-    GList *elements_list = g_hash_table_get_values(data->model->elements);
-
-    // Sort elements so CONNECTIONS type comes last
-    elements_list = g_list_sort(elements_list, (GCompareFunc)compare_model_elements);
-
-    // Iterate through sorted list
-    GList *iter = elements_list;
-    while (iter != NULL) {
-      ModelElement *model_element = (ModelElement*)iter->data;
-
-      // Create visual element from model element
-      Element *visual_element = create_visual_element(model_element, data);
-      if (visual_element) {
-        model_element->visual_element = visual_element;
-
-        if (model_element->position && model_element->position->z >= data->next_z_index) {
-          data->next_z_index = model_element->position->z + 1;
-        }
-      }
-
-      iter = iter->next;
-    }
-
-    g_list_free(elements_list);
+    GList *sorted_elements = sort_model_elements_for_serialization(data->model->elements);
+    create_visual_elements_from_sorted_list(sorted_elements, data);
+    g_list_free(sorted_elements);
   }
 
   return data;
+}
+
+GList* sort_model_elements_for_serialization(GHashTable *elements_table) {
+    GList *elements_list = g_hash_table_get_values(elements_table);
+    return g_list_sort(elements_list, (GCompareFunc)compare_model_elements_for_serialization);
+}
+
+void create_visual_elements_from_sorted_list(GList *sorted_elements, CanvasData *data) {
+    GList *iter = sorted_elements;
+    while (iter != NULL) {
+        ModelElement *model_element = (ModelElement*)iter->data;
+
+        // Create visual element from model element
+        Element *visual_element = create_visual_element(model_element, data);
+        if (visual_element) {
+            model_element->visual_element = visual_element;
+
+            if (model_element->position && model_element->position->z >= data->next_z_index) {
+                data->next_z_index = model_element->position->z + 1;
+            }
+        }
+
+        iter = iter->next;
+    }
 }
 
 void canvas_data_free(CanvasData *data) {

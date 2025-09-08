@@ -52,14 +52,14 @@ struct _ModelColor {
 };
 
 struct _ModelElement {
-  gchar *uuid;                // UUID string for the element
-  gchar *space_uuid;
+  gchar* uuid;                // UUID string for the element
+  gchar* space_uuid;
   ModelType* type;            // Shared element type reference
   ModelPosition* position;    // Shared position
   ModelSize* size;            // Shared size
   ModelText* text;            // Shared text
   ModelColor* color;          // Shared color
-  Element *visual_element;    // Pointer to visual representation
+  Element* visual_element;    // Pointer to visual representation
   ModelState state;
 
   // For connections
@@ -92,16 +92,17 @@ void model_load_space(Model *model);
 int model_save_elements(Model *model);
 
 int model_get_space_name(Model *model, const char *space_uuid, char **space_name);
+int model_get_parent_id(Model *model, char **space_parent_id);
 
 // Creation
-ModelElement* model_create_note(Model *model, int x, int y, int width, int height, const char *text);
-ModelElement* model_create_paper_note(Model *model, int x, int y, int width, int height, const char *text);
-ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point);
-ModelElement *model_create_space(Model *model, int x, int y, int width, int height, const char *target_space_uuid);
+ModelElement* model_create_note(Model *model, int x, int y, int z, int width, int height, const char *text);
+ModelElement* model_create_paper_note(Model *model, int x, int y, int z, int width, int height, const char *text);
+ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point, int z);
+ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height, const char *target_space_uuid);
 
 // Fork/cloning
 ModelElement* model_element_fork(Model *model, ModelElement *element);
-ModelElement *model_element_clone_by_text(Model *model, ModelElement *element);
+ModelElement* model_element_clone_by_text(Model *model, ModelElement *element);
 ModelElement* model_element_clone_by_size(Model *model, ModelElement *element);
 
 // Updating props
@@ -115,5 +116,6 @@ int model_delete_element(Model *model, ModelElement *element);
 // Helper functions
 gchar *model_generate_uuid(void);
 ModelElement* model_get_by_visual(Model *model, Element *visual_element);
+gint compare_model_elements_for_serialization(ModelElement *a, ModelElement *b);
 
 #endif

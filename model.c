@@ -1,5 +1,6 @@
 #include "model.h"
 #include "database.h"
+#include "element.h"
 #include "note.h"
 #include <string.h>
 #include <stdio.h>
@@ -110,6 +111,11 @@ int model_get_space_name(Model *model, const char *space_uuid, char **space_name
   return database_get_space_name(model->db, space_uuid, space_name);
 }
 
+int model_get_parent_id(Model *model, char **space_parent_id) {
+  if (!model || !model->db) return 0;
+  return database_get_space_parent_id(model->db, model->current_space_uuid, space_parent_id);
+}
+
 gchar* model_generate_uuid(void) {
   uuid_t uuid;
   uuid_generate(uuid);
@@ -120,7 +126,7 @@ gchar* model_generate_uuid(void) {
 }
 
 // Create a note element
-ModelElement* model_create_note(Model *model, int x, int y, int width, int height, const char *text) {
+ModelElement* model_create_note(Model *model, int x, int y, int z, int width, int height, const char *text) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_note\n");
     return NULL;
@@ -145,7 +151,7 @@ ModelElement* model_create_note(Model *model, int x, int y, int width, int heigh
   position->id = -1;  // Temporary ID until saved to database
   position->x = x;
   position->y = y;
-  position->z = 0;
+  position->z = z;
   position->ref_count = 1;
   element->position = position;
 
@@ -173,7 +179,7 @@ ModelElement* model_create_note(Model *model, int x, int y, int width, int heigh
 }
 
 // Create a paper note element
-ModelElement* model_create_paper_note(Model *model, int x, int y, int width, int height, const char *text) {
+ModelElement* model_create_paper_note(Model *model, int x, int y, int z, int width, int height, const char *text) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_paper_note\n");
     return NULL;
@@ -198,7 +204,7 @@ ModelElement* model_create_paper_note(Model *model, int x, int y, int width, int
   position->id = -1;  // Temporary ID until saved to database
   position->x = x;
   position->y = y;
-  position->z = 0;
+  position->z = z;
   position->ref_count = 1;
   element->position = position;
 
@@ -227,7 +233,7 @@ ModelElement* model_create_paper_note(Model *model, int x, int y, int width, int
 
 // Create a connection element
 ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid,
-                                      int from_point, int to_point) {
+                                      int from_point, int to_point, int z) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_connection\n");
     return NULL;
@@ -252,7 +258,7 @@ ModelElement* model_create_connection(Model *model, const char *from_element_uui
   position->id = -1;  // Temporary ID until saved to database
   position->x = 0;
   position->y = 0;
-  position->z = 0;
+  position->z = z;
   position->ref_count = 1;
   element->position = position;
 
@@ -277,7 +283,7 @@ ModelElement* model_create_connection(Model *model, const char *from_element_uui
 }
 
 // Create a space element
-ModelElement* model_create_space(Model *model, int x, int y, int width, int height, const char *target_space_uuid) {
+ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height, const char *target_space_uuid) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_space\n");
     return NULL;
@@ -291,6 +297,12 @@ ModelElement* model_create_space(Model *model, int x, int y, int width, int heig
   element->space_uuid = model->current_space_uuid;
 
   // Create type reference
+  ModelText *model_text = g_new0(ModelText, 1);
+  model_text->id = -1;  // Temporary ID until saved to database
+  model_text->text = g_strdup(name);
+  model_text->ref_count = 1;
+  element->text = model_text;
+
   ModelType *model_type = g_new0(ModelType, 1);
   model_type->id = -1;  // Temporary ID until saved to database
   model_type->type = ELEMENT_SPACE;
@@ -302,7 +314,7 @@ ModelElement* model_create_space(Model *model, int x, int y, int width, int heig
   position->id = -1;  // Temporary ID until saved to database
   position->x = x;
   position->y = y;
-  position->z = 0;
+  position->z = z;
   position->ref_count = 1;
   element->position = position;
 
@@ -424,8 +436,6 @@ int model_delete_element(Model *model, ModelElement *element) {
     return 0;
   }
 
-
-
   // Decrement ref_count for shared resources with proper NULL checks
   if (element->type && element->type->ref_count > 0) element->type->ref_count--;
   if (element->position && element->position->ref_count > 0) element->position->ref_count--;
@@ -453,6 +463,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
       return model_create_note(model,
                                element->position->x,
                                element->position->y,
+                               element->position->z,
                                element->size->width,
                                element->size->height,
                                element->text->text);
@@ -464,6 +475,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
       return model_create_paper_note(model,
                                      element->position->x,
                                      element->position->y,
+                                     element->position->z,
                                      element->size->width,
                                      element->size->height,
                                      element->text->text);
@@ -476,15 +488,19 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
                                      element->from_element_uuid,
                                      element->to_element_uuid,
                                      element->from_point,
-                                     element->to_point);
+                                     element->to_point,
+                                     element->position->z
+                                     );
     }
     break;
 
   case ELEMENT_SPACE:
     if (element->position && element->size && element->target_space_uuid) {
       return model_create_space(model,
+                                element->text->text,
                                 element->position->x,
                                 element->position->y,
+                                element->position->z,
                                 element->size->width,
                                 element->size->height,
                                 element->target_space_uuid);
@@ -553,18 +569,30 @@ int model_save_elements(Model *model) {
     return 0;
   }
 
-  GHashTableIter iter;
-  gpointer key, value;
+  database_set_current_space_uuid(model->db, model->current_space_uuid);
+
   int saved_count = 0;
   GList *to_remove = NULL;  // List of UUIDs to remove after iteration
 
-  // Iterate through all elements
-  g_hash_table_iter_init(&iter, model->elements);
-  while (g_hash_table_iter_next(&iter, &key, &value)) {
-    ModelElement *element = (ModelElement *)value;
+  // Get all elements and sort them so CONNECTIONS come last
+  GList *elements_list = g_hash_table_get_values(model->elements);
+  elements_list = g_list_sort(elements_list, (GCompareFunc)compare_model_elements_for_serialization);
+
+  // Iterate through sorted elements
+  GList *iter = elements_list;
+  while (iter != NULL) {
+    ModelElement *element = (ModelElement *)iter->data;
 
     switch (element->state) {
     case MODEL_STATE_NEW: {
+      if (element->type->type == ELEMENT_SPACE) {
+        char *target_space_uuid = NULL;
+        if (!database_create_space(model->db, element->text->text, model->current_space_uuid, &target_space_uuid)) {
+          g_error("Failed to create target space");
+        }
+        element->target_space_uuid = target_space_uuid;
+      }
+
       // Save NEW elements to database
       if (database_create_element(model->db, model->current_space_uuid, element)) {
         // Add shared resources to model caches
@@ -673,7 +701,12 @@ int model_save_elements(Model *model) {
       // Already saved, nothing to do
       break;
     }
+
+    iter = iter->next;
   }
+
+  // Free the sorted list (doesn't free the elements themselves)
+  g_list_free(elements_list);
 
   // Remove deleted elements after iteration completes
   GList *iter_list = to_remove;
@@ -686,6 +719,17 @@ int model_save_elements(Model *model) {
   g_list_free(to_remove);
 
   return saved_count;
+}
+
+// Comparison function to sort elements with CONNECTIONS type last
+gint compare_model_elements_for_serialization(ModelElement *a, ModelElement *b) {
+  if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
+    return 1; // a (connection) comes after b
+  } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
+    return -1; // a comes before b (connection)
+  } else {
+    return 0; // equal order
+  }
 }
 
 ModelElement* model_get_by_visual(Model *model, Element *visual_element) {

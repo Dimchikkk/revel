@@ -15,6 +15,10 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
 void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
     static Element *connection_start = NULL;
@@ -33,9 +37,8 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
     }
 
     if (element && element->type == ELEMENT_SPACE && n_press == 2) {
-        // Switch to the space represented by this element
-        // SpaceElement *space_elem = (SpaceElement*)element;
-        g_printerr("swithc_to_space is not implemented");
+        SpaceElement *space_elem = (SpaceElement*)element;
+        switch_to_space(data, space_elem->target_space_uuid);
         return;
     }
 
@@ -75,17 +78,9 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
 
                     if (from_model && to_model) {
                         // Create connection in the model
-                        ModelElement *model_conn = model_create_connection(data->model,
-                                                                         from_model->uuid, to_model->uuid,
-                                                                         connection_start_point, cp);
-
-                        if (model_conn) {
-                            // Create visual connection element
-                            Connection *conn = connection_create(connection_start, connection_start_point,
-                                                                element, cp, data->next_z_index++, data);
-                            // Link the visual element to the model
-                            model_conn->visual_element = (Element*)conn;
-                        }
+                        int z = MAX(from_model->position->z, to_model->position->z);
+                        ModelElement *model_conn = model_create_connection(data->model, from_model->uuid, to_model->uuid, connection_start_point, cp, z);
+                        model_conn->visual_element = create_visual_element(model_conn, data);
                     }
                 }
                 connection_start = NULL;

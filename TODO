@@ -1,5 +1,5 @@
-- [new feature] sqlite load/save
 - [new feature] fork, clone (text/size) functionality
+- [improvement] disable back to parent button if at root space
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [improvement] implement deletion of elements with ref tables clean up if ref_count = 0
 - [new feature] full-text inverted index implementation for quick search by element content

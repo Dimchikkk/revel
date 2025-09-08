@@ -8,31 +8,27 @@
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    ModelElement *model_element = model_create_paper_note(data->model, 50, 50, 200, 150, "Paper Note");
+    ModelElement *model_element = model_create_paper_note(data->model, 50, 50, data->next_z_index++, 200, 150, "Paper Note");
     if (!model_element) {
         g_printerr("Failed to create paper note model element\n");
         return;
     }
-
-
-    PaperNote *paper_note = paper_note_create(50, 50, data->next_z_index++, 200, 150, "Paper Note", data);
-    model_element->visual_element = (Element*)paper_note;
-
+    model_element->visual_element = create_visual_element(model_element, data);
     gtk_widget_queue_draw(data->drawing_area);
 }
 
 void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    ModelElement *model_element = model_create_note(data->model, 100, 100, 200, 150, "Note");
+    ModelElement *model_element = model_create_note(data->model, 100, 100, data->next_z_index++, 200, 150, "Note");
     if (!model_element) {
         g_printerr("Failed to create note model element\n");
         return;
     }
 
-    Note *note = note_create(100, 100, data->next_z_index++, 200, 150, "Note", data);
     // Link model and visual elements
-    model_element->visual_element = (Element*)note;
+    model_element->visual_element = create_visual_element(model_element, data);
+
 
     if (data->model == NULL) {
       g_printerr("%s:%d:0 Failed to initialize model\n", __FILE__, __LINE__);
@@ -76,6 +72,7 @@ void canvas_on_add_space(GtkButton *button, gpointer user_data) {
 
     // Store the entry widget in dialog data for easy access
     g_object_set_data(G_OBJECT(dialog), "space_name_entry", entry);
+    g_object_set_data(G_OBJECT(dialog), "canvas_data", data);
 
     // Set focus on the entry field
     gtk_widget_grab_focus(entry);
