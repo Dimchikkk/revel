@@ -10,5 +10,6 @@ void canvas_on_leave(GtkEventControllerMotion *controller, gpointer user_data);
 void canvas_update_cursor(CanvasData *data, int x, int y);
 Element* canvas_pick_element(CanvasData *data, int x, int y);
 void canvas_set_cursor(CanvasData *data, GdkCursor *cursor);
+void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data);
 
 #endif

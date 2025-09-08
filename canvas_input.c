@@ -308,3 +308,138 @@ void canvas_set_cursor(CanvasData *data, GdkCursor *cursor) {
         data->current_cursor = cursor;
     }
 }
+
+static void on_fork_element_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+    if (data && data->model && element_uuid) {
+        model_save_elements(data->model);
+        ModelElement *original = g_hash_table_lookup(data->model->elements, element_uuid);
+        if (original) {
+            ModelElement *forked = model_element_fork(data->model, original);
+            if (forked) {
+                forked->visual_element = create_visual_element(forked, data);
+                gtk_widget_queue_draw(data->drawing_area);
+            }
+        }
+    }
+}
+
+static void on_clone_by_text_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+    if (data && data->model && element_uuid) {
+        model_save_elements(data->model);
+        ModelElement *original = g_hash_table_lookup(data->model->elements, element_uuid);
+        if (original) {
+            ModelElement *clone = model_element_clone_by_text(data->model, original);
+            if (clone) {
+                clone->visual_element = create_visual_element(clone, data);
+                gtk_widget_queue_draw(data->drawing_area);
+            }
+        }
+    }
+}
+
+static void on_clone_by_size_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+    if (data && data->model && element_uuid) {
+        model_save_elements(data->model);
+        ModelElement *original = g_hash_table_lookup(data->model->elements, element_uuid);
+        if (original) {
+            ModelElement *clone = model_element_clone_by_size(data->model, original);
+            if (clone) {
+                clone->visual_element = create_visual_element(clone, data);
+                gtk_widget_queue_draw(data->drawing_area);
+            }
+        }
+    }
+}
+
+// Add this helper function
+static gboolean destroy_popover_callback(gpointer user_data) {
+    GtkWidget *popover = user_data;
+    gtk_widget_unparent(popover);
+    return G_SOURCE_REMOVE;
+}
+
+static void on_popover_closed(GtkPopover *popover, gpointer user_data) {
+    // Defer the destruction until after the action handlers have finished
+    g_idle_add(destroy_popover_callback, popover);
+}
+
+void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
+    CanvasData *data = (CanvasData*)user_data;
+
+    if (n_press == 1) {
+        Element *element = canvas_pick_element(data, (int)x, (int)y);
+
+        if (element) {
+            ModelElement *model_element = model_get_by_visual(data->model, element);
+
+            if (model_element) {
+                // Create an action group for the menu
+                GSimpleActionGroup *action_group = g_simple_action_group_new();
+
+                // Create actions - use g_strdup for the UUID
+                GSimpleAction *fork_action = g_simple_action_new("fork", NULL);
+                GSimpleAction *clone_text_action = g_simple_action_new("clone-text", NULL);
+                GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
+
+                // Store the necessary data in the actions with proper string duplication
+                g_object_set_data(G_OBJECT(fork_action), "canvas_data", data);
+                g_object_set_data_full(G_OBJECT(fork_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+
+                g_object_set_data(G_OBJECT(clone_text_action), "canvas_data", data);
+                g_object_set_data_full(G_OBJECT(clone_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+
+                g_object_set_data(G_OBJECT(clone_size_action), "canvas_data", data);
+                g_object_set_data_full(G_OBJECT(clone_size_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+
+                // Connect the actions to their handlers
+                g_signal_connect(fork_action, "activate", G_CALLBACK(on_fork_element_action), NULL);
+                g_signal_connect(clone_text_action, "activate", G_CALLBACK(on_clone_by_text_action), NULL);
+                g_signal_connect(clone_size_action, "activate", G_CALLBACK(on_clone_by_size_action), NULL);
+
+                // Add actions to the action group
+                g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(fork_action));
+                g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_text_action));
+                g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
+
+                // Create the menu model
+                GMenu *menu_model = g_menu_new();
+                g_menu_append(menu_model, "Fork Element", "menu.fork");
+                g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
+                g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
+
+                // Create the popover menu
+                GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu_model));
+
+                // Add the action group to the popover
+                gtk_widget_insert_action_group(popover, "menu", G_ACTION_GROUP(action_group));
+
+                // Set the parent and position
+                gtk_widget_set_parent(popover, data->drawing_area);
+                gtk_popover_set_pointing_to(GTK_POPOVER(popover), &(GdkRectangle){x, y, 1, 1});
+                gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
+
+                // Store references for cleanup when the popover is destroyed
+                g_object_set_data_full(G_OBJECT(popover), "action_group", action_group, g_object_unref);
+                g_object_set_data_full(G_OBJECT(popover), "menu_model", menu_model, g_object_unref);
+                g_object_set_data_full(G_OBJECT(popover), "fork_action", fork_action, g_object_unref);
+                g_object_set_data_full(G_OBJECT(popover), "clone_text_action", clone_text_action, g_object_unref);
+                g_object_set_data_full(G_OBJECT(popover), "clone_size_action", clone_size_action, g_object_unref);
+
+                // Connect the closed signal with deferred cleanup
+                g_signal_connect(popover, "closed", G_CALLBACK(on_popover_closed), NULL);
+
+                // Show the popover
+                gtk_popover_popup(GTK_POPOVER(popover));
+            }
+        }
+    }
+}

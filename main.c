@@ -48,6 +48,12 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), canvas_on_draw, data, NULL);
 
+    // Right-click controller for context menu
+    GtkGesture *right_click_controller = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(right_click_controller), GDK_BUTTON_SECONDARY);
+    g_signal_connect(right_click_controller, "pressed", G_CALLBACK(canvas_on_right_click), data);
+    gtk_widget_add_controller(drawing_area, GTK_EVENT_CONTROLLER(right_click_controller));
+
     GtkGesture *click_controller = gtk_gesture_click_new();
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_controller), GDK_BUTTON_PRIMARY);
     g_signal_connect(click_controller, "pressed", G_CALLBACK(canvas_on_button_press), data);
