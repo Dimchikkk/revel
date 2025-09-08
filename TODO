@@ -1,4 +1,5 @@
 - [new feature] implement removal of elements (including spaces) from DB
+one simple idea is to diasslow removing space unless it's empty
 - [improvement] disable back to parent button if at root space
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [improvement] implement deletion of elements with ref tables clean up if ref_count = 0
