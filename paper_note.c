@@ -1,5 +1,6 @@
 #include "paper_note.h"
 #include "canvas.h"
+#include "canvas_core.h"
 #include "model.h"
 #include <pango/pangocairo.h>
 #include <math.h>
@@ -14,7 +15,6 @@ static ElementVTable paper_note_vtable = {
     .pick_resize_handle = paper_note_pick_resize_handle,
     .pick_connection_point = paper_note_pick_connection_point,
     .start_editing = paper_note_start_editing,
-    .finish_editing = paper_note_finish_editing,
     .update_position = paper_note_update_position,
     .update_size = paper_note_update_size,
     .free = paper_note_free
@@ -199,6 +199,10 @@ void paper_note_finish_editing(Element *element) {
 
     // Queue redraw using the stored canvas data
     if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
+        GList *sorted_elements = sort_model_elements_for_serialization(note->base.canvas_data->model->elements);
+        create_visual_elements_from_sorted_list(sorted_elements, note->base.canvas_data);
+        g_list_free(sorted_elements);
+
         gtk_widget_queue_draw(note->base.canvas_data->drawing_area);
     }
 }

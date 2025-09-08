@@ -20,7 +20,6 @@ typedef struct {
     int (*pick_resize_handle)(Element *element, int x, int y);
     int (*pick_connection_point)(Element *element, int x, int y);
     void (*start_editing)(Element *element, GtkWidget *overlay);
-    void (*finish_editing)(Element *element);
     void (*update_position)(Element *element, int x, int y, int z);
     void (*update_size)(Element *element, int width, int height);
     void (*free)(Element *element);
@@ -47,7 +46,6 @@ void element_get_connection_point(Element *element, int point, int *cx, int *cy)
 int element_pick_resize_handle(Element *element, int x, int y);
 int element_pick_connection_point(Element *element, int x, int y);
 void element_start_editing(Element *element, GtkWidget *overlay);
-void element_finish_editing(Element *element);
 void element_update_position(Element *element, int x, int y, int z);
 void element_update_size(Element *element, int width, int height);
 void element_free(Element *element);

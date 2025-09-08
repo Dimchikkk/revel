@@ -3,6 +3,7 @@
 #include "note.h"
 #include "model.h"
 #include "canvas.h"
+#include "canvas_core.h"
 
 void element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     if (element && element->vtable && element->vtable->draw) {
@@ -33,12 +34,6 @@ int element_pick_connection_point(Element *element, int x, int y) {
 void element_start_editing(Element *element, GtkWidget *overlay) {
     if (element && element->vtable && element->vtable->start_editing) {
         element->vtable->start_editing(element, overlay);
-    }
-}
-
-void element_finish_editing(Element *element) {
-    if (element && element->vtable && element->vtable->finish_editing) {
-        element->vtable->finish_editing(element);
     }
 }
 

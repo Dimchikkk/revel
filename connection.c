@@ -9,7 +9,6 @@ static ElementVTable connection_vtable = {
     .pick_resize_handle = connection_pick_resize_handle,
     .pick_connection_point = connection_pick_connection_point,
     .start_editing = NULL, // Connections don't support editing
-    .finish_editing = NULL,
     .update_position = NULL, // Position is determined by connected elements
     .update_size = NULL,
     .free = NULL // Connections are freed by canvas

@@ -232,12 +232,22 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         }
     }
 
+    gboolean was_resized = FALSE;
     GList *visual_elements = canvas_get_visual_elements(data);
     for (GList *l = visual_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
-
+        if (element->resizing) {
+          was_resized = TRUE;
+        }
         element->dragging = FALSE;
         element->resizing = FALSE;
+    }
+
+    if (was_resized) {
+      // Re-create visual elements since some sizes may be changed due to resizing of cloned element
+      GList *sorted_elements = sort_model_elements_for_serialization(data->model->elements);
+      create_visual_elements_from_sorted_list(sorted_elements, data);
+      g_list_free(sorted_elements);
     }
 
     gtk_widget_queue_draw(data->drawing_area);

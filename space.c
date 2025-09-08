@@ -100,11 +100,6 @@ int space_element_pick_connection_point(Element *element, int x, int y) {
     return -1;
 }
 
-// Other required functions
-void space_element_finish_editing(Element *element) {
-    // Not used for space elements
-}
-
 void space_element_update_position(Element *element, int x, int y, int z) {
     // Update position with z coordinate
     element->x = x;
@@ -180,7 +175,6 @@ static ElementVTable space_element_vtable = {
     .pick_resize_handle = space_element_pick_resize_handle,
     .pick_connection_point = space_element_pick_connection_point,
     .start_editing = space_element_start_editing,
-    .finish_editing = space_element_finish_editing,
     .update_position = space_element_update_position,
     .update_size = space_element_update_size,
     .free = space_element_free
