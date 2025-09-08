@@ -1,5 +1,6 @@
 #include "paper_note.h"
 #include "canvas.h"
+#include "model.h"
 #include <pango/pangocairo.h>
 #include <math.h>
 
@@ -188,6 +189,10 @@ void paper_note_finish_editing(Element *element) {
     char *new_text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
     g_free(note->text);
     note->text = new_text;
+
+    Model* model = note->base.canvas_data->model;
+    ModelElement* model_element = model_get_by_visual(model, element);
+    model_update_text(model, model_element, new_text);
 
     note->editing = FALSE;
     gtk_widget_hide(note->text_view);

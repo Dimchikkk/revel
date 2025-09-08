@@ -1,6 +1,7 @@
 #include "canvas_core.h"
 #include "canvas_input.h"
 #include "canvas_spaces.h"
+#include "connection.h"
 #include "element.h"
 #include "paper_note.h"
 #include "note.h"
@@ -20,54 +21,66 @@ static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
     return element_a->z - element_b->z;
 }
 
+static gint compare_model_elements(ModelElement *a, ModelElement *b) {
+  if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
+    return 1; // a comes after b
+  } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
+    return -1; // a comes before b
+  } else {
+    return 0; // equal order
+  }
+}
+
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
-    CanvasData *data = g_new0(CanvasData, 1);
-    data->selected_elements = NULL;
-    data->drawing_area = drawing_area;
-    data->overlay = overlay;
-    data->next_z_index = 1;
-    data->selecting = FALSE;
-    data->start_x = 0;
-    data->start_y = 0;
-    data->current_x = 0;
-    data->current_y = 0;
-    data->modifier_state = 0;
+  CanvasData *data = g_new0(CanvasData, 1);
+  data->selected_elements = NULL;
+  data->drawing_area = drawing_area;
+  data->overlay = overlay;
+  data->next_z_index = 1;
+  data->selecting = FALSE;
+  data->start_x = 0;
+  data->start_y = 0;
+  data->current_x = 0;
+  data->current_y = 0;
+  data->modifier_state = 0;
 
-    data->default_cursor = gdk_cursor_new_from_name("default", NULL);
-    data->move_cursor = gdk_cursor_new_from_name("move", NULL);
-    data->resize_cursor = gdk_cursor_new_from_name("nwse-resize", NULL);
-    data->connect_cursor = gdk_cursor_new_from_name("crosshair", NULL);
-    data->current_cursor = NULL;
+  data->default_cursor = gdk_cursor_new_from_name("default", NULL);
+  data->move_cursor = gdk_cursor_new_from_name("move", NULL);
+  data->resize_cursor = gdk_cursor_new_from_name("nwse-resize", NULL);
+  data->connect_cursor = gdk_cursor_new_from_name("crosshair", NULL);
+  data->current_cursor = NULL;
 
-    data->elements = NULL;
+  data->model = model_new();
 
-    // Initialize model
-    data->model = model_new();
+  if (data->model != NULL && data->model->db != NULL) {
+    // Get all elements from the hashmap
+    GList *elements_list = g_hash_table_get_values(data->model->elements);
 
-    if (data->model != NULL && data->model->db != NULL) {
-      // Load visual elements from model into canvas data
-      GHashTableIter iter;
-      gpointer key, value;
-      g_hash_table_iter_init(&iter, data->model->elements);
-      while (g_hash_table_iter_next(&iter, &key, &value)) {
-        ModelElement *model_element = (ModelElement*)value;
+    // Sort elements so CONNECTIONS type comes last
+    elements_list = g_list_sort(elements_list, (GCompareFunc)compare_model_elements);
 
-        // Create visual element from model element
-        Element *visual_element = create_visual_element(model_element, data);
-        if (visual_element) {
-          model_element->visual_element = visual_element;
+    // Iterate through sorted list
+    GList *iter = elements_list;
+    while (iter != NULL) {
+      ModelElement *model_element = (ModelElement*)iter->data;
 
-          // Add visual element to canvas elements list
-          data->elements = g_list_append(data->elements, visual_element);
+      // Create visual element from model element
+      Element *visual_element = create_visual_element(model_element, data);
+      if (visual_element) {
+        model_element->visual_element = visual_element;
 
-          if (model_element->position && model_element->position->z >= data->next_z_index) {
-            data->next_z_index = model_element->position->z + 1;
-          }
+        if (model_element->position && model_element->position->z >= data->next_z_index) {
+          data->next_z_index = model_element->position->z + 1;
         }
       }
+
+      iter = iter->next;
     }
 
-    return data;
+    g_list_free(elements_list);
+  }
+
+  return data;
 }
 
 void canvas_data_free(CanvasData *data) {
@@ -77,8 +90,6 @@ void canvas_data_free(CanvasData *data) {
     if (data->connect_cursor) g_object_unref(data->connect_cursor);
 
     g_list_free(data->selected_elements);
-
-    // TODO: free elements
 
     // Don't free the model here - it's freed in canvas_on_app_shutdown
 
@@ -123,7 +134,9 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
         g_object_unref(layout);
     }
 
-    GList *sorted_elements = g_list_copy(data->elements);
+    // Get visual elements from model
+    GList *visual_elements = canvas_get_visual_elements(data);
+    GList *sorted_elements = g_list_copy(visual_elements);
     sorted_elements = g_list_sort(sorted_elements, compare_elements_by_z_index);
 
     for (GList *l = sorted_elements; l != NULL; l = l->next) {
@@ -134,6 +147,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     }
 
     g_list_free(sorted_elements);
+    g_list_free(visual_elements);
 
     if (data->selecting) {
         cairo_set_source_rgba(cr, 0.5, 0.5, 1.0, 0.3);
@@ -243,8 +257,52 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
             break;
 
         case ELEMENT_CONNECTION:
-            // Connections are handled differently since they need from/to elements
-            // You'll need to implement connection creation after all elements are loaded
+            if (model_element->from_element_uuid && model_element->to_element_uuid) {
+                // Find the visual elements for the from and to elements
+                Element *from_element = NULL;
+                Element *to_element = NULL;
+
+                // Search through all model elements to find the visual elements
+                GHashTableIter iter;
+                gpointer key, value;
+                g_hash_table_iter_init(&iter, data->model->elements);
+
+                while (g_hash_table_iter_next(&iter, &key, &value)) {
+                    ModelElement *current = (ModelElement*)value;
+                    if (current->visual_element) {
+                        if (g_strcmp0(current->uuid, model_element->from_element_uuid) == 0) {
+                            from_element = current->visual_element;
+                        }
+                        if (g_strcmp0(current->uuid, model_element->to_element_uuid) == 0) {
+                            to_element = current->visual_element;
+                        }
+
+                        // If we found both, break early
+                        if (from_element && to_element) {
+                            break;
+                        }
+                    }
+                }
+
+                if (from_element && to_element) {
+                    visual_element = (Element*)connection_create(
+                        from_element,
+                        model_element->from_point,
+                        to_element,
+                        model_element->to_point,
+                        model_element->position ? model_element->position->z : data->next_z_index++,
+                        data
+                    );
+
+                    if (visual_element && model_element->position &&
+                        model_element->position->z >= data->next_z_index) {
+                        data->next_z_index = model_element->position->z + 1;
+                    }
+                } else {
+                    g_printerr("Failed to find visual elements for connection: from=%s, to=%s\n",
+                              model_element->from_element_uuid, model_element->to_element_uuid);
+                }
+            }
             break;
 
         default:
@@ -252,4 +310,27 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     }
 
     return visual_element;
+}
+
+GList* canvas_get_visual_elements(CanvasData *data) {
+    if (!data || !data->model || !data->model->elements) {
+        return NULL;
+    }
+
+    GList *visual_elements = NULL;
+    GHashTableIter iter;
+    gpointer key, value;
+
+    g_hash_table_iter_init(&iter, data->model->elements);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        ModelElement *model_element = (ModelElement*)value;
+
+        // Only include elements that belong to the current space
+        if (model_element->visual_element != NULL &&
+            g_strcmp0(model_element->space_uuid, data->model->current_space_uuid) == 0) {
+            visual_elements = g_list_append(visual_elements, model_element->visual_element);
+        }
+    }
+
+    return visual_elements;
 }

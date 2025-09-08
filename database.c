@@ -636,7 +636,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, color_id, "
-    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid "
+    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
 
@@ -717,6 +717,11 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
     const char *target_uuid = (const char*)sqlite3_column_text(stmt, col++);
     if (target_uuid) {
       elem->target_space_uuid = g_strdup(target_uuid);
+    }
+
+    const char *space_uuid = (const char*)sqlite3_column_text(stmt, col++);
+    if (space_uuid) {
+      elem->space_uuid = g_strdup(space_uuid);
     }
 
     *element = elem;
@@ -921,7 +926,7 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
 int database_load_space(sqlite3 *db, Model *model) {
   const char *sql =
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.color_id, "
-    "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid "
+    "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -945,7 +950,8 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_TO_ELEMENT_UUID,
     COL_FROM_POINT,
     COL_TO_POINT,
-    COL_TARGET_SPACE_UUID
+    COL_TARGET_SPACE_UUID,
+    COL_SPACE_UUID,
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1061,6 +1067,12 @@ int database_load_space(sqlite3 *db, Model *model) {
     const char *target_uuid = (const char*)sqlite3_column_text(stmt, COL_TARGET_SPACE_UUID);
     if (target_uuid) {
       element->target_space_uuid = g_strdup(target_uuid);
+    }
+
+    // Extract space UUID
+    const char *space_uuid = (const char*)sqlite3_column_text(stmt, COL_SPACE_UUID);
+    if (space_uuid) {
+      element->space_uuid = g_strdup(space_uuid);
     }
 
     element->visual_element = NULL;

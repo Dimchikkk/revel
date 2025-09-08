@@ -208,6 +208,10 @@ void note_finish_editing(Element *element) {
     g_free(note->text);
     note->text = new_text;
 
+    Model* model = note->base.canvas_data->model;
+    ModelElement* model_element = model_get_by_visual(model, element);
+    model_update_text(model, model_element, new_text);
+
     note->editing = FALSE;
     gtk_widget_hide(note->text_view);
 

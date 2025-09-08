@@ -9,9 +9,6 @@
 
 typedef struct _CanvasData CanvasData;
 
-struct _UndoManager;
-typedef struct _UndoManager UndoManager;
-
 typedef struct {
     Element *element;
     double x;
@@ -34,7 +31,6 @@ struct _CanvasData {
     GdkCursor *connect_cursor;
     GdkCursor *current_cursor;
 
-    GList *elements;  // list of elements drawn on canvas
     Model *model;
 };
 

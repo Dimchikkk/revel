@@ -1,6 +1,8 @@
 #include "element.h"
 #include "paper_note.h"
 #include "note.h"
+#include "model.h"
+#include "canvas.h"
 
 void element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     if (element && element->vtable && element->vtable->draw) {
@@ -41,6 +43,10 @@ void element_finish_editing(Element *element) {
 }
 
 void element_update_position(Element *element, int x, int y, int z) {
+    Model* model = element->canvas_data->model;
+    ModelElement* model_element = model_get_by_visual(model, element);
+    model_update_position(model, model_element, x, y, z);
+
     element->x = x;
     element->y = y;
     element->z = z;
@@ -52,6 +58,11 @@ void element_update_position(Element *element, int x, int y, int z) {
 void element_update_size(Element *element, int width, int height) {
     element->width = width;
     element->height = height;
+
+    Model* model = element->canvas_data->model;
+    ModelElement* model_element = model_get_by_visual(model, element);
+    model_update_size(model, model_element, width, height);
+
     if (element && element->vtable && element->vtable->update_size) {
         element->vtable->update_size(element, width, height);
     }

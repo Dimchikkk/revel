@@ -1,6 +1,7 @@
 #include "canvas_input.h"
 #include "canvas_core.h"
 #include "canvas_spaces.h"
+#include "model.h"
 #include "paper_note.h"
 #include "note.h"
 #include "connection.h"
@@ -33,8 +34,8 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
 
     if (element && element->type == ELEMENT_SPACE && n_press == 2) {
         // Switch to the space represented by this element
-        // TODO: switch to space
         // SpaceElement *space_elem = (SpaceElement*)element;
+        g_printerr("swithc_to_space is not implemented");
         return;
     }
 
@@ -68,9 +69,24 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
                 connection_start_point = cp;
             } else {
                 if (element != connection_start) {
-                    Connection *conn = connection_create(connection_start, connection_start_point,
-                                                        element, cp, data->next_z_index++, data);
-                    data->elements = g_list_append(data->elements, (Element*)conn);
+                    // Use helper function to get model elements
+                    ModelElement *from_model = model_get_by_visual(data->model, connection_start);
+                    ModelElement *to_model = model_get_by_visual(data->model, element);
+
+                    if (from_model && to_model) {
+                        // Create connection in the model
+                        ModelElement *model_conn = model_create_connection(data->model,
+                                                                         from_model->uuid, to_model->uuid,
+                                                                         connection_start_point, cp);
+
+                        if (model_conn) {
+                            // Create visual connection element
+                            Connection *conn = connection_create(connection_start, connection_start_point,
+                                                                element, cp, data->next_z_index++, data);
+                            // Link the visual element to the model
+                            model_conn->visual_element = (Element*)conn;
+                        }
+                    }
                 }
                 connection_start = NULL;
                 connection_start_point = -1;
@@ -121,8 +137,9 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
 void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
     canvas_update_cursor(data, (int)x, (int)y);
+    GList *visual_elements = canvas_get_visual_elements(data);
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
+    for (GList *l = visual_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         if (element->resizing) {
@@ -199,7 +216,9 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         int sel_width = ABS(data->current_x - data->start_x);
         int sel_height = ABS(data->current_y - data->start_y);
 
-        for (GList *iter = data->elements; iter != NULL; iter = iter->next) {
+        GList *visual_elements = canvas_get_visual_elements(data);
+
+        for (GList *iter = visual_elements; iter != NULL; iter = iter->next) {
             Element *element = (Element*)iter->data;
 
             // Skip hidden elements
@@ -218,7 +237,8 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         }
     }
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
+    GList *visual_elements = canvas_get_visual_elements(data);
+    for (GList *l = visual_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         element->dragging = FALSE;
@@ -237,7 +257,8 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
     Element *selected_element = NULL;
     int highest_z_index = -1;
 
-    for (GList *l = data->elements; l != NULL; l = l->next) {
+    GList *visual_elements = canvas_get_visual_elements(data);
+    for (GList *l = visual_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         // Skip hidden elements

@@ -131,6 +131,8 @@ ModelElement* model_create_note(Model *model, int x, int y, int width, int heigh
   element->uuid = model_generate_uuid();
   element->state = MODEL_STATE_NEW;
 
+  element->space_uuid = model->current_space_uuid;
+
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
   model_type->id = -1;  // Temporary ID until saved to database
@@ -181,6 +183,8 @@ ModelElement* model_create_paper_note(Model *model, int x, int y, int width, int
   ModelElement *element = g_new0(ModelElement, 1);
   element->uuid = model_generate_uuid();
   element->state = MODEL_STATE_NEW;
+
+  element->space_uuid = model->current_space_uuid;
 
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
@@ -234,6 +238,8 @@ ModelElement* model_create_connection(Model *model, const char *from_element_uui
   element->uuid = model_generate_uuid();
   element->state = MODEL_STATE_NEW;
 
+  element->space_uuid = model->current_space_uuid;
+
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
   model_type->id = -1;  // Temporary ID until saved to database
@@ -281,6 +287,8 @@ ModelElement* model_create_space(Model *model, int x, int y, int width, int heig
   ModelElement *element = g_new0(ModelElement, 1);
   element->uuid = model_generate_uuid();
   element->state = MODEL_STATE_NEW;
+
+  element->space_uuid = model->current_space_uuid;
 
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
@@ -678,4 +686,21 @@ int model_save_elements(Model *model) {
   g_list_free(to_remove);
 
   return saved_count;
+}
+
+ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
+    if (!model || !visual_element) return NULL;
+
+    GHashTableIter iter;
+    gpointer key, value;
+
+    g_hash_table_iter_init(&iter, model->elements);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        ModelElement *model_elem = (ModelElement*)value;
+        if (model_elem->visual_element == visual_element) {
+            return model_elem;
+        }
+    }
+
+    return NULL;
 }

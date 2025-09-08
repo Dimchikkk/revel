@@ -53,6 +53,7 @@ struct _ModelColor {
 
 struct _ModelElement {
   gchar *uuid;                // UUID string for the element
+  gchar *space_uuid;
   ModelType* type;            // Shared element type reference
   ModelPosition* position;    // Shared position
   ModelSize* size;            // Shared size
@@ -112,6 +113,7 @@ int model_update_size(Model *model, ModelElement *element, int width, int height
 int model_delete_element(Model *model, ModelElement *element);
 
 // Helper functions
-gchar* model_generate_uuid(void);
+gchar *model_generate_uuid(void);
+ModelElement* model_get_by_visual(Model *model, Element *visual_element);
 
 #endif

@@ -8,8 +8,15 @@
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
+    ModelElement *model_element = model_create_paper_note(data->model, 50, 50, 200, 150, "Paper Note");
+    if (!model_element) {
+        g_printerr("Failed to create paper note model element\n");
+        return;
+    }
+
+
     PaperNote *paper_note = paper_note_create(50, 50, data->next_z_index++, 200, 150, "Paper Note", data);
-    data->elements = g_list_append(data->elements, (Element*)paper_note);
+    model_element->visual_element = (Element*)paper_note;
 
     gtk_widget_queue_draw(data->drawing_area);
 }
@@ -17,18 +24,19 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
 void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
+    ModelElement *model_element = model_create_note(data->model, 100, 100, 200, 150, "Note");
+    if (!model_element) {
+        g_printerr("Failed to create note model element\n");
+        return;
+    }
+
     Note *note = note_create(100, 100, data->next_z_index++, 200, 150, "Note", data);
-    data->elements = g_list_append(data->elements, (Element*)note);
+    // Link model and visual elements
+    model_element->visual_element = (Element*)note;
 
     if (data->model == NULL) {
       g_printerr("%s:%d:0 Failed to initialize model\n", __FILE__, __LINE__);
     }
-
-    // Create model element and link it to the visual element
-    /* ModelElement *model_element = model_create_element(data->model, ELEMENT_NOTE, note->base.x, note->base.y, note->base.z, note->base.width, note->base.height, note->text, NULL); */
-    /* if (model_element) { */
-    /*     model_element->visual_element = (Element*)note; */
-    /* } */
 
     gtk_widget_queue_draw(data->drawing_area);
 }
