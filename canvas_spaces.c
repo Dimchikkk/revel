@@ -8,11 +8,12 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
     g_print("App is in root space\n");
     return;
   }
-  model_save_elements(data->model);
+
   if (data->model->current_space_uuid) {
     g_free(data->model->current_space_uuid);
   }
   data->model->current_space_uuid = g_strdup(space_uuid);;
+
   model_load_space(data->model);
 
   GList *sorted_elements = sort_model_elements_for_serialization(data->model->elements);
@@ -23,6 +24,7 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
 }
 
 void go_back_to_parent_space(CanvasData *data) {
+  model_save_elements(data->model);
   gchar *parent_space_name = NULL;
   model_get_parent_id(data->model, &parent_space_name);
   switch_to_space(data, parent_space_name);
@@ -38,11 +40,8 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
       const char *space_name = gtk_editable_get_text(GTK_EDITABLE(entry));
 
       if (space_name && strlen(space_name) > 0) {
-        // Generate a new UUID for the target space
-        gchar *target_space_uuid = model_generate_uuid();
-
         // Create a new space element in the model
-        ModelElement *model_element = model_create_space(data->model, space_name, 100, 100, data->next_z_index++, 200, 150, target_space_uuid);
+        ModelElement *model_element = model_create_space(data->model, space_name, 100, 100, data->next_z_index++, 200, 150);
 
         // Create visual space element
         SpaceElement *space_element = space_element_create(
@@ -52,7 +51,6 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
                                                            model_element->size->width,
                                                            model_element->size->height,
                                                            space_name,
-                                                           target_space_uuid,
                                                            data
                                                            );
 
@@ -65,8 +63,6 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
         }
 
         gtk_widget_queue_draw(data->drawing_area);
-
-        g_free(target_space_uuid);
       } else {
         g_print("Space name cannot be empty\n");
       }

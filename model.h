@@ -98,7 +98,7 @@ int model_get_parent_id(Model *model, char **space_parent_id);
 ModelElement* model_create_note(Model *model, int x, int y, int z, int width, int height, const char *text);
 ModelElement* model_create_paper_note(Model *model, int x, int y, int z, int width, int height, const char *text);
 ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point, int z);
-ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height, const char *target_space_uuid);
+ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height);
 
 // Fork/cloning
 ModelElement* model_element_fork(Model *model, ModelElement *element);

@@ -149,7 +149,7 @@ static void test_create_space_element(TestFixture *fixture, gconstpointer user_d
   g_assert_nonnull(target_space_uuid);
 
   // Create space element that links to the target space
-  ModelElement *element = model_create_space(fixture->model, "Test space", 500, 600, 1, 100, 100, target_space_uuid);
+  ModelElement *element = model_create_space(fixture->model, "Test space", 500, 600, 1, 100, 100);
 
   g_assert_nonnull(element);
   g_assert_nonnull(element->uuid);
@@ -158,8 +158,6 @@ static void test_create_space_element(TestFixture *fixture, gconstpointer user_d
   g_assert_cmpint(element->position->y, ==, 600);
   g_assert_cmpint(element->size->width, ==, 100);
   g_assert_cmpint(element->size->height, ==, 100);
-  g_assert_nonnull(element->target_space_uuid);
-  g_assert_cmpstr(element->target_space_uuid, ==, target_space_uuid);
   g_assert_cmpint(element->state, ==, MODEL_STATE_NEW);
 
   // Check that element was added to model's hash table
@@ -197,9 +195,7 @@ static void test_model_load_space(TestFixture *fixture, gconstpointer user_data)
   ModelElement *paper_note = model_create_paper_note(fixture->model, 300, 400, 1, 80, 40, "Test Paper Note");
 
   // Create a target space first
-  char *target_space_uuid = NULL;
-  database_create_space(fixture->db, "Target Space", NULL, &target_space_uuid);
-  ModelElement *space_element = model_create_space(fixture->model, "Test space", 500, 600, 1, 100, 100, target_space_uuid);
+  ModelElement *space_element = model_create_space(fixture->model, "Test space", 500, 600, 1, 100, 100);
 
   // Create connection between note and paper_note
   ModelElement *connection = model_create_connection(fixture->model, note->uuid, paper_note->uuid, 0, 2, 1);
@@ -272,11 +268,6 @@ static void test_model_load_space(TestFixture *fixture, gconstpointer user_data)
   g_assert_cmpstr(loaded_connection->from_element_uuid, ==, note_uuid);
   g_assert_cmpstr(loaded_connection->to_element_uuid, ==, paper_note_uuid);
 
-  // Verify space element target is intact
-  g_assert_nonnull(loaded_space->target_space_uuid);
-  g_assert_cmpstr(loaded_space->target_space_uuid, ==, target_space_uuid);
-
-  g_free(target_space_uuid);
   g_free(note_uuid);
   g_free(paper_note_uuid);
   g_free(space_element_uuid);
@@ -468,18 +459,12 @@ static void test_model_element_fork(TestFixture *fixture, gconstpointer user_dat
   ModelElement *original_note = model_create_note(fixture->model, 100, 200, 1, 50, 30, "Original Note");
   ModelElement *original_paper_note = model_create_paper_note(fixture->model, 300, 400, 1, 80, 40, "Original Paper Note");
 
-  // Create a target space for space element
-  char *target_space_uuid = NULL;
-  database_create_space(fixture->db, "Target Space", NULL, &target_space_uuid);
-  ModelElement *original_space = model_create_space(fixture->model, "Space", 500, 600, 1, 100, 100, target_space_uuid);
-
   // Create connection between note and paper_note
   ModelElement *original_connection = model_create_connection(fixture->model,
                                                               original_note->uuid, original_paper_note->uuid, 0, 2, 1);
 
   g_assert_nonnull(original_note);
   g_assert_nonnull(original_paper_note);
-  g_assert_nonnull(original_space);
   g_assert_nonnull(original_connection);
 
   // Test 1: Try to fork NEW elements (should return NULL)
@@ -489,16 +474,12 @@ static void test_model_element_fork(TestFixture *fixture, gconstpointer user_dat
   ModelElement *forked_paper_note = model_element_fork(fixture->model, original_paper_note);
   g_assert_null(forked_paper_note);
 
-  ModelElement *forked_space = model_element_fork(fixture->model, original_space);
-  g_assert_null(forked_space);
-
   ModelElement *forked_connection = model_element_fork(fixture->model, original_connection);
   g_assert_null(forked_connection);
 
   // Change states to SAVED to allow forking
   original_note->state = MODEL_STATE_SAVED;
   original_paper_note->state = MODEL_STATE_SAVED;
-  original_space->state = MODEL_STATE_SAVED;
   original_connection->state = MODEL_STATE_SAVED;
 
   // Test 2: Fork SAVED elements (should succeed)
@@ -511,10 +492,6 @@ static void test_model_element_fork(TestFixture *fixture, gconstpointer user_dat
   forked_paper_note = model_element_fork(fixture->model, original_paper_note);
   g_assert_nonnull(forked_paper_note);
   g_assert_cmpstr(forked_paper_note->uuid, !=, original_paper_note->uuid);
-
-  forked_space = model_element_fork(fixture->model, original_space);
-  g_assert_nonnull(forked_space);
-  g_assert_cmpstr(forked_space->uuid, !=, original_space->uuid);
 
   forked_connection = model_element_fork(fixture->model, original_connection);
   g_assert_nonnull(forked_connection);
@@ -540,9 +517,6 @@ static void test_model_element_fork(TestFixture *fixture, gconstpointer user_dat
   null_result = model_element_fork(fixture->model, &element_no_type);
   g_assert_null(null_result);
   g_free(element_no_type.uuid);
-
-  // Cleanup
-  g_free(target_space_uuid);
 }
 
 // Test: Verify element independence after forking (with state restriction)

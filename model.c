@@ -283,7 +283,7 @@ ModelElement* model_create_connection(Model *model, const char *from_element_uui
 }
 
 // Create a space element
-ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height, const char *target_space_uuid) {
+ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_space\n");
     return NULL;
@@ -325,11 +325,6 @@ ModelElement* model_create_space(Model *model, const char *name, int x, int y, i
   size->height = height;
   size->ref_count = 1;
   element->size = size;
-
-  // Set target space UUID
-  if (target_space_uuid != NULL) {
-    element->target_space_uuid = g_strdup(target_space_uuid);
-  }
 
   // Add the element to the model's elements hash table
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
@@ -502,8 +497,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
                                 element->position->y,
                                 element->position->z,
                                 element->size->width,
-                                element->size->height,
-                                element->target_space_uuid);
+                                element->size->height);
     }
     break;
 

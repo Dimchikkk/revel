@@ -242,7 +242,6 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
                     model_element->size->width,
                     model_element->size->height,
                     model_element->text ? model_element->text->text : "Space",
-                    model_element->target_space_uuid,
                     data
                 );
             }

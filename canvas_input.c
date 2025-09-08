@@ -37,8 +37,9 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
     }
 
     if (element && element->type == ELEMENT_SPACE && n_press == 2) {
-        SpaceElement *space_elem = (SpaceElement*)element;
-        switch_to_space(data, space_elem->target_space_uuid);
+        model_save_elements(data->model);
+        ModelElement *model_element = model_get_by_visual(data->model, element);
+        switch_to_space(data, model_element->target_space_uuid);
         return;
     }
 

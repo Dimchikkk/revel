@@ -116,7 +116,6 @@ void space_element_update_size(Element *element, int width, int height) {
 void space_element_free(Element *element) {
     SpaceElement *space_elem = (SpaceElement*)element;
     g_free(space_elem->name);
-    g_free(space_elem->target_space_uuid);
     g_free(space_elem);
 }
 
@@ -181,7 +180,7 @@ static ElementVTable space_element_vtable = {
 };
 
 SpaceElement* space_element_create(int x, int y, int z, int width, int height,
-                                   const gchar *name, const gchar *target_space_uuid,
+                                   const gchar *name,
                                    CanvasData *data) {
     SpaceElement *space_elem = g_new0(SpaceElement, 1);
     space_elem->base.type = ELEMENT_SPACE;
@@ -193,6 +192,5 @@ SpaceElement* space_element_create(int x, int y, int z, int width, int height,
     space_elem->base.height = height;
     space_elem->base.canvas_data = data;
     space_elem->name = g_strdup(name);
-    space_elem->target_space_uuid = g_strdup(target_space_uuid);
     return space_elem;
 }
