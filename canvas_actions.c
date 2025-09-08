@@ -4,16 +4,12 @@
 #include "paper_note.h"
 #include "note.h"
 #include "space.h"
-#include "undo_manager.h"
 
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    PaperNote *paper_note = paper_note_create(50, 50, 200, 150, "Paper Note", data->next_z_index++, data);
-    data->current_space->elements = g_list_append(data->current_space->elements, (Element*)paper_note);
-
-    // Log the action
-    undo_manager_push_action(data->undo_manager, ACTION_CREATE_PAPER_NOTE, paper_note, "Create Paper Note");
+    PaperNote *paper_note = paper_note_create(50, 50, data->next_z_index++, 200, 150, "Paper Note", data);
+    data->elements = g_list_append(data->elements, (Element*)paper_note);
 
     gtk_widget_queue_draw(data->drawing_area);
 }
@@ -21,11 +17,18 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
 void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
-    Note *note = note_create(100, 100, 200, 150, "Note", data->next_z_index++, data);
-    data->current_space->elements = g_list_append(data->current_space->elements, (Element*)note);
+    Note *note = note_create(100, 100, data->next_z_index++, 200, 150, "Note", data);
+    data->elements = g_list_append(data->elements, (Element*)note);
 
-    // Log the action
-    undo_manager_push_action(data->undo_manager, ACTION_CREATE_NOTE, note, "Create Note");
+    if (data->model == NULL) {
+      g_printerr("%s:%d:0 Failed to initialize model\n", __FILE__, __LINE__);
+    }
+
+    // Create model element and link it to the visual element
+    /* ModelElement *model_element = model_create_element(data->model, ELEMENT_NOTE, note->base.x, note->base.y, note->base.z, note->base.width, note->base.height, note->text, NULL); */
+    /* if (model_element) { */
+    /*     model_element->visual_element = (Element*)note; */
+    /* } */
 
     gtk_widget_queue_draw(data->drawing_area);
 }

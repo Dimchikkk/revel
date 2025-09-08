@@ -40,11 +40,12 @@ void element_finish_editing(Element *element) {
     }
 }
 
-void element_update_position(Element *element, int x, int y) {
+void element_update_position(Element *element, int x, int y, int z) {
     element->x = x;
     element->y = y;
+    element->z = z;
     if (element && element->vtable && element->vtable->update_position) {
-        element->vtable->update_position(element, x, y);
+        element->vtable->update_position(element, x, y, z);
     }
 }
 
@@ -62,6 +63,6 @@ void element_free(Element *element) {
     }
 }
 
-void element_bring_to_front(Element *element, int *next_z_index) {
-    element->z_index = (*next_z_index)++;
+void element_bring_to_front(Element *element, int *next_z) {
+    element->z = (*next_z)++;
 }

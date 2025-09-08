@@ -39,7 +39,7 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_layout_set_font_description(layout, font_desc);
     pango_font_description_free(font_desc);
 
-    pango_layout_set_text(layout, space_elem->target_space->name, -1);
+    pango_layout_set_text(layout, space_elem->name, -1);
 
     // Set text width to fit within the rounded rectangle (with padding)
     pango_layout_set_width(layout, (width - 40) * PANGO_SCALE); // 20px padding on each side
@@ -105,10 +105,11 @@ void space_element_finish_editing(Element *element) {
     // Not used for space elements
 }
 
-void space_element_update_position(Element *element, int x, int y) {
-    // Update position
+void space_element_update_position(Element *element, int x, int y, int z) {
+    // Update position with z coordinate
     element->x = x;
     element->y = y;
+    element->z = z;
 }
 
 void space_element_update_size(Element *element, int width, int height) {
@@ -119,7 +120,8 @@ void space_element_update_size(Element *element, int width, int height) {
 
 void space_element_free(Element *element) {
     SpaceElement *space_elem = (SpaceElement*)element;
-    // Don't free the target_space as it's managed separately
+    g_free(space_elem->name);
+    g_free(space_elem->target_space_uuid);
     g_free(space_elem);
 }
 
@@ -128,12 +130,11 @@ void space_name_dialog_response(GtkDialog *dialog, gint response_id, gpointer us
 
     if (response_id == GTK_RESPONSE_OK) {
         GtkWidget *entry = gtk_dialog_get_widget_for_response(dialog, GTK_RESPONSE_OK);
-        // Use gtk_editable_get_text instead of gtk_entry_get_text
         const char *new_name = gtk_editable_get_text(GTK_EDITABLE(entry));
 
         // Update space name
-        g_free(space_elem->target_space->name);
-        space_elem->target_space->name = g_strdup(new_name);
+        g_free(space_elem->name);
+        space_elem->name = g_strdup(new_name);
 
         // Queue redraw
         if (space_elem->base.canvas_data && space_elem->base.canvas_data->drawing_area) {
@@ -144,6 +145,7 @@ void space_name_dialog_response(GtkDialog *dialog, gint response_id, gpointer us
     gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
+// currently editing is not enabled for spaces
 void space_element_start_editing(Element *element, GtkWidget *overlay) {
     SpaceElement *space_elem = (SpaceElement*)element;
     CanvasData *data = space_elem->base.canvas_data;
@@ -163,7 +165,7 @@ void space_element_start_editing(Element *element, GtkWidget *overlay) {
     GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *entry = gtk_entry_new();
 
-    gtk_editable_set_text(GTK_EDITABLE(entry), space_elem->target_space->name);
+    gtk_editable_set_text(GTK_EDITABLE(entry), space_elem->name);
 
     gtk_box_append(GTK_BOX(content_area), entry);
 
@@ -184,39 +186,19 @@ static ElementVTable space_element_vtable = {
     .free = space_element_free
 };
 
-Space* space_new(const char *name, Space *parent) {
-    Space *space = g_new0(Space, 1);
-    uuid_generate(space->uuid);
-    space->name = g_strdup(name);
-    space->elements = NULL;
-    space->parent = parent;
-    return space;
-}
-
-void space_free(Space *space) {
-    if (!space) return;
-
-    // Free all elements in this space
-    for (GList *l = space->elements; l != NULL; l = l->next) {
-        element_free((Element*)l->data);
-    }
-    g_list_free(space->elements);
-
-    g_free(space->name);
-    g_free(space);
-}
-
-SpaceElement* space_element_create(int x, int y, int width, int height,
-                                  Space *target_space, int z_index, CanvasData *data) {
+SpaceElement* space_element_create(int x, int y, int z, int width, int height,
+                                   const gchar *name, const gchar *target_space_uuid,
+                                   CanvasData *data) {
     SpaceElement *space_elem = g_new0(SpaceElement, 1);
     space_elem->base.type = ELEMENT_SPACE;
     space_elem->base.vtable = &space_element_vtable;
     space_elem->base.x = x;
     space_elem->base.y = y;
+    space_elem->base.z = z;
     space_elem->base.width = width;
     space_elem->base.height = height;
-    space_elem->base.z_index = z_index;
-    space_elem->target_space = target_space;
     space_elem->base.canvas_data = data;
+    space_elem->name = g_strdup(name);
+    space_elem->target_space_uuid = g_strdup(target_space_uuid);
     return space_elem;
 }

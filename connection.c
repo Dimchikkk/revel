@@ -15,11 +15,11 @@ static ElementVTable connection_vtable = {
     .free = NULL // Connections are freed by canvas
 };
 
-Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z_index, CanvasData *data) {
+Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z, CanvasData *data) {
     Connection *conn = g_new0(Connection, 1);
     conn->base.type = ELEMENT_CONNECTION;
     conn->base.vtable = &connection_vtable;
-    conn->base.z_index = z_index;
+    conn->base.z = z;
     conn->from = from;
     conn->from_point = from_point;
     conn->to = to;

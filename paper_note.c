@@ -19,15 +19,15 @@ static ElementVTable paper_note_vtable = {
     .free = paper_note_free
 };
 
-PaperNote* paper_note_create(int x, int y, int width, int height, const char *text, int z_index, CanvasData *data) {
+PaperNote* paper_note_create(int x, int y, int z, int width, int height, const char *text, CanvasData *data) {
     PaperNote *note = g_new0(PaperNote, 1);
     note->base.type = ELEMENT_PAPER_NOTE;
     note->base.vtable = &paper_note_vtable;
     note->base.x = x;
     note->base.y = y;
+    note->base.z = z;
     note->base.width = width;
     note->base.height = height;
-    note->base.z_index = z_index;
     note->text = g_strdup(text);
     note->text_view = NULL;
     note->editing = FALSE;
@@ -198,8 +198,11 @@ void paper_note_finish_editing(Element *element) {
     }
 }
 
-void paper_note_update_position(Element *element, int x, int y) {
+void paper_note_update_position(Element *element, int x, int y, int z) {
     PaperNote *note = (PaperNote*)element;
+    element->x = x;
+    element->y = y;
+    element->z = z;
     if (note->text_view) {
         gtk_widget_set_margin_start(note->text_view, x);
         gtk_widget_set_margin_top(note->text_view, y);
@@ -208,6 +211,8 @@ void paper_note_update_position(Element *element, int x, int y) {
 
 void paper_note_update_size(Element *element, int width, int height) {
     PaperNote *note = (PaperNote*)element;
+    element->width = width;
+    element->height = height;
     if (note->text_view) {
         gtk_widget_set_size_request(note->text_view, width, height);
     }

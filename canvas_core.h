@@ -2,6 +2,7 @@
 #define CANVAS_CORE_H
 
 #include "canvas.h"
+#include "element.h"
 
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay);
 void canvas_data_free(CanvasData *data);
@@ -10,5 +11,7 @@ void canvas_delete_selected(CanvasData *data);
 void canvas_clear_selection(CanvasData *data);
 gboolean canvas_is_element_selected(CanvasData *data, Element *element);
 void canvas_on_app_shutdown(GApplication *app, gpointer user_data);
+
+Element* create_visual_element(ModelElement *model_element, CanvasData *canvas_data);
 
 #endif

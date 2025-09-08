@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 #include "note.h"
 #include "space.h"
+#include "model.h"
 #include "connection.h"
 
 typedef struct _CanvasData CanvasData;
@@ -33,16 +34,8 @@ struct _CanvasData {
     GdkCursor *connect_cursor;
     GdkCursor *current_cursor;
 
-    UndoManager *undo_manager;
-
-    double undo_original_width;
-    double undo_original_height;
-    double undo_original_x;
-    double undo_original_y;
-    GList *undo_original_positions;
-
-    Space *current_space;
-    GList *space_history;
+    GList *elements;  // list of elements drawn on canvas
+    Model *model;
 };
 
 #endif

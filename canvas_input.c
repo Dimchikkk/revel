@@ -6,7 +6,6 @@
 #include "connection.h"
 #include "space.h"
 #include <pango/pangocairo.h>
-#include "undo_manager.h"
 
 #ifndef ABS
 #define ABS(a) ((a) < 0 ? -(a) : (a))
@@ -34,8 +33,8 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
 
     if (element && element->type == ELEMENT_SPACE && n_press == 2) {
         // Switch to the space represented by this element
-        SpaceElement *space_elem = (SpaceElement*)element;
-        switch_to_space(data, space_elem->target_space);
+        // TODO: switch to space
+        // SpaceElement *space_elem = (SpaceElement*)element;
         return;
     }
 
@@ -59,12 +58,6 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             element->orig_width = element->width;
             element->orig_height = element->height;
 
-            // STORE ORIGINAL STATE FOR UNDO
-            data->undo_original_width = element->width;
-            data->undo_original_height = element->height;
-            data->undo_original_x = element->x;
-            data->undo_original_y = element->y;
-
             return;
         }
 
@@ -77,10 +70,7 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
                 if (element != connection_start) {
                     Connection *conn = connection_create(connection_start, connection_start_point,
                                                         element, cp, data->next_z_index++, data);
-                    data->current_space->elements = g_list_append(data->current_space->elements, (Element*)conn);
-
-                    // Log the action
-                    undo_manager_push_action(data->undo_manager, ACTION_CREATE_CONNECTION, conn, "Create Connection");
+                    data->elements = g_list_append(data->elements, (Element*)conn);
                 }
                 connection_start = NULL;
                 connection_start_point = -1;
@@ -109,23 +99,6 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
             element->drag_offset_x = (int)x - element->x;
             element->drag_offset_y = (int)y - element->y;
 
-            // STORE ORIGINAL POSITIONS FOR ALL SELECTED ELEMENTS
-            if (data->undo_original_positions) {
-                g_list_free_full(data->undo_original_positions, g_free);
-                data->undo_original_positions = NULL;
-            }
-
-            if (data->selected_elements) {
-                data->undo_original_positions = NULL;
-                for (GList *sel = data->selected_elements; sel != NULL; sel = sel->next) {
-                    Element *selected_element = (Element*)sel->data;
-                    PositionData *pos_data = g_new0(PositionData, 1);
-                    pos_data->element = selected_element;
-                    pos_data->x = selected_element->x;
-                    pos_data->y = selected_element->y;
-                    data->undo_original_positions = g_list_append(data->undo_original_positions, pos_data);
-                }
-            }
         }
     } else {
         connection_start = NULL;
@@ -149,7 +122,7 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     CanvasData *data = (CanvasData*)user_data;
     canvas_update_cursor(data, (int)x, (int)y);
 
-    for (GList *l = data->current_space->elements; l != NULL; l = l->next) {
+    for (GList *l = data->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         if (element->resizing) {
@@ -186,7 +159,7 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
             if (new_width < 50) new_width = 50;
             if (new_height < 30) new_height = 30;
 
-            element_update_position(element, new_x, new_y);
+            element_update_position(element, new_x, new_y, element->z);
             element_update_size(element, new_width, new_height);
 
             gtk_widget_queue_draw(data->drawing_area);
@@ -201,7 +174,7 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
                 Element *selected_element = (Element*)sel->data;
                 int new_x = selected_element->x + dx;
                 int new_y = selected_element->y + dy;
-                element_update_position(selected_element, new_x, new_y);
+                element_update_position(selected_element, new_x, new_y, element->z);
             }
 
             gtk_widget_queue_draw(data->drawing_area);
@@ -226,7 +199,7 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         int sel_width = ABS(data->current_x - data->start_x);
         int sel_height = ABS(data->current_y - data->start_y);
 
-        for (GList *iter = data->current_space->elements; iter != NULL; iter = iter->next) {
+        for (GList *iter = data->elements; iter != NULL; iter = iter->next) {
             Element *element = (Element*)iter->data;
 
             // Skip hidden elements
@@ -245,33 +218,8 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         }
     }
 
-    for (GList *l = data->current_space->elements; l != NULL; l = l->next) {
+    for (GList *l = data->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
-
-        if (element->resizing) {
-            // PUSH RESIZE UNDO ACTION
-            if (element->width != data->undo_original_width || element->height != data->undo_original_height) {
-                undo_manager_push_resize_action(data->undo_manager, element,
-                                              data->undo_original_width, data->undo_original_height,
-                                              element->width, element->height);
-            }
-        }
-
-        if (element->dragging && data->undo_original_positions) {
-            // PUSH MOVE UNDO ACTIONS FOR ALL SELECTED ELEMENTS
-            for (GList *pos_list = data->undo_original_positions; pos_list != NULL; pos_list = pos_list->next) {
-                PositionData *pos_data = (PositionData*)pos_list->data;
-                if (pos_data->element->x != pos_data->x || pos_data->element->y != pos_data->y) {
-                    undo_manager_push_move_action(data->undo_manager, pos_data->element,
-                                                pos_data->x, pos_data->y,
-                                                pos_data->element->x, pos_data->element->y);
-                }
-            }
-
-            // Clean up stored positions
-            g_list_free_full(data->undo_original_positions, g_free);
-            data->undo_original_positions = NULL;
-        }
 
         element->dragging = FALSE;
         element->resizing = FALSE;
@@ -289,7 +237,7 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
     Element *selected_element = NULL;
     int highest_z_index = -1;
 
-    for (GList *l = data->current_space->elements; l != NULL; l = l->next) {
+    for (GList *l = data->elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
 
         // Skip hidden elements
@@ -299,9 +247,9 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
 
         if (x >= element->x && x <= element->x + element->width &&
             y >= element->y && y <= element->y + element->height) {
-            if (element->z_index > highest_z_index) {
+            if (element->z > highest_z_index) {
                 selected_element = element;
-                highest_z_index = element->z_index;
+                highest_z_index = element->z;
             }
         }
     }

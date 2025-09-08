@@ -19,15 +19,15 @@ static ElementVTable note_vtable = {
     .free = note_free
 };
 
-Note* note_create(int x, int y, int width, int height, const char *text, int z_index, CanvasData *data) {
+Note* note_create(int x, int y, int z, int width, int height, const char *text, CanvasData *data) {
     Note *note = g_new0(Note, 1);
     note->base.type = ELEMENT_NOTE;
     note->base.vtable = &note_vtable;
     note->base.x = x;
     note->base.y = y;
+    note->base.z = z;  // Use z for both position and drawing order
     note->base.width = width;
     note->base.height = height;
-    note->base.z_index = z_index;
     note->text = g_strdup(text);
     note->text_view = NULL;
     note->editing = FALSE;
@@ -217,8 +217,11 @@ void note_finish_editing(Element *element) {
     }
 }
 
-void note_update_position(Element *element, int x, int y) {
+void note_update_position(Element *element, int x, int y, int z) {
     Note *note = (Note*)element;
+    element->x = x;
+    element->y = y;
+    element->z = z;
     if (note->text_view) {
         gtk_widget_set_margin_start(note->text_view, x);
         gtk_widget_set_margin_top(note->text_view, y);
@@ -227,6 +230,8 @@ void note_update_position(Element *element, int x, int y) {
 
 void note_update_size(Element *element, int width, int height) {
     Note *note = (Note*)element;
+    element->width = width;
+    element->height = height;
     if (note->text_view) {
         gtk_widget_set_size_request(note->text_view, width, height);
     }

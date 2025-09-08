@@ -1,4 +1,3 @@
-#include "undo_manager.h"
 #include "canvas_core.h"
 #include "canvas_input.h"
 #include "canvas_actions.h"
@@ -21,13 +20,12 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     gtk_box_append(GTK_BOX(toolbar), add_note_btn);
 
     // Add undo/redo buttons to toolbar
-    GtkWidget *undo_btn = gtk_button_new_with_label("Undo");
-    GtkWidget *redo_btn = gtk_button_new_with_label("Redo");
-    GtkWidget *log_btn = gtk_button_new_with_label("Log");
-
-    gtk_box_append(GTK_BOX(toolbar), undo_btn);
-    gtk_box_append(GTK_BOX(toolbar), redo_btn);
-    gtk_box_append(GTK_BOX(toolbar), log_btn);
+    /* GtkWidget *undo_btn = gtk_button_new_with_label("Undo"); */
+    /* GtkWidget *redo_btn = gtk_button_new_with_label("Redo"); */
+    /* GtkWidget *log_btn = gtk_button_new_with_label("Log"); */
+    /* gtk_box_append(GTK_BOX(toolbar), undo_btn); */
+    /* gtk_box_append(GTK_BOX(toolbar), redo_btn); */
+    /* gtk_box_append(GTK_BOX(toolbar), log_btn); */
 
     GtkWidget *add_space_btn = gtk_button_new_with_label("New Space");
     gtk_box_append(GTK_BOX(toolbar), add_space_btn);
@@ -63,9 +61,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
     g_signal_connect(add_paper_btn, "clicked", G_CALLBACK(canvas_on_add_paper_note), data);
     g_signal_connect(add_note_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
-    g_signal_connect(undo_btn, "clicked", G_CALLBACK(on_undo_clicked), data);
-    g_signal_connect(redo_btn, "clicked", G_CALLBACK(on_redo_clicked), data);
-    g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data);
+    /* g_signal_connect(undo_btn, "clicked", G_CALLBACK(on_undo_clicked), data); */
+    /* g_signal_connect(redo_btn, "clicked", G_CALLBACK(on_redo_clicked), data); */
+    /* g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data); */
     g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
     g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);
 
