@@ -217,11 +217,6 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         for (GList *iter = visual_elements; iter != NULL; iter = iter->next) {
             Element *element = (Element*)iter->data;
 
-            // Skip hidden elements
-            if (element->hidden) {
-                continue;
-            }
-
             if (element->x + element->width >= sel_x &&
                 element->x <= sel_x + sel_width &&
                 element->y + element->height >= sel_y &&
@@ -244,12 +239,8 @@ void canvas_on_release(GtkGestureClick *gesture, int n_press, double x, double y
         element->resizing = FALSE;
     }
 
-    if (was_resized) {
-      // Re-create visual elements since some sizes may be changed due to resizing of cloned element
-      GList *sorted_elements = sort_model_elements_for_serialization(data->model->elements);
-      create_visual_elements_from_sorted_list(sorted_elements, data);
-      g_list_free(sorted_elements);
-    }
+    // Re-create visual elements since some sizes may be changed due to resizing of cloned element
+    if (was_resized) canvas_recreate_visual_elements(data);
 
     gtk_widget_queue_draw(data->drawing_area);
 }
@@ -266,11 +257,6 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
     GList *visual_elements = canvas_get_visual_elements(data);
     for (GList *l = visual_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
-
-        // Skip hidden elements
-        if (element->hidden) {
-            continue;
-        }
 
         if (x >= element->x && x <= element->x + element->width &&
             y >= element->y && y <= element->y + element->height) {
@@ -383,6 +369,33 @@ static void on_popover_closed(GtkPopover *popover, gpointer user_data) {
     g_idle_add(destroy_popover_callback, popover);
 }
 
+static void on_delete_element_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+    if (data && data->model && element_uuid) {
+        ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+        if (model_element) {
+            // Check if it's a space with elements
+            if (model_element->type->type == ELEMENT_SPACE) {
+              // No need to query DB if it's a new space
+              if (model_element->state != MODEL_STATE_NEW) {
+                int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
+                if (element_count > 0) {
+                    g_print("Only empty space is allowed for deletion for now\n");
+                    return;
+                }
+              }
+            }
+
+            model_delete_element(data->model, model_element);
+            canvas_recreate_visual_elements(data);
+            gtk_widget_queue_draw(data->drawing_area);
+        }
+    }
+}
+
+// Modify the canvas_on_right_click function to include the delete option
 void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
@@ -396,33 +409,38 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
                 // Create an action group for the menu
                 GSimpleActionGroup *action_group = g_simple_action_group_new();
 
-                // Create actions - use g_strdup for the UUID
+                // Create delete action
+                GSimpleAction *delete_action = g_simple_action_new("delete", NULL);
+                g_object_set_data(G_OBJECT(delete_action), "canvas_data", data);
+                g_object_set_data_full(G_OBJECT(delete_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+                g_signal_connect(delete_action, "activate", G_CALLBACK(on_delete_element_action), NULL);
+
                 GSimpleAction *fork_action = g_simple_action_new("fork", NULL);
                 GSimpleAction *clone_text_action = g_simple_action_new("clone-text", NULL);
                 GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
 
-                // Store the necessary data in the actions with proper string duplication
+                // Store data for existing actions
                 g_object_set_data(G_OBJECT(fork_action), "canvas_data", data);
                 g_object_set_data_full(G_OBJECT(fork_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-
                 g_object_set_data(G_OBJECT(clone_text_action), "canvas_data", data);
                 g_object_set_data_full(G_OBJECT(clone_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-
                 g_object_set_data(G_OBJECT(clone_size_action), "canvas_data", data);
                 g_object_set_data_full(G_OBJECT(clone_size_action), "element_uuid", g_strdup(model_element->uuid), g_free);
 
-                // Connect the actions to their handlers
+                // Connect existing actions
                 g_signal_connect(fork_action, "activate", G_CALLBACK(on_fork_element_action), NULL);
                 g_signal_connect(clone_text_action, "activate", G_CALLBACK(on_clone_by_text_action), NULL);
                 g_signal_connect(clone_size_action, "activate", G_CALLBACK(on_clone_by_size_action), NULL);
 
-                // Add actions to the action group
+                // Add all actions to the action group
+                g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
                 g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(fork_action));
                 g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_text_action));
                 g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
 
-                // Create the menu model
+                // Create the menu model with delete option first
                 GMenu *menu_model = g_menu_new();
+                g_menu_append(menu_model, "Delete", "menu.delete");
                 g_menu_append(menu_model, "Fork Element", "menu.fork");
                 g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
                 g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
@@ -438,9 +456,10 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
                 gtk_popover_set_pointing_to(GTK_POPOVER(popover), &(GdkRectangle){x, y, 1, 1});
                 gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
 
-                // Store references for cleanup when the popover is destroyed
+                // Store references for cleanup
                 g_object_set_data_full(G_OBJECT(popover), "action_group", action_group, g_object_unref);
                 g_object_set_data_full(G_OBJECT(popover), "menu_model", menu_model, g_object_unref);
+                g_object_set_data_full(G_OBJECT(popover), "delete_action", delete_action, g_object_unref);
                 g_object_set_data_full(G_OBJECT(popover), "fork_action", fork_action, g_object_unref);
                 g_object_set_data_full(G_OBJECT(popover), "clone_text_action", clone_text_action, g_object_unref);
                 g_object_set_data_full(G_OBJECT(popover), "clone_size_action", clone_size_action, g_object_unref);

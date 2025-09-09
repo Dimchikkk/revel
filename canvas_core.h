@@ -15,7 +15,10 @@ void canvas_on_app_shutdown(GApplication *app, gpointer user_data);
 // Expects connections to be last in elements array
 Element* create_visual_element(ModelElement *model_element, CanvasData *canvas_data);
 GList *canvas_get_visual_elements(CanvasData *data);
-void create_visual_elements_from_sorted_list(GList *sorted_elements, CanvasData *data);
-GList *sort_model_elements_for_serialization(GHashTable *elements_table);
+// Recreates all visual elements from the model, sorted for proper serialization
+//
+// This function sorts the model elements (with connections last) and creates
+// visual elements from the sorted list. Useful for refreshing the canvas display.
+void canvas_recreate_visual_elements(CanvasData *canvas_data);
 
 #endif

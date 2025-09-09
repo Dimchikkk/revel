@@ -1190,6 +1190,249 @@ static void test_model_delete_element_comprehensive(TestFixture *fixture, gconst
   g_free(uuid3);
 }
 
+// Test: Delete element with connections (should cascade delete connections)
+static void test_model_delete_element_with_connections(TestFixture *fixture, gconstpointer user_data) {
+  // Create three elements to form connections
+  ModelElement *element1 = model_create_note(fixture->model, 100, 100, 1, 50, 30, "Element 1");
+  ModelElement *element2 = model_create_note(fixture->model, 200, 200, 1, 50, 30, "Element 2");
+  ModelElement *element3 = model_create_note(fixture->model, 300, 300, 1, 50, 30, "Element 3");
+
+  g_assert_nonnull(element1);
+  g_assert_nonnull(element2);
+  g_assert_nonnull(element3);
+
+  // Create connections between them
+  ModelElement *connection1 = model_create_connection(fixture->model, element1->uuid, element2->uuid, 0, 2, 1);
+  ModelElement *connection2 = model_create_connection(fixture->model, element2->uuid, element3->uuid, 1, 3, 1);
+  ModelElement *connection3 = model_create_connection(fixture->model, element3->uuid, element1->uuid, 2, 0, 1);
+
+  g_assert_nonnull(connection1);
+  g_assert_nonnull(connection2);
+  g_assert_nonnull(connection3);
+
+  // Save all elements to database first
+  int saved_count = model_save_elements(fixture->model);
+  g_assert_cmpint(saved_count, ==, 6); // 3 notes + 3 connections
+
+  // Change states to SAVED to simulate loaded elements
+  element1->state = MODEL_STATE_SAVED;
+  element2->state = MODEL_STATE_SAVED;
+  element3->state = MODEL_STATE_SAVED;
+  connection1->state = MODEL_STATE_SAVED;
+  connection2->state = MODEL_STATE_SAVED;
+  connection3->state = MODEL_STATE_SAVED;
+
+  // Store UUIDs for verification
+  char *element1_uuid = g_strdup(element1->uuid);
+  char *element2_uuid = g_strdup(element2->uuid);
+  char *element3_uuid = g_strdup(element3->uuid);
+  char *connection1_uuid = g_strdup(connection1->uuid);
+  char *connection2_uuid = g_strdup(connection2->uuid);
+  char *connection3_uuid = g_strdup(connection3->uuid);
+
+  // Verify all elements exist in model
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element1_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element2_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element3_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, connection1_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, connection2_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, connection3_uuid));
+
+  // Test 1: Delete element2 (which has connections pointing to and from it)
+  int delete_result = model_delete_element(fixture->model, element2);
+  g_assert_cmpint(delete_result, ==, 1);
+  g_assert_cmpint(element2->state, ==, MODEL_STATE_DELETED);
+
+  // Verify that connections referencing element2 are also marked for deletion
+  g_assert_cmpint(connection1->state, ==, MODEL_STATE_DELETED); // connection1: element1 -> element2
+  g_assert_cmpint(connection2->state, ==, MODEL_STATE_DELETED); // connection2: element2 -> element3
+
+  // connection3 should NOT be deleted (it's element3 -> element1, doesn't reference element2)
+  g_assert_cmpint(connection3->state, ==, MODEL_STATE_SAVED);
+
+  // Verify elements still exist in model (marked for deletion but not removed yet)
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element2_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, connection1_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, connection2_uuid));
+
+  // Save deletions to database
+  saved_count = model_save_elements(fixture->model);
+  g_assert_cmpint(saved_count, ==, 3); // element2 + connection1 + connection2
+
+  // Verify deleted elements are removed from model
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, element2_uuid));
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, connection1_uuid));
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, connection2_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element1_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element3_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, connection3_uuid));
+
+  // Verify deleted elements are removed from database
+  ModelElement *db_element = NULL;
+  int exists = database_read_element(fixture->db, element2_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_null(db_element); // Should not be found
+
+  exists = database_read_element(fixture->db, connection1_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_null(db_element);
+
+  exists = database_read_element(fixture->db, connection2_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_null(db_element);
+
+  // Verify remaining elements still exist in database
+  exists = database_read_element(fixture->db, element1_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_nonnull(db_element);
+  if (db_element) model_element_free(db_element);
+
+  exists = database_read_element(fixture->db, element3_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_nonnull(db_element);
+  if (db_element) model_element_free(db_element);
+
+  exists = database_read_element(fixture->db, connection3_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_nonnull(db_element);
+  if (db_element) model_element_free(db_element);
+
+  // Test 2: Delete element1 (which should also delete connection3 that references it)
+  delete_result = model_delete_element(fixture->model, element1);
+  g_assert_cmpint(delete_result, ==, 1);
+  g_assert_cmpint(element1->state, ==, MODEL_STATE_DELETED);
+
+  // Verify connection3 is also marked for deletion (it references element1)
+  g_assert_cmpint(connection3->state, ==, MODEL_STATE_DELETED);
+
+  // Save deletions
+  saved_count = model_save_elements(fixture->model);
+  g_assert_cmpint(saved_count, ==, 2); // element1 + connection3
+
+  // Verify all elements except element3 are removed from model
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, element1_uuid));
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, connection3_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, element3_uuid));
+
+  // Verify database cleanup
+  exists = database_read_element(fixture->db, element1_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_null(db_element);
+
+  exists = database_read_element(fixture->db, connection3_uuid, &db_element);
+  g_assert_true(exists);
+  g_assert_null(db_element);
+
+  // Test 3: Verify connection deletion doesn't cascade further
+  // (Deleting a connection should NOT trigger deletion of other connections)
+  // Create a new connection to test this
+  ModelElement *element4 = model_create_note(fixture->model, 400, 400, 1, 50, 30, "Element 4");
+  ModelElement *connection4 = model_create_connection(fixture->model, element3->uuid, element4->uuid, 0, 1, 1);
+
+  g_assert_nonnull(element4);
+  g_assert_nonnull(connection4);
+
+  // Save them
+  element4->state = MODEL_STATE_SAVED;
+  connection4->state = MODEL_STATE_SAVED;
+  saved_count = model_save_elements(fixture->model);
+
+  // Delete connection4 (should NOT trigger deletion of element3 or element4)
+  delete_result = model_delete_element(fixture->model, connection4);
+  g_assert_cmpint(delete_result, ==, 1);
+  g_assert_cmpint(connection4->state, ==, MODEL_STATE_DELETED);
+
+  // Verify element3 and element4 are NOT marked for deletion
+  g_assert_cmpint(element3->state, ==, MODEL_STATE_SAVED);
+  g_assert_cmpint(element4->state, ==, MODEL_STATE_SAVED);
+
+  // Cleanup
+  g_free(element1_uuid);
+  g_free(element2_uuid);
+  g_free(element3_uuid);
+  g_free(connection1_uuid);
+  g_free(connection2_uuid);
+  g_free(connection3_uuid);
+}
+
+// Test: Verify save/delete ordering functionality
+static void test_model_save_delete_ordering(TestFixture *fixture, gconstpointer user_data) {
+  // Create elements and connections
+  ModelElement *note1 = model_create_note(fixture->model, 100, 100, 1, 50, 30, "Note 1");
+  ModelElement *note2 = model_create_note(fixture->model, 200, 200, 1, 50, 30, "Note 2");
+  ModelElement *connection = model_create_connection(fixture->model, note1->uuid, note2->uuid, 0, 2, 1);
+
+  g_assert_nonnull(note1);
+  g_assert_nonnull(note2);
+  g_assert_nonnull(connection);
+
+  // Copy UUIDs immediately before they might get freed
+  char *note1_uuid = g_strdup(note1->uuid);
+  char *note2_uuid = g_strdup(note2->uuid);
+  char *connection_uuid = g_strdup(connection->uuid);
+
+  // Save all elements - should save notes first, then connection
+  int saved_count = model_save_elements(fixture->model);
+  g_assert_cmpint(saved_count, ==, 3);
+
+  // Verify all elements are saved
+  g_assert_cmpint(note1->state, ==, MODEL_STATE_SAVED);
+  g_assert_cmpint(note2->state, ==, MODEL_STATE_SAVED);
+  g_assert_cmpint(connection->state, ==, MODEL_STATE_SAVED);
+
+  // Verify elements exist in database using the copied UUIDs
+  ModelElement *db_note1 = NULL;
+  ModelElement *db_note2 = NULL;
+  ModelElement *db_connection = NULL;
+
+  g_assert_true(database_read_element(fixture->db, note1_uuid, &db_note1));
+  g_assert_nonnull(db_note1);
+  g_assert_true(database_read_element(fixture->db, note2_uuid, &db_note2));
+  g_assert_nonnull(db_note2);
+  g_assert_true(database_read_element(fixture->db, connection_uuid, &db_connection));
+  g_assert_nonnull(db_connection);
+
+  // Cleanup database reads
+  if (db_note1) model_element_free(db_note1);
+  if (db_note2) model_element_free(db_note2);
+  if (db_connection) model_element_free(db_connection);
+
+  // Now test deletion ordering - mark connection for deletion first
+  int delete_result = model_delete_element(fixture->model, connection);
+  g_assert_cmpint(delete_result, ==, 1);
+  g_assert_cmpint(connection->state, ==, MODEL_STATE_DELETED);
+
+  // Then mark one note for deletion
+  delete_result = model_delete_element(fixture->model, note1);
+  g_assert_cmpint(delete_result, ==, 1);
+  g_assert_cmpint(note1->state, ==, MODEL_STATE_DELETED);
+
+  // Save deletions - should delete connection first, then note
+  saved_count = model_save_elements(fixture->model);
+  g_assert_cmpint(saved_count, ==, 2);
+
+  // Verify elements are removed from model using copied UUIDs
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, note1_uuid));
+  g_assert_null(g_hash_table_lookup(fixture->model->elements, connection_uuid));
+  g_assert_nonnull(g_hash_table_lookup(fixture->model->elements, note2_uuid));
+
+  // Verify elements are removed from database using copied UUIDs
+  g_assert_true(database_read_element(fixture->db, note1_uuid, &db_note1));
+  g_assert_null(db_note1);
+  g_assert_true(database_read_element(fixture->db, connection_uuid, &db_connection));
+  g_assert_null(db_connection);
+
+  // Verify remaining element still exists using copied UUID
+  g_assert_true(database_read_element(fixture->db, note2_uuid, &db_note2));
+  g_assert_nonnull(db_note2);
+  if (db_note2) model_element_free(db_note2);
+
+  // Cleanup copied UUIDs
+  g_free(note1_uuid);
+  g_free(note2_uuid);
+  g_free(connection_uuid);
+}
+
 int main(int argc, char *argv[]) {
   g_test_init(&argc, &argv, NULL);
 
@@ -1215,6 +1458,8 @@ int main(int argc, char *argv[]) {
   g_test_add("/model/save-new-elements-updated", TestFixture, NULL, test_setup, test_model_save_updated_elements, test_teardown);
   g_test_add("/model/delete-from-db", TestFixture, NULL, test_setup, test_model_delete_element_from_database, test_teardown);
   g_test_add("/model/delete-from-db-shared", TestFixture, NULL, test_setup, test_model_delete_element_comprehensive, test_teardown);
+  g_test_add("/model/delete-element-with-connections", TestFixture, NULL, test_setup, test_model_delete_element_with_connections, test_teardown);
+  g_test_add("/model/save-delete-ordering", TestFixture, NULL, test_setup, test_model_save_delete_ordering, test_teardown);
 
   return g_test_run();
 }

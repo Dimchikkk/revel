@@ -15,10 +15,7 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   data->model->current_space_uuid = g_strdup(space_uuid);;
 
   model_load_space(data->model);
-
-  GList *sorted_elements = sort_model_elements_for_serialization(data->model->elements);
-  create_visual_elements_from_sorted_list(sorted_elements, data);
-  g_list_free(sorted_elements);
+  canvas_recreate_visual_elements(data);
 
   gtk_widget_queue_draw(data->drawing_area);
 }

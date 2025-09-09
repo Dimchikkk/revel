@@ -2,9 +2,18 @@
 
 Note taking brainstorming app
 
+# Features:
+
+- TODO
+
 ## Dependencies
 
 GTK4, sqlite3
+
+```
+sudo apt install libgtk-4-dev
+sudo apt install libsqlite3-dev
+```
 
 ## To run on x86_64 GNU/Linux:
 

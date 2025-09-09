@@ -15,12 +15,6 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
-static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
-    const Element *element_a = (const Element*)a;
-    const Element *element_b = (const Element*)b;
-    return element_a->z - element_b->z;
-}
-
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   CanvasData *data = g_new0(CanvasData, 1);
   data->selected_elements = NULL;
@@ -42,18 +36,14 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
 
   data->model = model_new();
 
-  if (data->model != NULL && data->model->db != NULL) {
-    GList *sorted_elements = sort_model_elements_for_serialization(data->model->elements);
-    create_visual_elements_from_sorted_list(sorted_elements, data);
-    g_list_free(sorted_elements);
-  }
+  if (data->model != NULL && data->model->db != NULL) canvas_recreate_visual_elements(data);
 
   return data;
 }
 
 GList* sort_model_elements_for_serialization(GHashTable *elements_table) {
     GList *elements_list = g_hash_table_get_values(elements_table);
-    return g_list_sort(elements_list, (GCompareFunc)compare_model_elements_for_serialization);
+    return g_list_sort(elements_list, (GCompareFunc)model_compare_for_saving_loading);
 }
 
 void create_visual_elements_from_sorted_list(GList *sorted_elements, CanvasData *data) {
@@ -86,6 +76,12 @@ void canvas_data_free(CanvasData *data) {
     // Don't free the model here - it's freed in canvas_on_app_shutdown
 
     g_free(data);
+}
+
+static gint compare_model_elements_by_z(const ModelElement *a, const ModelElement *b) {
+    if (!a || !a->position) return 1;
+    if (!b || !b->position) return -1;
+    return a->position->z - b->position->z;
 }
 
 void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data) {
@@ -126,20 +122,22 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
         g_object_unref(layout);
     }
 
-    // Get visual elements from model
-    GList *visual_elements = canvas_get_visual_elements(data);
-    GList *sorted_elements = g_list_copy(visual_elements);
-    sorted_elements = g_list_sort(sorted_elements, compare_elements_by_z_index);
+    GList *model_elements_list = g_hash_table_get_values(data->model->elements);
+    GList *sorted_model_elements = g_list_sort(model_elements_list, (GCompareFunc)compare_model_elements_by_z);
 
-    for (GList *l = sorted_elements; l != NULL; l = l->next) {
-        Element *element = (Element*)l->data;
-        if (!element->hidden) {
-            element_draw(element, cr, canvas_is_element_selected(data, element));
-        }
+    for (GList *l = sorted_model_elements; l != NULL; l = l->next) {
+      ModelElement *model_element = (ModelElement*)l->data;
+
+      // Skip deleted elements and elements without visual representation
+      if (model_element->state == MODEL_STATE_DELETED || !model_element->visual_element) {
+        continue;
+      }
+
+      // Draw the visual element
+      element_draw(model_element->visual_element, cr, canvas_is_element_selected(data, model_element->visual_element));
     }
 
-    g_list_free(sorted_elements);
-    g_list_free(visual_elements);
+    g_list_free(sorted_model_elements);
 
     if (data->selecting) {
         cairo_set_source_rgba(cr, 0.5, 0.5, 1.0, 0.3);
@@ -158,12 +156,6 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
 
 void canvas_delete_selected(CanvasData *data) {
     if (!data->selected_elements) return;
-
-    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
-        Element *element = (Element*)l->data;
-        element->hidden = TRUE;
-    }
-
     canvas_clear_selection(data);
     gtk_widget_queue_draw(data->drawing_area);
 }
@@ -324,4 +316,14 @@ GList* canvas_get_visual_elements(CanvasData *data) {
     }
 
     return visual_elements;
+}
+
+void canvas_recreate_visual_elements(CanvasData *canvas_data) {
+  if (!canvas_data || !canvas_data->model || !canvas_data->model->elements) {
+    return;
+  }
+
+  GList *sorted_elements = sort_model_elements_for_serialization(canvas_data->model->elements);
+  create_visual_elements_from_sorted_list(sorted_elements, canvas_data);
+  g_list_free(sorted_elements);
 }

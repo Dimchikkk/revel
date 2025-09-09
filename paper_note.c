@@ -53,7 +53,6 @@ gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, gui
 
 void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     PaperNote *note = (PaperNote*)element;
-    element->hidden = 0;
 
     cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_clip(cr);
@@ -199,10 +198,7 @@ void paper_note_finish_editing(Element *element) {
 
     // Queue redraw using the stored canvas data
     if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
-        GList *sorted_elements = sort_model_elements_for_serialization(note->base.canvas_data->model->elements);
-        create_visual_elements_from_sorted_list(sorted_elements, note->base.canvas_data);
-        g_list_free(sorted_elements);
-
+        canvas_recreate_visual_elements(note->base.canvas_data);
         gtk_widget_queue_draw(note->base.canvas_data->drawing_area);
     }
 }

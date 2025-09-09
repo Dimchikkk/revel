@@ -93,6 +93,7 @@ int model_save_elements(Model *model);
 
 int model_get_space_name(Model *model, const char *space_uuid, char **space_name);
 int model_get_parent_id(Model *model, char **space_parent_id);
+int model_get_amount_of_elements(Model *model, const char *space_uuid);
 
 // Creation
 ModelElement* model_create_note(Model *model, int x, int y, int z, int width, int height, const char *text);
@@ -116,6 +117,7 @@ int model_delete_element(Model *model, ModelElement *element);
 // Helper functions
 gchar *model_generate_uuid(void);
 ModelElement* model_get_by_visual(Model *model, Element *visual_element);
-gint compare_model_elements_for_serialization(ModelElement *a, ModelElement *b);
+gint model_compare_for_saving_loading(const ModelElement *a, const ModelElement *b);
+gint model_compare_for_deletion(const ModelElement *a, const ModelElement *b);
 
 #endif

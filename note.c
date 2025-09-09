@@ -57,7 +57,6 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     double y = element->y;
     double width = element->width;
     double height = element->height;
-    element->hidden = 0;
 
     // Create rounded rectangle path
     cairo_new_path(cr);
@@ -217,9 +216,7 @@ void note_finish_editing(Element *element) {
 
     // Queue redraw using the stored canvas data
     if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
-        GList *sorted_elements = sort_model_elements_for_serialization(note->base.canvas_data->model->elements);
-        create_visual_elements_from_sorted_list(sorted_elements, note->base.canvas_data);
-        g_list_free(sorted_elements);
+        canvas_recreate_visual_elements(note->base.canvas_data);
         gtk_widget_queue_draw(note->base.canvas_data->drawing_area);
     }
 }

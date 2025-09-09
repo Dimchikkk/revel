@@ -440,6 +440,33 @@ int model_delete_element(Model *model, ModelElement *element) {
 
   // Mark element as deleted
   element->state = MODEL_STATE_DELETED;
+
+  // If this is NOT a connection element, find and mark any connections that reference it
+  if (element->type->type != ELEMENT_CONNECTION) {
+    GHashTableIter iter;
+    gpointer key, value;
+
+    g_hash_table_iter_init(&iter, model->elements);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      ModelElement *current_element = (ModelElement*)value;
+
+      // Only check connection elements that aren't already marked for deletion
+      if (current_element->type->type == ELEMENT_CONNECTION &&
+          current_element->state != MODEL_STATE_DELETED) {
+
+        // Check if this connection references the element being deleted
+        if ((current_element->from_element_uuid && element->uuid &&
+             strcmp(current_element->from_element_uuid, element->uuid) == 0) ||
+            (current_element->to_element_uuid && element->uuid &&
+             strcmp(current_element->to_element_uuid, element->uuid) == 0)) {
+
+          // Mark this connection for deletion too
+          model_delete_element(model, current_element);
+        }
+      }
+    }
+  }
+
   return 1;
 }
 
@@ -568,17 +595,130 @@ int model_save_elements(Model *model) {
   int saved_count = 0;
   GList *to_remove = NULL;  // List of UUIDs to remove after iteration
 
-  // Get all elements and sort them so CONNECTIONS come last
-  GList *elements_list = g_hash_table_get_values(model->elements);
-  elements_list = g_list_sort(elements_list, (GCompareFunc)compare_model_elements_for_serialization);
+  // FIRST: Process DELETIONS with connections first order
+  GList *deleted_elements = NULL;
+  GHashTableIter iter;
+  gpointer key, value;
 
-  // Iterate through sorted elements
-  GList *iter = elements_list;
-  while (iter != NULL) {
-    ModelElement *element = (ModelElement *)iter->data;
+  // Collect all deleted elements
+  g_hash_table_iter_init(&iter, model->elements);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *element = (ModelElement *)value;
+    if (element->state == MODEL_STATE_DELETED) {
+      deleted_elements = g_list_prepend(deleted_elements, element);
+    }
+  }
 
-    switch (element->state) {
-    case MODEL_STATE_NEW: {
+  // Sort deletions: connections first, then elements
+  deleted_elements = g_list_sort(deleted_elements, (GCompareFunc)model_compare_for_deletion);
+
+  // Process deletions in proper order
+  GList *del_iter = deleted_elements;
+  while (del_iter != NULL) {
+    ModelElement *element = (ModelElement *)del_iter->data;
+
+    // Check if element exists in database
+    ModelElement *db_element = NULL;
+    int exists = database_read_element(model->db, element->uuid, &db_element);
+
+    if (exists && db_element) {
+      // Element exists in database, delete it
+      int delete_success = 0;
+
+      // Special handling for space elements - delete from spaces table
+      if (element->type->type == ELEMENT_SPACE && element->target_space_uuid) {
+        // Delete the element itself
+        delete_success = database_delete_element(model->db, element->uuid);
+        if (delete_success) {
+          // Also delete the space from the spaces table
+          delete_success = database_delete_space(model->db, element->target_space_uuid);
+        }
+      } else {
+        // Regular element deletion
+        delete_success = database_delete_element(model->db, element->uuid);
+      }
+
+      if (delete_success) {
+        // Update reference counts in database
+        if (element->type && element->type->id > 0) {
+          database_update_type_ref(model->db, element->type);
+          if (element->type->ref_count < 1) {
+            g_hash_table_remove(model->types, GINT_TO_POINTER(element->type->id));
+            model_type_free(element->type);
+          }
+        }
+
+        if (element->position && element->position->id > 0) {
+          database_update_position_ref(model->db, element->position);
+          if (element->position->ref_count < 1) {
+            g_hash_table_remove(model->positions, GINT_TO_POINTER(element->position->id));
+            model_position_free(element->position);
+          }
+        }
+
+        if (element->size && element->size->id > 0) {
+          database_update_size_ref(model->db, element->size);
+          if (element->size->ref_count < 1) {
+            g_hash_table_remove(model->sizes, GINT_TO_POINTER(element->size->id));
+            model_size_free(element->size);
+          }
+        }
+
+        if (element->text && element->text->id > 0) {
+          database_update_text_ref(model->db, element->text);
+          if (element->text->ref_count < 1) {
+            g_hash_table_remove(model->texts, GINT_TO_POINTER(element->text->id));
+            model_text_free(element->text);
+          }
+        }
+
+        if (element->color && element->color->id > 0) {
+          database_update_color_ref(model->db, element->color);
+          if (element->color->ref_count < 1) {
+            g_hash_table_remove(model->colors, GINT_TO_POINTER(element->color->id));
+            model_color_free(element->color);
+          }
+        }
+
+        cleanup_database_references(model->db);
+        saved_count++;
+      } else {
+        fprintf(stderr, "Failed to delete element %s from database\n", element->uuid);
+      }
+
+      if (db_element) {
+        g_free(db_element->uuid);
+        g_free(db_element);
+      }
+    }
+
+    to_remove = g_list_append(to_remove, g_strdup(element->uuid));
+    del_iter = del_iter->next;
+  }
+
+  g_list_free(deleted_elements);
+
+  // SECOND: Process NEW and UPDATED elements with elements first order
+  GList *elements_to_save = NULL;
+
+  // Collect all elements that need to be saved (NEW or UPDATED)
+  g_hash_table_iter_init(&iter, model->elements);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *element = (ModelElement *)value;
+    if (element->state == MODEL_STATE_NEW || element->state == MODEL_STATE_UPDATED) {
+      elements_to_save = g_list_prepend(elements_to_save, element);
+    }
+  }
+
+  // Sort for saving: elements first, then connections
+  elements_to_save = g_list_sort(elements_to_save, (GCompareFunc)model_compare_for_saving_loading);
+
+  // Process saves in proper order
+  GList *save_iter = elements_to_save;
+  while (save_iter != NULL) {
+    ModelElement *element = (ModelElement *)save_iter->data;
+
+    if (element->state == MODEL_STATE_NEW) {
       if (element->type->type == ELEMENT_SPACE) {
         char *target_space_uuid = NULL;
         if (!database_create_space(model->db, element->text->text, model->current_space_uuid, &target_space_uuid)) {
@@ -612,11 +752,7 @@ int model_save_elements(Model *model) {
       } else {
         fprintf(stderr, "Failed to save element %s to database\n", element->uuid);
       }
-      break;
-    }
-
-      // Assumes that element can't have new property with UPDATED state
-    case MODEL_STATE_UPDATED:
+    } else if (element->state == MODEL_STATE_UPDATED) {
       if (database_update_element(model->db, element->uuid, element)) {
         // Change state back to SAVED
         element->state = MODEL_STATE_SAVED;
@@ -624,85 +760,14 @@ int model_save_elements(Model *model) {
       } else {
         fprintf(stderr, "Failed to update element %s in database\n", element->uuid);
       }
-      break;
-
-    case MODEL_STATE_DELETED: {
-      // Check if element exists in database
-      ModelElement *db_element = NULL;
-      int exists = database_read_element(model->db, element->uuid, &db_element);
-
-      if (exists && db_element) {
-        // Element exists in database, delete it
-        if (database_delete_element(model->db, element->uuid)) {
-          // Update reference counts in database
-          if (element->type && element->type->id > 0) {
-            database_update_type_ref(model->db, element->type);
-            if (element->type->ref_count < 1) {
-              g_hash_table_remove(model->types, GINT_TO_POINTER(element->type->id));
-              model_type_free(element->type);
-            }
-          }
-
-          if (element->position && element->position->id > 0) {
-            database_update_position_ref(model->db, element->position);
-            if (element->position->ref_count < 1) {
-              g_hash_table_remove(model->positions, GINT_TO_POINTER(element->position->id));
-              model_position_free(element->position);
-            }
-          }
-
-          if (element->size && element->size->id > 0) {
-            database_update_size_ref(model->db, element->size);
-            if (element->size->ref_count < 1) {
-              g_hash_table_remove(model->sizes, GINT_TO_POINTER(element->size->id));
-              model_size_free(element->size);
-            }
-          }
-
-          if (element->text && element->text->id > 0) {
-            database_update_text_ref(model->db, element->text);
-            if (element->text->ref_count < 1) {
-              g_hash_table_remove(model->texts, GINT_TO_POINTER(element->text->id));
-              model_text_free(element->text);
-            }
-          }
-
-          if (element->color && element->color->id > 0) {
-            database_update_color_ref(model->db, element->color);
-            if (element->color->ref_count < 1) {
-              g_hash_table_remove(model->colors, GINT_TO_POINTER(element->color->id));
-              model_color_free(element->color);
-            }
-          }
-
-          cleanup_database_references(model->db);
-          saved_count++;
-        } else {
-          fprintf(stderr, "Failed to delete element %s from database\n", element->uuid);
-        }
-
-        if (db_element) {
-          g_free(db_element->uuid);
-          g_free(db_element);
-        }
-      }
-
-      to_remove = g_list_append(to_remove, g_strdup(element->uuid));
-      break;
     }
 
-    case MODEL_STATE_SAVED:
-      // Already saved, nothing to do
-      break;
-    }
-
-    iter = iter->next;
+    save_iter = save_iter->next;
   }
 
-  // Free the sorted list (doesn't free the elements themselves)
-  g_list_free(elements_list);
+  g_list_free(elements_to_save);
 
-  // Remove deleted elements after iteration completes
+  // Remove deleted elements from model after all processing is complete
   GList *iter_list = to_remove;
   while (iter_list) {
     char *uuid = (char *)iter_list->data;
@@ -715,15 +780,26 @@ int model_save_elements(Model *model) {
   return saved_count;
 }
 
-// Comparison function to sort elements with CONNECTIONS type last
-gint compare_model_elements_for_serialization(ModelElement *a, ModelElement *b) {
-  if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
-    return 1; // a (connection) comes after b
-  } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
-    return -1; // a comes before b (connection)
-  } else {
-    return 0; // equal order
-  }
+// Comparison function for saving: elements first, then connections
+gint model_compare_for_saving_loading(const ModelElement *a, const ModelElement *b) {
+    if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
+        return 1; // connection comes after non-connection
+    } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
+        return -1; // non-connection comes before connection
+    } else {
+        return 0;
+    }
+}
+
+// Comparison function for deletion: connections first, then elements
+gint model_compare_for_deletion(const ModelElement *a, const ModelElement *b) {
+    if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
+        return -1; // connection comes before non-connection
+    } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
+        return 1; // non-connection comes after connection
+    } else {
+        return 0;
+    }
 }
 
 ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
@@ -741,4 +817,8 @@ ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
     }
 
     return NULL;
+}
+
+int model_get_amount_of_elements(Model *model, const char *space_uuid) {
+  return database_get_amount_of_elements(model->db, space_uuid);
 }
