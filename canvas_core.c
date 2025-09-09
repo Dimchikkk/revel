@@ -16,6 +16,12 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
+static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
+    const Element *element_a = (const Element*)a;
+    const Element *element_b = (const Element*)b;
+    return element_a->z - element_b->z;
+}
+
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   CanvasData *data = g_new0(CanvasData, 1);
   data->selected_elements = NULL;
@@ -79,12 +85,6 @@ void canvas_data_free(CanvasData *data) {
     g_free(data);
 }
 
-static gint compare_model_elements_by_z(const ModelElement *a, const ModelElement *b) {
-    if (!a || !a->position) return 1;
-    if (!b || !b->position) return -1;
-    return a->position->z - b->position->z;
-}
-
 void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data) {
     CanvasData *data = (CanvasData*)user_data;
 
@@ -123,22 +123,18 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
         g_object_unref(layout);
     }
 
-    GList *model_elements_list = g_hash_table_get_values(data->model->elements);
-    GList *sorted_model_elements = g_list_sort(model_elements_list, (GCompareFunc)compare_model_elements_by_z);
+    GList *visual_elements = canvas_get_visual_elements(data);
+    GList *sorted_elements = g_list_copy(visual_elements);
 
-    for (GList *l = sorted_model_elements; l != NULL; l = l->next) {
-      ModelElement *model_element = (ModelElement*)l->data;
+    sorted_elements = g_list_sort(sorted_elements, compare_elements_by_z_index);
 
-      // Skip deleted elements and elements without visual representation
-      if (model_element->state == MODEL_STATE_DELETED || !model_element->visual_element) {
-        continue;
-      }
-
-      // Draw the visual element
-      element_draw(model_element->visual_element, cr, canvas_is_element_selected(data, model_element->visual_element));
+    for (GList *l = sorted_elements; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        element_draw(element, cr, canvas_is_element_selected(data, element));
     }
 
-    g_list_free(sorted_model_elements);
+    g_list_free(sorted_elements);
+    g_list_free(visual_elements);
 
     if (data->selecting) {
         cairo_set_source_rgba(cr, 0.5, 0.5, 1.0, 0.3);
@@ -153,12 +149,6 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
         cairo_set_line_width(cr, 1);
         cairo_stroke(cr);
     }
-}
-
-void canvas_delete_selected(CanvasData *data) {
-    if (!data->selected_elements) return;
-    canvas_clear_selection(data);
-    gtk_widget_queue_draw(data->drawing_area);
 }
 
 void canvas_clear_selection(CanvasData *data) {
@@ -324,6 +314,8 @@ GList* canvas_get_visual_elements(CanvasData *data) {
     g_hash_table_iter_init(&iter, data->model->elements);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         ModelElement *model_element = (ModelElement*)value;
+
+        if (model_element->state == MODEL_STATE_DELETED) continue;
 
         // Only include elements that belong to the current space
         if (model_element->visual_element != NULL &&
