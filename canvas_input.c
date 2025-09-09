@@ -100,6 +100,7 @@ void canvas_on_button_press(GtkGestureClick *gesture, int n_press, double x, dou
         }
 
         if (!((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
+              (element->type == ELEMENT_IMAGE_NOTE && ((Note*)element)->editing) ||
               (element->type == ELEMENT_NOTE && ((Note*)element)->editing))) {
             if (!(data->modifier_state & GDK_SHIFT_MASK)) {
                 canvas_clear_selection(data);
@@ -472,4 +473,86 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
             }
         }
     }
+}
+
+void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+  CanvasData *data = (CanvasData *)user_data;
+  GError *error = NULL;
+
+
+  GdkClipboard *clipboard = GDK_CLIPBOARD(source_object);
+
+  GdkTexture *texture = gdk_clipboard_read_texture_finish(clipboard, res, &error);
+  if (!texture) {
+    g_print("No image in clipboard or failed: %s\n",
+            error ? error->message : "unknown");
+    if (error) g_error_free(error);
+    return;
+  }
+
+  // Convert to GdkPixbuf
+  GdkPixbuf *pixbuf = gdk_pixbuf_get_from_texture(texture);
+  if (!pixbuf) {
+    g_print("Failed to convert texture to pixbuf: %s\n",
+            error ? error->message : "unknown");
+    if (error) g_error_free(error);
+    g_object_unref(texture);
+    return;
+  }
+
+  // Convert pixbuf to raw image data
+  gsize buffer_size;
+  gchar *buffer = NULL;
+
+  if (gdk_pixbuf_save_to_buffer(pixbuf, &buffer, &buffer_size, "png", &error, NULL)) {
+    // Create image note element
+    ModelElement *model_element = model_create_image_note(
+                                                          data->model,
+                                                          100, 100, data->next_z_index++,
+                                                          gdk_pixbuf_get_width(pixbuf),
+                                                          gdk_pixbuf_get_height(pixbuf),
+                                                          (const unsigned char*)buffer, buffer_size,
+                                                          g_strdup("")
+                                                          );
+
+    model_element->visual_element = create_visual_element(model_element, data);
+    gtk_widget_queue_draw(data->drawing_area);
+
+    g_free(buffer);
+  }
+
+  // Queue redraw
+  gtk_widget_queue_draw(data->drawing_area);
+
+  g_object_unref(pixbuf);
+  g_object_unref(texture);
+}
+
+void canvas_on_paste(GtkWidget *widget, CanvasData *data) {
+    GdkClipboard *clipboard = gdk_display_get_clipboard(gdk_display_get_default());
+
+    if (!clipboard) {
+        g_print("Failed to get clipboard\n");
+        return;
+    }
+
+    // Async read texture from clipboard
+    gdk_clipboard_read_texture_async(
+        clipboard,
+        NULL,                     // GCancellable
+        on_clipboard_texture_ready, // Callback function
+        data                       // user_data
+    );
+}
+
+gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
+                        guint keycode, GdkModifierType state, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_v) {
+    canvas_on_paste(data->drawing_area, data);
+    return TRUE;
+  }
+
+  return FALSE;
 }

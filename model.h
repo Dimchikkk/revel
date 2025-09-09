@@ -70,6 +70,10 @@ struct _ModelElement {
 
   // For space elements
   gchar *target_space_uuid;
+
+  // For image note
+  unsigned char *image_data;
+  int image_size;
 };
 
 // Model manages all elements
@@ -100,6 +104,7 @@ ModelElement* model_create_note(Model *model, int x, int y, int z, int width, in
 ModelElement* model_create_paper_note(Model *model, int x, int y, int z, int width, int height, const char *text);
 ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point, int z);
 ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height);
+ModelElement* model_create_image_note(Model *model, int x, int y, int z, int width, int height, const unsigned char *image_data, int image_size, const char *text);
 
 // Fork/cloning
 ModelElement* model_element_fork(Model *model, ModelElement *element);

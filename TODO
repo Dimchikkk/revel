@@ -1,16 +1,11 @@
-- [new feature] insert image from clipboard
-    * make it similar to note (image has connection points, cab be resized etc)
-    * keep images in db or outside?
-    * keep image source as base64 in text column?
+- [new feature] virtual infinite canvas
 - [new feature] change color in right click on element (utilize color_refs table, use GTK4 color picker)
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
-- [new feature] user can choose DB file to load from
+- [new feature] allow choosing DB file
 - [improvement] disable back to parent button if at root space
-- [improvement] implement deletion of elements with ref tables clean up if ref_count = 0
-- [new feature] full-text inverted index implementation for quick search by element content
-- [new feature] virtual infinite canvas
+- [new feature] make index on element text and utilise sqlite to have search functionality
 - [new feature] drawing using pencil feature
+- [improvement] time-travel on row click in action log window
 - [improvement] put text in center of note
 - [improvement] different type of connections
-- [improvement] time-travel on row click in action log window
 - [idea to explore] collaborative editing

@@ -98,6 +98,8 @@ int database_create_tables(sqlite3 *db) {
     "    from_point INTEGER,"        // For connections 0,1,2,3 (connection point location)
     "    to_point INTEGER,"          // For connections 0,1,2,3 (connection point location)
     "    target_space_uuid TEXT,"    // For space elements, UUID of the target space
+    "    image_data BLOB,"          // Image data storage for image note
+    "    image_size INTEGER,"       // Image data size for image note
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -574,8 +576,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_data, image_size) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -623,6 +625,14 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     sqlite3_bind_null(stmt, param_index++);
   }
 
+  if (element->image_data && element->image_size > 0) {
+    sqlite3_bind_blob(stmt, param_index++, element->image_data, element->image_size, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, param_index++, element->image_size);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
+    sqlite3_bind_null(stmt, param_index++);
+  }
+
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create element: %s\n", sqlite3_errmsg(db));
     sqlite3_finalize(stmt);
@@ -636,7 +646,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, color_id, "
-    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid "
+    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_data, image_size "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
 
@@ -724,6 +734,18 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
       elem->space_uuid = g_strdup(space_uuid);
     }
 
+    const void *image_blob = sqlite3_column_blob(stmt, col);
+    int blob_size = sqlite3_column_bytes(stmt, col);
+    col++; // Move to next column
+
+    int image_size = sqlite3_column_int(stmt, col++);
+
+    if (image_blob && blob_size > 0 && image_size > 0) {
+      elem->image_data = g_malloc(image_size);
+      memcpy(elem->image_data, image_blob, image_size);
+      elem->image_size = image_size;
+    }
+
     *element = elem;
     sqlite3_finalize(stmt);
     return 1; // Success
@@ -771,7 +793,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "type_id = ?, position_id = ?, size_id = ?, "
     "text_id = ?, color_id = ?, "
     "from_element_uuid = ?, to_element_uuid = ?, "
-    "from_point = ?, to_point = ?, target_space_uuid = ? "
+    "from_point = ?, to_point = ?, target_space_uuid = ?, "
+    "image_data = ?, image_size = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -820,6 +843,14 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   if (element->target_space_uuid && database_is_valid_uuid(element->target_space_uuid)) {
     sqlite3_bind_text(stmt, param_index++, element->target_space_uuid, -1, SQLITE_STATIC);
   } else {
+    sqlite3_bind_null(stmt, param_index++);
+  }
+
+  if (element->image_data && element->image_size > 0) {
+    sqlite3_bind_blob(stmt, param_index++, element->image_data, element->image_size, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, param_index++, element->image_size);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
     sqlite3_bind_null(stmt, param_index++);
   }
 
@@ -926,7 +957,8 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
 int database_load_space(sqlite3 *db, Model *model) {
   const char *sql =
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.color_id, "
-    "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid "
+    "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
+    "e.image_data, e.image_size "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -952,6 +984,8 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_TO_POINT,
     COL_TARGET_SPACE_UUID,
     COL_SPACE_UUID,
+    COL_IMAGE_DATA,
+    COL_IMAGE_SIZE
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1073,6 +1107,16 @@ int database_load_space(sqlite3 *db, Model *model) {
     const char *space_uuid = (const char*)sqlite3_column_text(stmt, COL_SPACE_UUID);
     if (space_uuid) {
       element->space_uuid = g_strdup(space_uuid);
+    }
+
+    const void *image_blob = sqlite3_column_blob(stmt, COL_IMAGE_DATA);
+    int blob_size = sqlite3_column_bytes(stmt, COL_IMAGE_DATA);
+    int image_size = sqlite3_column_int(stmt, COL_IMAGE_SIZE);
+
+    if (image_blob && blob_size > 0 && image_size > 0) {
+      element->image_data = g_malloc(blob_size);
+      memcpy(element->image_data, image_blob, blob_size);
+      element->image_size = image_size;
     }
 
     element->visual_element = NULL;

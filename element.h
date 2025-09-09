@@ -12,6 +12,7 @@ typedef enum {
   ELEMENT_PAPER_NOTE,
   ELEMENT_CONNECTION,
   ELEMENT_SPACE,
+  ELEMENT_IMAGE_NOTE,
 } ElementType;
 
 typedef struct {

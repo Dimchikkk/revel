@@ -54,6 +54,10 @@ void model_element_free(ModelElement *element) {
   g_free(element->to_element_uuid);
   g_free(element->target_space_uuid);
 
+  if (element->image_data) {
+    g_free(element->image_data);
+  }
+
   // Important: Don't free shared resources here!
   // They are managed by the respective hash tables and will be
   // automatically freed when the hash tables are destroyed
@@ -528,6 +532,21 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     }
     break;
 
+  case ELEMENT_IMAGE_NOTE:
+    if (element->position && element->size && element->image_data && element->image_size > 0) {
+      return model_create_image_note(model,
+                               element->position->x,
+                               element->position->y,
+                               element->position->z,
+                               element->size->width,
+                               element->size->height,
+                               element->image_data,
+                               element->image_size,
+                               element->text->text
+                               );
+    }
+    break;
+
   default:
     g_warning("Unknown element type: %d", element->type->type);
     break;
@@ -821,4 +840,60 @@ ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
 
 int model_get_amount_of_elements(Model *model, const char *space_uuid) {
   return database_get_amount_of_elements(model->db, space_uuid);
+}
+
+ModelElement* model_create_image_note(Model *model, int x, int y, int z, int width, int height,
+                                      const unsigned char *image_data, int image_size, const char *text) {
+  if (model == NULL) {
+    g_printerr("Error: model is NULL in model_create_image_note\n");
+    return NULL;
+  }
+
+  ModelElement *element = g_new0(ModelElement, 1);
+  element->uuid = model_generate_uuid();
+  element->state = MODEL_STATE_NEW;
+  element->space_uuid = g_strdup(model->current_space_uuid);
+
+  // Create type reference
+  ModelType *model_type = g_new0(ModelType, 1);
+  model_type->id = -1;
+  model_type->type = ELEMENT_IMAGE_NOTE;
+  model_type->ref_count = 1;
+  element->type = model_type;
+
+  // Create position reference
+  ModelPosition *position = g_new0(ModelPosition, 1);
+  position->id = -1;
+  position->x = x;
+  position->y = y;
+  position->z = z;
+  position->ref_count = 1;
+  element->position = position;
+
+  // Create size reference
+  ModelSize *size = g_new0(ModelSize, 1);
+  size->id = -1;
+  size->width = width;
+  size->height = height;
+  size->ref_count = 1;
+  element->size = size;
+
+  // Create text reference if text is provided
+  if (text != NULL) {
+    ModelText *model_text = g_new0(ModelText, 1);
+    model_text->id = -1;  // Temporary ID until saved to database
+    model_text->text = g_strdup(text);
+    model_text->ref_count = 1;
+    element->text = model_text;
+  }
+
+  // Store image data
+  if (image_data && image_size > 0) {
+    element->image_data = g_malloc(image_size);
+    memcpy(element->image_data, image_data, image_size);
+    element->image_size = image_size;
+  }
+
+  g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
+  return element;
 }

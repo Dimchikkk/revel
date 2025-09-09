@@ -4,6 +4,7 @@
 #include "connection.h"
 #include "element.h"
 #include "paper_note.h"
+#include "image_note.h"
 #include "note.h"
 #include <pango/pangocairo.h>
 #include "model.h"
@@ -285,6 +286,22 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
                     g_printerr("Failed to find visual elements for connection: from=%s, to=%s\n",
                               model_element->from_element_uuid, model_element->to_element_uuid);
                 }
+            }
+            break;
+        case ELEMENT_IMAGE_NOTE:
+            if (model_element->position && model_element->size &&
+                model_element->image_data && model_element->image_size > 0) {
+                visual_element = (Element*)image_note_create(
+                    model_element->position->x,
+                    model_element->position->y,
+                    model_element->position->z,
+                    model_element->size->width,
+                    model_element->size->height,
+                    model_element->image_data,
+                    model_element->image_size,
+                    model_element->text->text,
+                    data
+                );
             }
             break;
 
