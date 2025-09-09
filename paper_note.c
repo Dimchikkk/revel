@@ -69,12 +69,14 @@ void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_set_line_width(cr, 1.5);
     cairo_stroke(cr);
 
-    for (int i = 0; i < 4; i++) {
+    if (is_selected) {
+      for (int i = 0; i < 4; i++) {
         int cx, cy;
         paper_note_get_connection_point(element, i, &cx, &cy);
         cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
         cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
         cairo_fill(cr);
+      }
     }
 
     if (!note->editing) {
