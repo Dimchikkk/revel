@@ -16,8 +16,17 @@ void model_free(Model *model) {
   g_hash_table_destroy(model->positions);
   g_hash_table_destroy(model->sizes);
   g_hash_table_destroy(model->colors);
+  g_hash_table_destroy(model->images);
   g_free(model->current_space_uuid);
   g_free(model);
+}
+
+void model_image_free(ModelImage *image) {
+  if (!image) return;
+  if (image->image_data) {
+    g_free(image->image_data);
+  }
+  g_free(image);
 }
 
 void model_type_free(ModelType *type) {
@@ -54,10 +63,6 @@ void model_element_free(ModelElement *element) {
   g_free(element->to_element_uuid);
   g_free(element->target_space_uuid);
 
-  if (element->image_data) {
-    g_free(element->image_data);
-  }
-
   // Important: Don't free shared resources here!
   // They are managed by the respective hash tables and will be
   // automatically freed when the hash tables are destroyed
@@ -74,6 +79,7 @@ Model* model_new() {
   model->positions = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->sizes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->colors = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+  model->images = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->db = NULL;
 
   if (!database_init(&model->db, "velo2.db")) {
@@ -441,6 +447,7 @@ int model_delete_element(Model *model, ModelElement *element) {
   if (element->size && element->size->ref_count > 0) element->size->ref_count--;
   if (element->text && element->text->ref_count > 0) element->text->ref_count--;
   if (element->color && element->color->ref_count > 0) element->color->ref_count--;
+  if (element->image && element->image->ref_count > 0) element->image->ref_count--;
 
   // Mark element as deleted
   element->state = MODEL_STATE_DELETED;
@@ -533,15 +540,15 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     break;
 
   case ELEMENT_IMAGE_NOTE:
-    if (element->position && element->size && element->image_data && element->image_size > 0) {
+    if (element->position && element->size && element->image->image_data && element->image->image_size > 0) {
       return model_create_image_note(model,
                                      element->position->x,
                                      element->position->y,
                                      element->position->z,
                                      element->size->width,
                                      element->size->height,
-                                     element->image_data,
-                                     element->image_size,
+                                     element->image->image_data,
+                                     element->image->image_size,
                                      element->text->text
                                      );
     }
@@ -612,7 +619,7 @@ int model_save_elements(Model *model) {
   database_set_current_space_uuid(model->db, model->current_space_uuid);
 
   int saved_count = 0;
-  GList *to_remove = NULL;  // List of UUIDs to remove after iteration
+  GList *to_remove = NULL;
 
   // FIRST: Process DELETIONS with connections first order
   GList *deleted_elements = NULL;
@@ -699,6 +706,14 @@ int model_save_elements(Model *model) {
           }
         }
 
+        if (element->image && element->image->id > 0) {
+          database_update_image_ref(model->db, element->image);
+          if (element->image->ref_count < 1) {
+            g_hash_table_remove(model->images, GINT_TO_POINTER(element->image->id));
+            model_image_free(element->image);
+          }
+        }
+
         cleanup_database_references(model->db);
         saved_count++;
       } else {
@@ -763,6 +778,9 @@ int model_save_elements(Model *model) {
         }
         if (element->color && element->color->id > 0) {
           g_hash_table_insert(model->colors, GINT_TO_POINTER(element->color->id), element->color);
+        }
+        if (element->image && element->image->id > 0) {
+          g_hash_table_insert(model->images, GINT_TO_POINTER(element->image->id), element->image);
         }
 
         // Change state to SAVED
@@ -887,12 +905,15 @@ ModelElement* model_create_image_note(Model *model, int x, int y, int z, int wid
     element->text = model_text;
   }
 
-  // Store image data
+  ModelImage *model_image = g_new0(ModelImage, 1);
+  model_image->id = -1;
   if (image_data && image_size > 0) {
-    element->image_data = g_malloc(image_size);
-    memcpy(element->image_data, image_data, image_size);
-    element->image_size = image_size;
+    model_image->image_data = g_malloc(image_size);
+    memcpy(model_image->image_data, image_data, image_size);
+    model_image->image_size = image_size;
   }
+  model_image->ref_count = 1;
+  element->image = model_image;
 
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
   return element;

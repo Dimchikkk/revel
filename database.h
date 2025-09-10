@@ -41,6 +41,11 @@ int database_create_color_ref(sqlite3 *db, double r, double g, double b, double 
 int database_read_color_ref(sqlite3 *db, int color_id, ModelColor **color);
 int database_update_color_ref(sqlite3 *db, ModelColor *color);
 
+// Image reference operations
+int database_create_image_ref(sqlite3 *db, const unsigned char *image_data, int image_size, int *image_id);
+int database_read_image_ref(sqlite3 *db, int image_id, ModelImage **image);
+int database_update_image_ref(sqlite3 *db, ModelImage *image);
+
 int cleanup_database_references(sqlite3 *db);
 
 // Element operations

@@ -292,15 +292,15 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     break;
   case ELEMENT_IMAGE_NOTE:
     if (model_element->position && model_element->size &&
-        model_element->image_data && model_element->image_size > 0) {
+        model_element->image->image_data && model_element->image->image_size > 0) {
       visual_element = (Element*)image_note_create(
                                                    model_element->position->x,
                                                    model_element->position->y,
                                                    model_element->position->z,
                                                    model_element->size->width,
                                                    model_element->size->height,
-                                                   model_element->image_data,
-                                                   model_element->image_size,
+                                                   model_element->image->image_data,
+                                                   model_element->image->image_size,
                                                    model_element->text->text,
                                                    data
                                                    );

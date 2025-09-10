@@ -20,6 +20,7 @@ typedef struct _ModelColor ModelColor;
 typedef struct _ModelPosition ModelPosition;
 typedef struct _ModelElement ModelElement;
 typedef struct _Model Model;
+typedef struct _ModelImage ModelImage;
 
 struct _ModelType {
   gint id;                    // Unique ID for this element type
@@ -51,6 +52,13 @@ struct _ModelColor {
   gint ref_count;
 };
 
+struct _ModelImage {
+  gint id;
+  unsigned char *image_data;
+  int image_size;
+  gint ref_count;
+};
+
 struct _ModelElement {
   gchar* uuid;                // UUID string for the element
   gchar* space_uuid;
@@ -59,6 +67,7 @@ struct _ModelElement {
   ModelSize* size;            // Shared size
   ModelText* text;            // Shared text
   ModelColor* color;          // Shared color
+  ModelImage* image;
   Element* visual_element;    // Pointer to visual representation
   ModelState state;
 
@@ -70,10 +79,6 @@ struct _ModelElement {
 
   // For space elements
   gchar *target_space_uuid;
-
-  // For image note
-  unsigned char *image_data;
-  int image_size;
 };
 
 // Model manages all elements
@@ -84,7 +89,8 @@ struct _Model {
   GHashTable *texts;          // text_id -> ModelText* (shared texts)
   GHashTable *positions;      // positon_id -> ModelPosition* (shared position)
   GHashTable *sizes;          // size_id -> ModelSize* (shared size)
-  GHashTable *colors;         // color_id -> ModelColor* (shared_color)
+  GHashTable *colors;         // color_id -> ModelColor* (shared color)
+  GHashTable *images;         // image_id -> ModelImage (shared image)
   sqlite3 *db;
 };
 

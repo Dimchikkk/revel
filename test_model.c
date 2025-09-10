@@ -66,6 +66,7 @@ static void test_model_creation(TestFixture *fixture, gconstpointer user_data) {
   g_assert_nonnull(fixture->model->positions);
   g_assert_nonnull(fixture->model->sizes);
   g_assert_nonnull(fixture->model->colors);
+  g_assert_nonnull(fixture->model->images);
 }
 
 // Test: Create a note element
