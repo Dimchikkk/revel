@@ -1,6 +1,7 @@
 - [new feature] change color in right click on element (utilize color_refs table, use GTK4 color picker)
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
-- [improvement] time-travel on row click in action log window
+- [new feature] ability to change canvas color (or load image pattern as canvas background)
+- [new feature] time-travel on row click in action log window
 - [new feature] make index on element text and utilise sqlite to have search functionality
 - [new feature] allow choosing DB file
 - [improvement] disable back to parent button if at root space
@@ -8,3 +9,4 @@
 - [improvement] put text in center of note
 - [improvement] different type of connections
 - [idea to explore] collaborative editing
+- [idea to explore] different types of spaces (e.g. task board space, music player space)
