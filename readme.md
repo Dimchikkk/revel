@@ -2,7 +2,7 @@
 
 Note taking brainstorming app
 
-![velo2](https://gist.github.com/user-attachments/assets/b029a9b1-be2c-4c45-8f50-283d6210e506.jpg?raw=true)
+![velo2.jpg](https://gist.github.com/user-attachments/assets/b029a9b1-be2c-4c45-8f50-283d6210e506.jpg?raw=true)
 
 # Features:
 
