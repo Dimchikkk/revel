@@ -1,6 +1,7 @@
 #include "space.h"
 #include "element.h"
 #include "canvas.h"
+#include "canvas_core.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -60,7 +61,6 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   g_object_unref(layout);
 }
 
-// Implement other required functions (similar to note elements)
 void space_element_get_connection_point(Element *element, int point, int *cx, int *cy) {
   // Same as note elements
   switch(point) {
@@ -72,7 +72,10 @@ void space_element_get_connection_point(Element *element, int point, int *cx, in
 }
 
 int space_element_pick_resize_handle(Element *element, int x, int y) {
-  // Same as note elements
+  // Convert screen coordinates to canvas coordinates
+  int canvas_x, canvas_y;
+  canvas_screen_to_canvas(element->canvas_data, x, y, &canvas_x, &canvas_y);
+
   int size = 8;
   struct { int px, py; } handles[4] = {
     {element->x, element->y},
@@ -82,7 +85,7 @@ int space_element_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(x - handles[i].px) <= size && abs(y - handles[i].py) <= size) {
+    if (abs(canvas_x - handles[i].px) <= size && abs(canvas_y - handles[i].py) <= size) {
       return i;
     }
   }
@@ -90,11 +93,14 @@ int space_element_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int space_element_pick_connection_point(Element *element, int x, int y) {
-  // Same as note elements
+  // Convert screen coordinates to canvas coordinates
+  int canvas_x, canvas_y;
+  canvas_screen_to_canvas(element->canvas_data, x, y, &canvas_x, &canvas_y);
+
   for (int i = 0; i < 4; i++) {
     int cx, cy;
     space_element_get_connection_point(element, i, &cx, &cy);
-    int dx = x - cx, dy = y - cy;
+    int dx = canvas_x - cx, dy = canvas_y - cy;
     if (dx * dx + dy * dy < 36) return i;
   }
   return -1;
@@ -139,7 +145,6 @@ void space_name_dialog_response(GtkDialog *dialog, gint response_id, gpointer us
   gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
-// currently editing is not enabled for spaces
 void space_element_start_editing(Element *element, GtkWidget *overlay) {
   SpaceElement *space_elem = (SpaceElement*)element;
   CanvasData *data = space_elem->base.canvas_data;
