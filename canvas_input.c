@@ -508,7 +508,6 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         gtk_popover_popup(GTK_POPOVER(popover));
       }
     } else {
-      g_print("enabling panning\n");
       data->panning = TRUE;
       data->pan_start_x = (int)x;
       data->pan_start_y = (int)y;

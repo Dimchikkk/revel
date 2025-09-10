@@ -134,15 +134,23 @@ void image_note_start_editing(Element *element, GtkWidget *overlay) {
     int text_view_width, text_view_height;
     gtk_widget_get_size_request(image_note->text_view, &text_view_width, &text_view_height);
 
-    gtk_widget_set_margin_start(image_note->text_view, draw_x + draw_width - text_view_width - 10);
-    gtk_widget_set_margin_top(image_note->text_view, draw_y + draw_height - text_view_height - 10);
+    // Convert canvas coordinates to screen coordinates for margin positioning
+    int screen_x = draw_x + draw_width - text_view_width - 10 + element->canvas_data->offset_x;
+    int screen_y = draw_y + draw_height - text_view_height - 10 + element->canvas_data->offset_y;
+
+    gtk_widget_set_margin_start(image_note->text_view, screen_x);
+    gtk_widget_set_margin_top(image_note->text_view, screen_y);
   } else {
     // Fallback to element bounds if no pixbuf
     int text_view_width, text_view_height;
     gtk_widget_get_size_request(image_note->text_view, &text_view_width, &text_view_height);
 
-    gtk_widget_set_margin_start(image_note->text_view, element->x + element->width - text_view_width - 10);
-    gtk_widget_set_margin_top(image_note->text_view, element->y + element->height - text_view_height - 10);
+    // Convert canvas coordinates to screen coordinates for margin positioning
+    int screen_x = element->x + element->width - text_view_width - 10 + element->canvas_data->offset_x;
+    int screen_y = element->y + element->height - text_view_height - 10 + element->canvas_data->offset_y;
+
+    gtk_widget_set_margin_start(image_note->text_view, screen_x);
+    gtk_widget_set_margin_top(image_note->text_view, screen_y);
   }
 
   gtk_widget_show(image_note->text_view);
@@ -383,6 +391,8 @@ void image_note_get_connection_point(Element *element, int point, int *cx, int *
 
 int image_note_pick_resize_handle(Element *element, int x, int y) {
   ImageNote *image_note = (ImageNote*)element;
+  int cx, cy;
+  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
 
   if (!image_note->pixbuf) {
     // Fallback to element bounds if no pixbuf
@@ -395,7 +405,7 @@ int image_note_pick_resize_handle(Element *element, int x, int y) {
     };
 
     for (int i = 0; i < 4; i++) {
-      if (abs(x - handles[i][0]) <= size && abs(y - handles[i][1]) <= size) {
+      if (abs(cx - handles[i][0]) <= size && abs(cy - handles[i][1]) <= size) {
         return i;
       }
     }
@@ -424,7 +434,7 @@ int image_note_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(x - handles[i][0]) <= size && abs(y - handles[i][1]) <= size) {
+    if (abs(cx - handles[i][0]) <= size && abs(cy - handles[i][1]) <= size) {
       return i;
     }
   }
@@ -433,13 +443,15 @@ int image_note_pick_resize_handle(Element *element, int x, int y) {
 
 int image_note_pick_connection_point(Element *element, int x, int y) {
   ImageNote *image_note = (ImageNote*)element;
+  int cx, cy;
+  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
 
   if (!image_note->pixbuf) {
     // Fallback to element bounds if no pixbuf
     for (int i = 0; i < 4; i++) {
-      int cx, cy;
-      image_note_get_connection_point(element, i, &cx, &cy);
-      int dx = x - cx, dy = y - cy;
+      int px, py;
+      image_note_get_connection_point(element, i, &px, &py);
+      int dx = cx - px, dy = cy - py;
       if (dx * dx + dy * dy < 36) return i;
     }
     return -1;
@@ -466,7 +478,7 @@ int image_note_pick_connection_point(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    int dx = x - connection_points[i][0], dy = y - connection_points[i][1];
+    int dx = cx - connection_points[i][0], dy = cy - connection_points[i][1];
     if (dx * dx + dy * dy < 36) return i;
   }
   return -1;

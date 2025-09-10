@@ -121,6 +121,9 @@ void paper_note_get_connection_point(Element *element, int point, int *cx, int *
 }
 
 int paper_note_pick_resize_handle(Element *element, int x, int y) {
+  int cx, cy;
+  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
+
   int size = 8;
   struct { int px, py; } handles[4] = {
     {element->x, element->y},
@@ -130,7 +133,7 @@ int paper_note_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(x - handles[i].px) <= size && abs(y - handles[i].py) <= size) {
+    if (abs(cx - handles[i].px) <= size && abs(cy - handles[i].py) <= size) {
       return i;
     }
   }
@@ -138,10 +141,13 @@ int paper_note_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int paper_note_pick_connection_point(Element *element, int x, int y) {
+  int cx, cy;
+  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
+
   for (int i = 0; i < 4; i++) {
-    int cx, cy;
-    paper_note_get_connection_point(element, i, &cx, &cy);
-    int dx = x - cx, dy = y - cy;
+    int px, py;
+    paper_note_get_connection_point(element, i, &px, &py);
+    int dx = cx - px, dy = cy - py;
     if (dx * dx + dy * dy < 36) return i;
   }
   return -1;
@@ -159,8 +165,10 @@ void paper_note_start_editing(Element *element, GtkWidget *overlay) {
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), note->text_view);
     gtk_widget_set_halign(note->text_view, GTK_ALIGN_START);
     gtk_widget_set_valign(note->text_view, GTK_ALIGN_START);
-    gtk_widget_set_margin_start(note->text_view, element->x);
-    gtk_widget_set_margin_top(note->text_view, element->y);
+    int screen_x = element->x + element->canvas_data->offset_x;
+    int screen_y = element->y + element->canvas_data->offset_y;
+    gtk_widget_set_margin_start(note->text_view, screen_x);
+    gtk_widget_set_margin_top(note->text_view, screen_y);
 
     GtkEventController *focus_controller = gtk_event_controller_focus_new();
     g_signal_connect(focus_controller, "leave", G_CALLBACK(paper_note_on_text_view_focus_leave), note);

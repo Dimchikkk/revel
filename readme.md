@@ -4,7 +4,13 @@ Note taking brainstorming app
 
 # Features:
 
-* TODO
+* create notes, paper notes
+* connect elements with arrows
+* organize elements into nested spaces
+* paste images from clipboard and annotate them
+* stora all data in a single portable SQLite3 database file
+* resize, move, fork, clone (by text or by size) and delete elements
+* infinite canvas space
 
 ## Dependencies
 
