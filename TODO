@@ -1,3 +1,5 @@
+- [fix] textview position unsync while panning
+- [new feature] change color in right click on element (utilize color_refs table, use GTK4 color picker)
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [new feature] time-travel on row click in action log window
