@@ -535,15 +535,15 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
   case ELEMENT_IMAGE_NOTE:
     if (element->position && element->size && element->image_data && element->image_size > 0) {
       return model_create_image_note(model,
-                               element->position->x,
-                               element->position->y,
-                               element->position->z,
-                               element->size->width,
-                               element->size->height,
-                               element->image_data,
-                               element->image_size,
-                               element->text->text
-                               );
+                                     element->position->x,
+                                     element->position->y,
+                                     element->position->z,
+                                     element->size->width,
+                                     element->size->height,
+                                     element->image_data,
+                                     element->image_size,
+                                     element->text->text
+                                     );
     }
     break;
 
@@ -801,41 +801,41 @@ int model_save_elements(Model *model) {
 
 // Comparison function for saving: elements first, then connections
 gint model_compare_for_saving_loading(const ModelElement *a, const ModelElement *b) {
-    if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
-        return 1; // connection comes after non-connection
-    } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
-        return -1; // non-connection comes before connection
-    } else {
-        return 0;
-    }
+  if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
+    return 1; // connection comes after non-connection
+  } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
+    return -1; // non-connection comes before connection
+  } else {
+    return 0;
+  }
 }
 
 // Comparison function for deletion: connections first, then elements
 gint model_compare_for_deletion(const ModelElement *a, const ModelElement *b) {
-    if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
-        return -1; // connection comes before non-connection
-    } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
-        return 1; // non-connection comes after connection
-    } else {
-        return 0;
-    }
+  if (a->type->type == ELEMENT_CONNECTION && b->type->type != ELEMENT_CONNECTION) {
+    return -1; // connection comes before non-connection
+  } else if (a->type->type != ELEMENT_CONNECTION && b->type->type == ELEMENT_CONNECTION) {
+    return 1; // non-connection comes after connection
+  } else {
+    return 0;
+  }
 }
 
 ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
-    if (!model || !visual_element) return NULL;
+  if (!model || !visual_element) return NULL;
 
-    GHashTableIter iter;
-    gpointer key, value;
+  GHashTableIter iter;
+  gpointer key, value;
 
-    g_hash_table_iter_init(&iter, model->elements);
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        ModelElement *model_elem = (ModelElement*)value;
-        if (model_elem->visual_element == visual_element) {
-            return model_elem;
-        }
+  g_hash_table_iter_init(&iter, model->elements);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *model_elem = (ModelElement*)value;
+    if (model_elem->visual_element == visual_element) {
+      return model_elem;
     }
+  }
 
-    return NULL;
+  return NULL;
 }
 
 int model_get_amount_of_elements(Model *model, const char *space_uuid) {

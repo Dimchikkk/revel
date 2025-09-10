@@ -7,10 +7,10 @@
 #include "element.h"
 
 typedef enum {
-    MODEL_STATE_NEW,      // Not yet saved to database
-    MODEL_STATE_SAVED,    // Successfully saved to database
-    MODEL_STATE_UPDATED,  // Saved but has been updated
-    MODEL_STATE_DELETED,
+  MODEL_STATE_NEW,      // Not yet saved to database
+  MODEL_STATE_SAVED,    // Successfully saved to database
+  MODEL_STATE_UPDATED,  // Saved but has been updated
+  MODEL_STATE_DELETED,
 } ModelState;
 
 typedef struct _ModelText ModelText;

@@ -8,8 +8,8 @@ typedef struct _CanvasData CanvasData;
 
 // Space element (visual representation of a space)
 typedef struct {
-    Element base;
-    gchar *name;              // Name of the space
+  Element base;
+  gchar *name;              // Name of the space
 } SpaceElement;
 
 // Function declarations

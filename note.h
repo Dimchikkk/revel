@@ -6,10 +6,10 @@
 typedef struct _CanvasData CanvasData;
 
 typedef struct {
-    Element base;
-    char *text;
-    GtkWidget *text_view;
-    gboolean editing;
+  Element base;
+  char *text;
+  GtkWidget *text_view;
+  gboolean editing;
 } Note;
 
 Note* note_create(int x, int y, int z, int width, int height, const char *text, CanvasData* data);

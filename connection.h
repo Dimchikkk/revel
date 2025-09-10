@@ -7,11 +7,11 @@
 typedef struct _CanvasData CanvasData;
 
 typedef struct {
-    Element base;
-    Element *from;
-    int from_point;
-    Element *to;
-    int to_point;
+  Element base;
+  Element *from;
+  int from_point;
+  Element *to;
+  int to_point;
 } Connection;
 
 Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z, CanvasData *data);

@@ -1402,28 +1402,28 @@ int database_update_color_ref(sqlite3 *db, ModelColor *color) {
 }
 
 int database_get_amount_of_elements(sqlite3 *db, const char *space_uuid) {
-    if (!db || !space_uuid || !database_is_valid_uuid(space_uuid)) {
-        fprintf(stderr, "Error: Invalid parameters in database_get_amount_of_elements\n");
-        return 0;
-    }
+  if (!db || !space_uuid || !database_is_valid_uuid(space_uuid)) {
+    fprintf(stderr, "Error: Invalid parameters in database_get_amount_of_elements\n");
+    return 0;
+  }
 
-    const char *sql = "SELECT COUNT(*) FROM elements WHERE space_uuid = ?";
-    sqlite3_stmt *stmt;
+  const char *sql = "SELECT COUNT(*) FROM elements WHERE space_uuid = ?";
+  sqlite3_stmt *stmt;
 
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
-        fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
-        return 0;
-    }
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
 
-    sqlite3_bind_text(stmt, 1, space_uuid, -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 1, space_uuid, -1, SQLITE_STATIC);
 
-    int count = 0;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        count = sqlite3_column_int(stmt, 0);
-    }
+  int count = 0;
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    count = sqlite3_column_int(stmt, 0);
+  }
 
-    sqlite3_finalize(stmt);
-    return count;
+  sqlite3_finalize(stmt);
+  return count;
 }
 
 int database_delete_space(sqlite3 *db, const char *space_uuid) {

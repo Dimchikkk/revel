@@ -1,4 +1,5 @@
 - [new feature] virtual infinite canvas
+- [improvement] move image_data and image_ref to images_ref table to have clonable images
 - [new feature] change color in right click on element (utilize color_refs table, use GTK4 color picker)
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [new feature] allow choosing DB file

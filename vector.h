@@ -2,7 +2,7 @@
 #define VECTOR_H
 
 typedef struct {
-    double x, y;
+  double x, y;
 } Vec2;
 
 Vec2 vec2_add(Vec2 a, Vec2 b);
