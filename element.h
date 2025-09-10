@@ -26,6 +26,18 @@ typedef struct {
   void (*free)(Element *element);
 } ElementVTable;
 
+typedef struct {
+    double r, g, b, a;
+} ElementColor;
+
+typedef struct {
+    int x, y, z;
+} ElementPosition;
+
+typedef struct {
+    int width, height;
+} ElementSize;
+
 struct Element {
   ElementType type;
   ElementVTable *vtable;
@@ -37,6 +49,7 @@ struct Element {
   int resize_edge;
   int resize_start_x, resize_start_y;
   int orig_x, orig_y, orig_width, orig_height;
+  double bg_r, bg_g, bg_b, bg_a;
   CanvasData *canvas_data;
 };
 

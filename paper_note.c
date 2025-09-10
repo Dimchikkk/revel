@@ -20,15 +20,23 @@ static ElementVTable paper_note_vtable = {
   .free = paper_note_free
 };
 
-PaperNote* paper_note_create(int x, int y, int z, int width, int height, const char *text, CanvasData *data) {
+PaperNote* paper_note_create(ElementPosition position,
+                             ElementColor bg_color,
+                             ElementSize size,
+                             const char *text,
+                             CanvasData *data) {
   PaperNote *note = g_new0(PaperNote, 1);
   note->base.type = ELEMENT_PAPER_NOTE;
   note->base.vtable = &paper_note_vtable;
-  note->base.x = x;
-  note->base.y = y;
-  note->base.z = z;
-  note->base.width = width;
-  note->base.height = height;
+  note->base.x = position.x;
+  note->base.y = position.y;
+  note->base.z = position.z;
+  note->base.bg_r = bg_color.r;
+  note->base.bg_g = bg_color.g;
+  note->base.bg_b = bg_color.b;
+  note->base.bg_a = bg_color.a;
+  note->base.width = size.width;
+  note->base.height = size.height;
   note->text = g_strdup(text);
   note->text_view = NULL;
   note->editing = FALSE;
@@ -208,7 +216,7 @@ void paper_note_finish_editing(Element *element) {
 
   // Queue redraw using the stored canvas data
   if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
-    canvas_recreate_visual_elements(note->base.canvas_data);
+    canvas_sync_with_model(note->base.canvas_data);
     gtk_widget_queue_draw(note->base.canvas_data->drawing_area);
   }
 }

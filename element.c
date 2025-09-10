@@ -71,4 +71,7 @@ void element_free(Element *element) {
 
 void element_bring_to_front(Element *element, int *next_z) {
   element->z = (*next_z)++;
+  Model* model = element->canvas_data->model;
+  ModelElement* model_element = model_get_by_visual(model, element);
+  model_update_position(model, model_element, model_element->position->x, model_element->position->y, element->z);
 }

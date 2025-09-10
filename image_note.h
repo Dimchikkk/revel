@@ -13,10 +13,13 @@ typedef struct {
   gboolean editing;
 } ImageNote;
 
-
-ImageNote* image_note_create(int x, int y, int z, int width, int height,
-                             const unsigned char *image_data, int image_size,
-                             const char *text, CanvasData *data);
+ImageNote* image_note_create(ElementPosition position,
+                             ElementColor bg_color,
+                             ElementSize size,
+                             const unsigned char *image_data,
+                             int image_size,
+                             const char *text,
+                             CanvasData *data);
 void image_note_finish_editing(Element *element);
 void image_note_draw(Element *element, cairo_t *cr, gboolean is_selected);
 void image_note_get_connection_point(Element *element, int point, int *cx, int *cy);

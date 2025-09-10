@@ -1,12 +1,14 @@
 #include "canvas_input.h"
 #include "canvas_core.h"
 #include "canvas_spaces.h"
+#include "element.h"
 #include "model.h"
 #include "paper_note.h"
 #include "note.h"
 #include "connection.h"
 #include "space.h"
 #include <pango/pangocairo.h>
+#include <gtk/gtkdialog.h>
 
 #ifndef ABS
 #define ABS(a) ((a) < 0 ? -(a) : (a))
@@ -78,9 +80,28 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
           ModelElement *to_model = model_get_by_visual(data->model, element);
 
           if (from_model && to_model) {
-            // Create connection in the model
-            int z = MAX(from_model->position->z, to_model->position->z);
-            ModelElement *model_conn = model_create_connection(data->model, from_model->uuid, to_model->uuid, connection_start_point, cp, z);
+            ElementPosition position = {
+              .x = 0,
+              .y = 0,
+              .z = MAX(from_model->position->z, to_model->position->z),
+            };
+            ElementColor bg_color = {
+              .r = 1.0,
+              .g = 1.0,
+              .b = 1.0,
+              .a = 1.0,
+            };
+            ElementSize size = {
+              .width = 1,
+              .height = 1,
+            };
+
+            ModelElement *model_conn = model_create_element(data->model,
+                                                            ELEMENT_CONNECTION,
+                                                            bg_color, position, size,
+                                                            NULL, 0,
+                                                            from_model->uuid, to_model->uuid, connection_start_point, cp,
+                                                            NULL);
             model_conn->visual_element = create_visual_element(model_conn, data);
           }
         }
@@ -271,7 +292,7 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
   }
 
   // Re-create visual elements since some sizes may be changed due to resizing of cloned element
-  if (was_resized) canvas_recreate_visual_elements(data);
+  if (was_resized) canvas_sync_with_model(data);
 
   gtk_widget_queue_draw(data->drawing_area);
 }
@@ -426,13 +447,69 @@ static void on_delete_element_action(GSimpleAction *action, GVariant *parameter,
       }
 
       model_delete_element(data->model, model_element);
-      canvas_recreate_visual_elements(data);
+      canvas_sync_with_model(data);
       gtk_widget_queue_draw(data->drawing_area);
     }
   }
 }
 
-// Modify the canvas_on_right_click function to include the delete option
+static void on_color_dialog_response(GtkDialog *dialog, int response_id, gpointer user_data) {
+  if (response_id == GTK_RESPONSE_OK) {
+    CanvasData *data = g_object_get_data(G_OBJECT(dialog), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(dialog), "element_uuid");
+
+    GtkColorChooser *chooser = GTK_COLOR_CHOOSER(dialog);
+    GdkRGBA color;
+    gtk_color_chooser_get_rgba(chooser, &color);
+
+    if (data && data->model && element_uuid) {
+      ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+      if (model_element) {
+        model_update_color(data->model, model_element, color.red, color.green, color.blue, color.alpha);
+        canvas_sync_with_model(data);
+        gtk_widget_queue_draw(data->drawing_area);
+      }
+    }
+  }
+
+  gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void on_change_color_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (data && data->model && element_uuid) {
+    ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+    if (model_element) {
+      // Create color chooser dialog
+      GtkWidget *dialog = gtk_color_chooser_dialog_new("Choose Element Color",
+                                                       GTK_WINDOW(gtk_widget_get_root(data->drawing_area)));
+
+      // Set initial color if exists
+      if (model_element->bg_color) {
+        GdkRGBA initial_color = {
+          .red = model_element->bg_color->r / 255.0,
+          .green = model_element->bg_color->g / 255.0,
+          .blue = model_element->bg_color->b / 255.0,
+          .alpha = model_element->bg_color->a / 255.0
+        };
+        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog), &initial_color);
+      }
+
+      // Store data for the callback
+      g_object_set_data(G_OBJECT(dialog), "canvas_data", data);
+      g_object_set_data_full(G_OBJECT(dialog), "element_uuid", g_strdup(element_uuid), g_free);
+
+      // Connect response signal
+      g_signal_connect(dialog, "response", G_CALLBACK(on_color_dialog_response), NULL);
+
+      // Show dialog
+      gtk_window_present(GTK_WINDOW(dialog));
+    }
+  }
+}
+
 void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
@@ -452,6 +529,10 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(delete_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_signal_connect(delete_action, "activate", G_CALLBACK(on_delete_element_action), NULL);
 
+        GSimpleAction *change_color_action = g_simple_action_new("change-color", NULL);
+        g_object_set_data(G_OBJECT(change_color_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(change_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+
         GSimpleAction *fork_action = g_simple_action_new("fork", NULL);
         GSimpleAction *clone_text_action = g_simple_action_new("clone-text", NULL);
         GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
@@ -468,19 +549,22 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_signal_connect(fork_action, "activate", G_CALLBACK(on_fork_element_action), NULL);
         g_signal_connect(clone_text_action, "activate", G_CALLBACK(on_clone_by_text_action), NULL);
         g_signal_connect(clone_size_action, "activate", G_CALLBACK(on_clone_by_size_action), NULL);
+        g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
 
         // Add all actions to the action group
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(fork_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_text_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
 
         // Create the menu model with delete option first
         GMenu *menu_model = g_menu_new();
-        g_menu_append(menu_model, "Delete", "menu.delete");
+        g_menu_append(menu_model, "Change Color", "menu.change-color");
         g_menu_append(menu_model, "Fork Element", "menu.fork");
         g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
         g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
+        g_menu_append(menu_model, "Delete", "menu.delete");
 
         // Create the popover menu
         GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu_model));
@@ -546,15 +630,28 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
   gchar *buffer = NULL;
 
   if (gdk_pixbuf_save_to_buffer(pixbuf, &buffer, &buffer_size, "png", &error, NULL)) {
-    // Create image note element
-    ModelElement *model_element = model_create_image_note(
-                                                          data->model,
-                                                          100, 100, data->next_z_index++,
-                                                          gdk_pixbuf_get_width(pixbuf),
-                                                          gdk_pixbuf_get_height(pixbuf),
-                                                          (const unsigned char*)buffer, buffer_size,
-                                                          g_strdup("")
-                                                          );
+    ElementPosition position = {
+      .x = 100,
+      .y = 100,
+      .z = data->next_z_index++,
+    };
+    ElementColor bg_color = {
+      .r = 1.0,
+      .g = 1.0,
+      .b = 1.0,
+      .a = 1.0,
+    };
+    ElementSize size = {
+      .width = gdk_pixbuf_get_width(pixbuf),
+      .height = gdk_pixbuf_get_height(pixbuf),
+    };
+
+    ModelElement *model_element = model_create_element(data->model,
+                                                       ELEMENT_IMAGE_NOTE,
+                                                       bg_color, position, size,
+                                                       (const unsigned char*)buffer, buffer_size,
+                                                       0, NULL, -1, -1,
+                                                       "");
 
     model_element->visual_element = create_visual_element(model_element, data);
     gtk_widget_queue_draw(data->drawing_area);

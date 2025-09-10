@@ -135,10 +135,16 @@ gchar* model_generate_uuid(void) {
   return buf;
 }
 
-// Create a note element
-ModelElement* model_create_note(Model *model, int x, int y, int z, int width, int height, const char *text) {
+ModelElement* model_create_element(Model *model,
+                                   ElementType element_type,
+                                   ElementColor bg_color,
+                                   ElementPosition pos,
+                                   ElementSize s,
+                                   const unsigned char *image_data, int image_size,
+                                   const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
+                                   const char *text) {
   if (model == NULL) {
-    g_printerr("Error: model is NULL in model_create_note\n");
+    g_printerr("Error: model is NULL in model_create_element\n");
     return NULL;
   }
 
@@ -152,24 +158,24 @@ ModelElement* model_create_note(Model *model, int x, int y, int z, int width, in
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
   model_type->id = -1;  // Temporary ID until saved to database
-  model_type->type = ELEMENT_NOTE;
+  model_type->type = element_type;
   model_type->ref_count = 1;
   element->type = model_type;
 
   // Create position reference
   ModelPosition *position = g_new0(ModelPosition, 1);
   position->id = -1;  // Temporary ID until saved to database
-  position->x = x;
-  position->y = y;
-  position->z = z;
+  position->x = pos.x;
+  position->y = pos.y;
+  position->z = pos.z;
   position->ref_count = 1;
   element->position = position;
 
   // Create size reference
   ModelSize *size = g_new0(ModelSize, 1);
   size->id = -1;  // Temporary ID until saved to database
-  size->width = width;
-  size->height = height;
+  size->width = s.width;
+  size->height = s.height;
   size->ref_count = 1;
   element->size = size;
 
@@ -182,159 +188,40 @@ ModelElement* model_create_note(Model *model, int x, int y, int z, int width, in
     element->text = model_text;
   }
 
-  // Add the element to the model's elements hash table
-  g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
-
-  return element;
-}
-
-// Create a paper note element
-ModelElement* model_create_paper_note(Model *model, int x, int y, int z, int width, int height, const char *text) {
-  if (model == NULL) {
-    g_printerr("Error: model is NULL in model_create_paper_note\n");
-    return NULL;
+  if (bg_color.r && bg_color.g && bg_color.b && bg_color.a) {
+    ModelColor *color = g_new0(ModelColor, 1);
+    color->id = -1;  // Temporary ID until saved to database
+    color->r = bg_color.r;
+    color->g = bg_color.g;
+    color->b = bg_color.b;
+    color->a = bg_color.a;
+    color->ref_count = 1;
+    element->bg_color = color;
   }
-
-  // Create a new ModelElement
-  ModelElement *element = g_new0(ModelElement, 1);
-  element->uuid = model_generate_uuid();
-  element->state = MODEL_STATE_NEW;
-
-  element->space_uuid = model->current_space_uuid;
-
-  // Create type reference
-  ModelType *model_type = g_new0(ModelType, 1);
-  model_type->id = -1;  // Temporary ID until saved to database
-  model_type->type = ELEMENT_PAPER_NOTE;
-  model_type->ref_count = 1;
-  element->type = model_type;
-
-  // Create position reference
-  ModelPosition *position = g_new0(ModelPosition, 1);
-  position->id = -1;  // Temporary ID until saved to database
-  position->x = x;
-  position->y = y;
-  position->z = z;
-  position->ref_count = 1;
-  element->position = position;
-
-  // Create size reference
-  ModelSize *size = g_new0(ModelSize, 1);
-  size->id = -1;  // Temporary ID until saved to database
-  size->width = width;
-  size->height = height;
-  size->ref_count = 1;
-  element->size = size;
-
-  // Create text reference if text is provided
-  if (text != NULL) {
-    ModelText *model_text = g_new0(ModelText, 1);
-    model_text->id = -1;  // Temporary ID until saved to database
-    model_text->text = g_strdup(text);
-    model_text->ref_count = 1;
-    element->text = model_text;
-  }
-
-  // Add the element to the model's elements hash table
-  g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
-
-  return element;
-}
-
-// Create a connection element
-ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid,
-                                      int from_point, int to_point, int z) {
-  if (model == NULL) {
-    g_printerr("Error: model is NULL in model_create_connection\n");
-    return NULL;
-  }
-
-  // Create a new ModelElement
-  ModelElement *element = g_new0(ModelElement, 1);
-  element->uuid = model_generate_uuid();
-  element->state = MODEL_STATE_NEW;
-
-  element->space_uuid = model->current_space_uuid;
-
-  // Create type reference
-  ModelType *model_type = g_new0(ModelType, 1);
-  model_type->id = -1;  // Temporary ID until saved to database
-  model_type->type = ELEMENT_CONNECTION;
-  model_type->ref_count = 1;
-  element->type = model_type;
-
-  // Create position reference (connections don't need position, but we need to satisfy the schema)
-  ModelPosition *position = g_new0(ModelPosition, 1);
-  position->id = -1;  // Temporary ID until saved to database
-  position->x = 0;
-  position->y = 0;
-  position->z = z;
-  position->ref_count = 1;
-  element->position = position;
-
-  // Create size reference (connections don't need size, but we need to satisfy the schema)
-  ModelSize *size = g_new0(ModelSize, 1);
-  size->id = -1;  // Temporary ID until saved to database
-  size->width = 1;
-  size->height = 1;
-  size->ref_count = 1;
-  element->size = size;
 
   // Set connection properties
-  element->from_element_uuid = g_strdup(from_element_uuid);
-  element->to_element_uuid = g_strdup(to_element_uuid);
-  element->from_point = from_point;
-  element->to_point = to_point;
-
-  // Add the element to the model's elements hash table
-  g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
-
-  return element;
-}
-
-// Create a space element
-ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height) {
-  if (model == NULL) {
-    g_printerr("Error: model is NULL in model_create_space\n");
-    return NULL;
+  if (from_element_uuid) {
+    element->from_element_uuid = g_strdup(from_element_uuid);
+  }
+  if (to_element_uuid) {
+    element->to_element_uuid = g_strdup(to_element_uuid);
+  }
+  if (from_point) {
+    element->from_point = from_point;
+  }
+  if (to_point) {
+    element->to_point = to_point;
   }
 
-  // Create a new ModelElement
-  ModelElement *element = g_new0(ModelElement, 1);
-  element->uuid = model_generate_uuid();
-  element->state = MODEL_STATE_NEW;
-
-  element->space_uuid = model->current_space_uuid;
-
-  // Create type reference
-  ModelText *model_text = g_new0(ModelText, 1);
-  model_text->id = -1;  // Temporary ID until saved to database
-  model_text->text = g_strdup(name);
-  model_text->ref_count = 1;
-  element->text = model_text;
-
-  ModelType *model_type = g_new0(ModelType, 1);
-  model_type->id = -1;  // Temporary ID until saved to database
-  model_type->type = ELEMENT_SPACE;
-  model_type->ref_count = 1;
-  element->type = model_type;
-
-  // Create position reference
-  ModelPosition *position = g_new0(ModelPosition, 1);
-  position->id = -1;  // Temporary ID until saved to database
-  position->x = x;
-  position->y = y;
-  position->z = z;
-  position->ref_count = 1;
-  element->position = position;
-
-  // Create size reference
-  ModelSize *size = g_new0(ModelSize, 1);
-  size->id = -1;  // Temporary ID until saved to database
-  size->width = width;
-  size->height = height;
-  size->ref_count = 1;
-  element->size = size;
+  if (image_data && image_size > 0) {
+    ModelImage *model_image = g_new0(ModelImage, 1);
+    model_image->id = -1;
+    model_image->image_data = g_malloc(image_size);
+    memcpy(model_image->image_data, image_data, image_size);
+    model_image->image_size = image_size;
+    model_image->ref_count = 1;
+    element->image = model_image;
+  }
 
   // Add the element to the model's elements hash table
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
@@ -369,6 +256,23 @@ int model_update_text(Model *model, ModelElement *element, const char *text) {
   }
 
   return 0; // No change needed
+}
+
+int model_update_color(Model *model, ModelElement *element, double r, double g, double b, double a) {
+  if (!model || !element || !element->bg_color) return 0;
+
+  ModelColor *color = element->bg_color;
+
+  color->r = r;
+  color->g = g;
+  color->b = b;
+  color->a = a;
+
+  if (element->state != MODEL_STATE_NEW) {
+    element->state = MODEL_STATE_UPDATED;
+  }
+
+  return 1;
 }
 
 int model_update_position(Model *model, ModelElement *element, int x, int y, int z) {
@@ -446,7 +350,7 @@ int model_delete_element(Model *model, ModelElement *element) {
   if (element->position && element->position->ref_count > 0) element->position->ref_count--;
   if (element->size && element->size->ref_count > 0) element->size->ref_count--;
   if (element->text && element->text->ref_count > 0) element->text->ref_count--;
-  if (element->color && element->color->ref_count > 0) element->color->ref_count--;
+  if (element->bg_color && element->bg_color->ref_count > 0) element->bg_color->ref_count--;
   if (element->image && element->image->ref_count > 0) element->image->ref_count--;
 
   // Mark element as deleted
@@ -490,76 +394,28 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     return NULL;
   }
 
-  switch (element->type->type) {
-  case ELEMENT_NOTE:
-    if (element->position && element->size && element->text) {
-      return model_create_note(model,
-                               element->position->x,
-                               element->position->y,
-                               element->position->z,
-                               element->size->width,
-                               element->size->height,
-                               element->text->text);
-    }
-    break;
+  ElementPosition position = {
+    .x = element->position->x,
+    .y = element->position->y,
+    .z = element->position->z,
+  };
+  ElementColor bg_color = {
+    .r = element->bg_color->r,
+    .g = element->bg_color->g,
+    .b = element->bg_color->b,
+    .a = element->bg_color->a,
+  };
+  ElementSize size = {
+    .width = element->size->width,
+    .height = element->size->height,
+  };
 
-  case ELEMENT_PAPER_NOTE:
-    if (element->position && element->size && element->text) {
-      return model_create_paper_note(model,
-                                     element->position->x,
-                                     element->position->y,
-                                     element->position->z,
-                                     element->size->width,
-                                     element->size->height,
-                                     element->text->text);
-    }
-    break;
-
-  case ELEMENT_CONNECTION:
-    if (element->from_element_uuid && element->to_element_uuid) {
-      return model_create_connection(model,
-                                     element->from_element_uuid,
-                                     element->to_element_uuid,
-                                     element->from_point,
-                                     element->to_point,
-                                     element->position->z
-                                     );
-    }
-    break;
-
-  case ELEMENT_SPACE:
-    if (element->position && element->size && element->target_space_uuid) {
-      return model_create_space(model,
-                                element->text->text,
-                                element->position->x,
-                                element->position->y,
-                                element->position->z,
-                                element->size->width,
-                                element->size->height);
-    }
-    break;
-
-  case ELEMENT_IMAGE_NOTE:
-    if (element->position && element->size && element->image->image_data && element->image->image_size > 0) {
-      return model_create_image_note(model,
-                                     element->position->x,
-                                     element->position->y,
-                                     element->position->z,
-                                     element->size->width,
-                                     element->size->height,
-                                     element->image->image_data,
-                                     element->image->image_size,
-                                     element->text->text
-                                     );
-    }
-    break;
-
-  default:
-    g_warning("Unknown element type: %d", element->type->type);
-    break;
-  }
-
-  return NULL;
+  return model_create_element(model,
+                              element->type->type,
+                              bg_color, position, size,
+                              element->image ? element->image->image_data : NULL, element-> image ? element->image->image_size : 0,
+                              element->from_element_uuid, element->to_element_uuid, element->from_point, element->to_point,
+                              element->text->text);
 }
 
 ModelElement* model_element_clone_by_text(Model *model, ModelElement *element) {
@@ -698,11 +554,11 @@ int model_save_elements(Model *model) {
           }
         }
 
-        if (element->color && element->color->id > 0) {
-          database_update_color_ref(model->db, element->color);
-          if (element->color->ref_count < 1) {
-            g_hash_table_remove(model->colors, GINT_TO_POINTER(element->color->id));
-            model_color_free(element->color);
+        if (element->bg_color && element->bg_color->id > 0) {
+          database_update_color_ref(model->db, element->bg_color);
+          if (element->bg_color->ref_count < 1) {
+            g_hash_table_remove(model->colors, GINT_TO_POINTER(element->bg_color->id));
+            model_color_free(element->bg_color);
           }
         }
 
@@ -776,8 +632,8 @@ int model_save_elements(Model *model) {
         if (element->text && element->text->id > 0) {
           g_hash_table_insert(model->texts, GINT_TO_POINTER(element->text->id), element->text);
         }
-        if (element->color && element->color->id > 0) {
-          g_hash_table_insert(model->colors, GINT_TO_POINTER(element->color->id), element->color);
+        if (element->bg_color && element->bg_color->id > 0) {
+          g_hash_table_insert(model->colors, GINT_TO_POINTER(element->bg_color->id), element->bg_color);
         }
         if (element->image && element->image->id > 0) {
           g_hash_table_insert(model->images, GINT_TO_POINTER(element->image->id), element->image);
@@ -858,63 +714,4 @@ ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
 
 int model_get_amount_of_elements(Model *model, const char *space_uuid) {
   return database_get_amount_of_elements(model->db, space_uuid);
-}
-
-ModelElement* model_create_image_note(Model *model, int x, int y, int z, int width, int height,
-                                      const unsigned char *image_data, int image_size, const char *text) {
-  if (model == NULL) {
-    g_printerr("Error: model is NULL in model_create_image_note\n");
-    return NULL;
-  }
-
-  ModelElement *element = g_new0(ModelElement, 1);
-  element->uuid = model_generate_uuid();
-  element->state = MODEL_STATE_NEW;
-  element->space_uuid = g_strdup(model->current_space_uuid);
-
-  // Create type reference
-  ModelType *model_type = g_new0(ModelType, 1);
-  model_type->id = -1;
-  model_type->type = ELEMENT_IMAGE_NOTE;
-  model_type->ref_count = 1;
-  element->type = model_type;
-
-  // Create position reference
-  ModelPosition *position = g_new0(ModelPosition, 1);
-  position->id = -1;
-  position->x = x;
-  position->y = y;
-  position->z = z;
-  position->ref_count = 1;
-  element->position = position;
-
-  // Create size reference
-  ModelSize *size = g_new0(ModelSize, 1);
-  size->id = -1;
-  size->width = width;
-  size->height = height;
-  size->ref_count = 1;
-  element->size = size;
-
-  // Create text reference if text is provided
-  if (text != NULL) {
-    ModelText *model_text = g_new0(ModelText, 1);
-    model_text->id = -1;  // Temporary ID until saved to database
-    model_text->text = g_strdup(text);
-    model_text->ref_count = 1;
-    element->text = model_text;
-  }
-
-  ModelImage *model_image = g_new0(ModelImage, 1);
-  model_image->id = -1;
-  if (image_data && image_size > 0) {
-    model_image->image_data = g_malloc(image_size);
-    memcpy(model_image->image_data, image_data, image_size);
-    model_image->image_size = image_size;
-  }
-  model_image->ref_count = 1;
-  element->image = model_image;
-
-  g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
-  return element;
 }

@@ -184,17 +184,23 @@ static ElementVTable space_element_vtable = {
   .free = space_element_free
 };
 
-SpaceElement* space_element_create(int x, int y, int z, int width, int height,
+SpaceElement* space_element_create(ElementPosition position,
+                                   ElementColor bg_color,
+                                   ElementSize size,
                                    const gchar *name,
                                    CanvasData *data) {
   SpaceElement *space_elem = g_new0(SpaceElement, 1);
   space_elem->base.type = ELEMENT_SPACE;
   space_elem->base.vtable = &space_element_vtable;
-  space_elem->base.x = x;
-  space_elem->base.y = y;
-  space_elem->base.z = z;
-  space_elem->base.width = width;
-  space_elem->base.height = height;
+  space_elem->base.x = position.x;
+  space_elem->base.y = position.y;
+  space_elem->base.z = position.z;
+  space_elem->base.bg_r = bg_color.r;
+  space_elem->base.bg_g = bg_color.g;
+  space_elem->base.bg_b = bg_color.b;
+  space_elem->base.bg_a = bg_color.a;
+  space_elem->base.width = size.width;
+  space_elem->base.height = size.height;
   space_elem->base.canvas_data = data;
   space_elem->name = g_strdup(name);
   return space_elem;

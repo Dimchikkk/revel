@@ -12,7 +12,11 @@ typedef struct {
   gboolean editing;
 } Note;
 
-Note* note_create(int x, int y, int z, int width, int height, const char *text, CanvasData* data);
+Note* note_create(ElementPosition position,
+                  ElementColor bg_color,
+                  ElementSize size,
+                  const char *text,
+                  CanvasData *data);
 void note_draw(Element *element, cairo_t *cr, gboolean is_selected);
 void note_get_connection_point(Element *element, int point, int *cx, int *cy);
 int note_pick_resize_handle(Element *element, int x, int y);

@@ -49,7 +49,7 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
 
   data->model = model_new();
 
-  if (data->model != NULL && data->model->db != NULL) canvas_recreate_visual_elements(data);
+  if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
   return data;
 }
@@ -59,19 +59,100 @@ GList* sort_model_elements_for_serialization(GHashTable *elements_table) {
   return g_list_sort(elements_list, (GCompareFunc)model_compare_for_saving_loading);
 }
 
-void create_visual_elements_from_sorted_list(GList *sorted_elements, CanvasData *data) {
+void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) {
   GList *iter = sorted_elements;
   while (iter != NULL) {
     ModelElement *model_element = (ModelElement*)iter->data;
 
-    // Create visual element from model element
-    Element *visual_element = create_visual_element(model_element, data);
-    if (visual_element) {
-      model_element->visual_element = visual_element;
+    if (model_element->visual_element != NULL) {
+      // Update existing visual element properties directly
+      Element *visual_element = model_element->visual_element;
 
-      if (model_element->position && model_element->position->z >= data->next_z_index) {
-        data->next_z_index = model_element->position->z + 1;
+      // Update position if changed
+      if (model_element->position) {
+        if (visual_element->x != model_element->position->x ||
+            visual_element->y != model_element->position->y ||
+            visual_element->z != model_element->position->z) {
+          visual_element->x = model_element->position->x;
+          visual_element->y = model_element->position->y;
+          visual_element->z = model_element->position->z;
+        }
       }
+
+      // Update size if changed
+      if (model_element->size) {
+        if (visual_element->width != model_element->size->width ||
+            visual_element->height != model_element->size->height) {
+          visual_element->width = model_element->size->width;
+          visual_element->height = model_element->size->height;
+        }
+      }
+
+      // Update color if changed
+      if (model_element->bg_color) {
+        if (visual_element->bg_r != model_element->bg_color->r ||
+            visual_element->bg_g != model_element->bg_color->g ||
+            visual_element->bg_b != model_element->bg_color->b ||
+            visual_element->bg_a != model_element->bg_color->a) {
+          visual_element->bg_r = model_element->bg_color->r;
+          visual_element->bg_g = model_element->bg_color->g;
+          visual_element->bg_b = model_element->bg_color->b;
+          visual_element->bg_a = model_element->bg_color->a;
+        }
+      }
+
+      // Handle text updates for specific element types
+      if (model_element->text && model_element->text->text) {
+        switch (visual_element->type) {
+          case ELEMENT_NOTE: {
+            Note *note = (Note *)visual_element;
+            if (note->text == NULL || strcmp(note->text, model_element->text->text) != 0) {
+              g_free(note->text);
+              note->text = g_strdup(model_element->text->text);
+            }
+            break;
+          }
+          case ELEMENT_PAPER_NOTE: {
+            PaperNote *paper_note = (PaperNote *)visual_element;
+            if (paper_note->text == NULL || strcmp(paper_note->text, model_element->text->text) != 0) {
+              g_free(paper_note->text);
+              paper_note->text = g_strdup(model_element->text->text);
+            }
+            break;
+          }
+          case ELEMENT_IMAGE_NOTE: {
+            ImageNote *image_note = (ImageNote *)visual_element;
+            if (image_note->text == NULL || strcmp(image_note->text, model_element->text->text) != 0) {
+              g_free(image_note->text);
+              image_note->text = g_strdup(model_element->text->text);
+            }
+            break;
+          }
+          case ELEMENT_SPACE: {
+            SpaceElement *space = (SpaceElement *)visual_element;
+            if (space->name == NULL || strcmp(space->name, model_element->text->text) != 0) {
+              g_free(space->name);
+              space->name = g_strdup(model_element->text->text);
+            }
+            break;
+          }
+          case ELEMENT_CONNECTION:
+            // Connections typically don't have text
+            break;
+        }
+      }
+
+    } else {
+      // Create new visual element if it doesn't exist
+      Element *visual_element = create_visual_element(model_element, data);
+      if (visual_element) {
+        model_element->visual_element = visual_element;
+      }
+    }
+
+    // Update z-index tracking
+    if (model_element->position && model_element->position->z >= data->next_z_index) {
+      data->next_z_index = model_element->position->z + 1;
     }
 
     iter = iter->next;
@@ -96,7 +177,8 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
   // Apply panning transformation
   cairo_translate(cr, data->offset_x, data->offset_y);
 
-  cairo_set_source_rgb(cr, 0.32, 0.32, 0.36);
+  // Canvas color
+  cairo_set_source_rgb(cr, 0.094, 0.094, 0.094);
   cairo_paint(cr);
 
   // Draw current space name in the top-left corner
@@ -197,50 +279,45 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     return NULL;
   }
 
+  if (!model_element->position  || !model_element->size || !model_element->bg_color) {
+    return NULL;
+  }
+
+  ElementPosition position = {
+    .x = model_element->position->x,
+    .y = model_element->position->y,
+    .z = model_element->position->z,
+  };
+  ElementColor bg_color = {
+    .r = model_element->bg_color->r,
+    .g = model_element->bg_color->g,
+    .b = model_element->bg_color->b,
+    .a = model_element->bg_color->a,
+  };
+  ElementSize size = {
+    .width = model_element->size->width,
+    .height = model_element->size->height,
+  };
+
   Element *visual_element = NULL;
 
   switch (model_element->type->type) {
   case ELEMENT_NOTE:
-    if (model_element->text && model_element->position && model_element->size) {
-      visual_element = (Element*)note_create(
-                                             model_element->position->x,
-                                             model_element->position->y,
-                                             model_element->position->z,
-                                             model_element->size->width,
-                                             model_element->size->height,
-                                             model_element->text->text,
-                                             data
-                                             );
+    if (model_element->text) {
+      visual_element = (Element*)note_create(position, bg_color, size, model_element->text->text, data);
     }
     break;
 
   case ELEMENT_PAPER_NOTE:
-    if (model_element->text && model_element->position && model_element->size) {
-      visual_element = (Element*)paper_note_create(
-                                                   model_element->position->x,
-                                                   model_element->position->y,
-                                                   model_element->position->z,
-                                                   model_element->size->width,
-                                                   model_element->size->height,
-                                                   model_element->text->text,
-                                                   data
-                                                   );
+    if (model_element->text) {
+      visual_element = (Element*)paper_note_create(position, bg_color, size, model_element->text->text, data);
     }
     break;
 
-  case ELEMENT_SPACE:
-    if (model_element->position && model_element->size) {
-      visual_element = (Element*)space_element_create(
-                                                      model_element->position->x,
-                                                      model_element->position->y,
-                                                      model_element->position->z,
-                                                      model_element->size->width,
-                                                      model_element->size->height,
-                                                      model_element->text ? model_element->text->text : "Space",
-                                                      data
-                                                      );
-    }
+  case ELEMENT_SPACE: {
+    visual_element = (Element*)space_element_create(position, bg_color, size, model_element->text ? model_element->text->text : "Space", data);
     break;
+  }
 
   case ELEMENT_CONNECTION:
     if (model_element->from_element_uuid && model_element->to_element_uuid) {
@@ -271,14 +348,9 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       }
 
       if (from_element && to_element) {
-        visual_element = (Element*)connection_create(
-                                                     from_element,
-                                                     model_element->from_point,
-                                                     to_element,
-                                                     model_element->to_point,
-                                                     model_element->position ? model_element->position->z : data->next_z_index++,
-                                                     data
-                                                     );
+        visual_element = (Element*)connection_create(from_element, model_element->from_point,
+                                                     to_element, model_element->to_point,
+                                                     bg_color, position.z, data);
 
         if (visual_element && model_element->position &&
             model_element->position->z >= data->next_z_index) {
@@ -293,17 +365,8 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
   case ELEMENT_IMAGE_NOTE:
     if (model_element->position && model_element->size &&
         model_element->image->image_data && model_element->image->image_size > 0) {
-      visual_element = (Element*)image_note_create(
-                                                   model_element->position->x,
-                                                   model_element->position->y,
-                                                   model_element->position->z,
-                                                   model_element->size->width,
-                                                   model_element->size->height,
-                                                   model_element->image->image_data,
-                                                   model_element->image->image_size,
-                                                   model_element->text->text,
-                                                   data
-                                                   );
+      visual_element = (Element*)image_note_create(position, bg_color, size,
+                                                   model_element->image->image_data, model_element->image->image_size, model_element->text->text, data);
     }
     break;
 
@@ -339,13 +402,13 @@ GList* canvas_get_visual_elements(CanvasData *data) {
   return visual_elements;
 }
 
-void canvas_recreate_visual_elements(CanvasData *canvas_data) {
+void canvas_sync_with_model(CanvasData *canvas_data) {
   if (!canvas_data || !canvas_data->model || !canvas_data->model->elements) {
     return;
   }
 
   GList *sorted_elements = sort_model_elements_for_serialization(canvas_data->model->elements);
-  create_visual_elements_from_sorted_list(sorted_elements, canvas_data);
+  create_or_update_visual_elements(sorted_elements, canvas_data);
   g_list_free(sorted_elements);
 }
 

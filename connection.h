@@ -14,7 +14,11 @@ typedef struct {
   int to_point;
 } Connection;
 
-Connection* connection_create(Element *from, int from_point, Element *to, int to_point, int z, CanvasData *data);
+Connection* connection_create(Element *from, int from_point,
+                              Element *to, int to_point,
+                              ElementColor bg_color,
+                              int z,
+                              CanvasData *data);
 void connection_draw(Element *element, cairo_t *cr, gboolean is_selected);
 void connection_get_connection_point(Element *element, int point, int *cx, int *cy);
 int connection_pick_resize_handle(Element *element, int x, int y);

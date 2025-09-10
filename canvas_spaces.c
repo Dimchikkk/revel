@@ -1,5 +1,6 @@
 #include "canvas_spaces.h"
 #include "canvas_core.h"
+#include "element.h"
 #include "space.h"
 #include "model.h"
 
@@ -15,7 +16,7 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   data->model->current_space_uuid = g_strdup(space_uuid);;
 
   model_load_space(data->model);
-  canvas_recreate_visual_elements(data);
+  canvas_sync_with_model(data);
 
   gtk_widget_queue_draw(data->drawing_area);
 }
@@ -38,18 +39,23 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
 
       if (space_name && strlen(space_name) > 0) {
         // Create a new space element in the model
-        ModelElement *model_element = model_create_space(data->model, space_name, 100, 100, data->next_z_index++, 200, 150);
-
-        // Create visual space element
-        SpaceElement *space_element = space_element_create(
-                                                           model_element->position->x,
-                                                           model_element->position->y,
-                                                           model_element->position->z,
-                                                           model_element->size->width,
-                                                           model_element->size->height,
-                                                           space_name,
-                                                           data
-                                                           );
+        ElementPosition position = {
+          .x = 100,
+          .y = 100,
+          .z = data->next_z_index++,
+        };
+        ElementColor bg_color = {
+          .r = 0.8,
+          .g = 0.8,
+          .b = 1.0,
+          .a = 1.0,
+        };
+        ElementSize size = {
+          .width = 200,
+          .height = 150,
+        };
+        ModelElement *model_element = model_create_element(data->model, ELEMENT_SPACE, bg_color, position, size, NULL, 0, 0, NULL, -1, -1, space_name);
+        SpaceElement *space_element = space_element_create(position, bg_color, size, space_name, data);
 
         // Link model and visual elements
         model_element->visual_element = (Element*)space_element;

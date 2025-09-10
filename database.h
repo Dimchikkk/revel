@@ -37,8 +37,8 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text);
 int database_update_text_ref(sqlite3 *db, ModelText *text);
 
 // Color reference operations
-int database_create_color_ref(sqlite3 *db, double r, double g, double b, double a, int *color_id);
-int database_read_color_ref(sqlite3 *db, int color_id, ModelColor **color);
+int database_create_color_ref(sqlite3 *db, double r, double g, double b, double a, int *bg_color_id);
+int database_read_color_ref(sqlite3 *db, int bg_color_id, ModelColor **color);
 int database_update_color_ref(sqlite3 *db, ModelColor *color);
 
 // Image reference operations

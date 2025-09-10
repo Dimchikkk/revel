@@ -66,7 +66,7 @@ struct _ModelElement {
   ModelPosition* position;    // Shared position
   ModelSize* size;            // Shared size
   ModelText* text;            // Shared text
-  ModelColor* color;          // Shared color
+  ModelColor* bg_color;       // Shared bg_color
   ModelImage* image;
   Element* visual_element;    // Pointer to visual representation
   ModelState state;
@@ -89,7 +89,7 @@ struct _Model {
   GHashTable *texts;          // text_id -> ModelText* (shared texts)
   GHashTable *positions;      // positon_id -> ModelPosition* (shared position)
   GHashTable *sizes;          // size_id -> ModelSize* (shared size)
-  GHashTable *colors;         // color_id -> ModelColor* (shared color)
+  GHashTable *colors;         // bg_color_id -> ModelColor* (shared color)
   GHashTable *images;         // image_id -> ModelImage (shared image)
   sqlite3 *db;
 };
@@ -106,11 +106,14 @@ int model_get_parent_id(Model *model, char **space_parent_id);
 int model_get_amount_of_elements(Model *model, const char *space_uuid);
 
 // Creation
-ModelElement* model_create_note(Model *model, int x, int y, int z, int width, int height, const char *text);
-ModelElement* model_create_paper_note(Model *model, int x, int y, int z, int width, int height, const char *text);
-ModelElement* model_create_connection(Model *model, const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point, int z);
-ModelElement* model_create_space(Model *model, const char *name, int x, int y, int z, int width, int height);
-ModelElement* model_create_image_note(Model *model, int x, int y, int z, int width, int height, const unsigned char *image_data, int image_size, const char *text);
+ModelElement* model_create_element(Model *model,
+                                   ElementType element_type,
+                                   ElementColor bg_color,
+                                   ElementPosition position,
+                                   ElementSize size,
+                                   const unsigned char *image_data, int image_size,
+                                   const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
+                                   const char *text);
 
 // Fork/cloning
 ModelElement* model_element_fork(Model *model, ModelElement *element);
@@ -121,6 +124,8 @@ ModelElement* model_element_clone_by_size(Model *model, ModelElement *element);
 int model_update_text(Model *model, ModelElement *element, const char *text);
 int model_update_position(Model *model, ModelElement *element, int x, int y, int z);
 int model_update_size(Model *model, ModelElement *element, int width, int height);
+// This method slightly inconsistent with other update methods: it doesn't create ModelColor if it is NULL
+int model_update_color(Model *model, ModelElement *element, double r, double g, double b, double a);
 
 // Deletion
 int model_delete_element(Model *model, ModelElement *element);

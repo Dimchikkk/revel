@@ -13,7 +13,9 @@ typedef struct {
 } SpaceElement;
 
 // Function declarations
-SpaceElement *space_element_create(int x, int y, int z, int width, int height,
+SpaceElement *space_element_create(ElementPosition position,
+                                   ElementColor bg_color,
+                                   ElementSize size,
                                    const gchar *name,
                                    CanvasData *data);
 

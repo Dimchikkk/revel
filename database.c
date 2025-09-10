@@ -100,7 +100,7 @@ int database_create_tables(sqlite3 *db) {
     "    position_id INTEGER NOT NULL,"
     "    size_id INTEGER NOT NULL,"
     "    text_id INTEGER,"
-    "    color_id INTEGER,"
+    "    bg_color_id INTEGER,"
     "    from_element_uuid TEXT,"    // UUID of the source element for connections
     "    to_element_uuid TEXT,"      // UUID of the target element for connections
     "    from_point INTEGER,"        // For connections 0,1,2,3 (connection point location)
@@ -113,7 +113,7 @@ int database_create_tables(sqlite3 *db) {
     "    FOREIGN KEY (position_id) REFERENCES position_refs(id),"
     "    FOREIGN KEY (size_id) REFERENCES size_refs(id),"
     "    FOREIGN KEY (text_id) REFERENCES text_refs(id),"
-    "    FOREIGN KEY (color_id) REFERENCES color_refs(id),"
+    "    FOREIGN KEY (bg_color_id) REFERENCES color_refs(id),"
     "    FOREIGN KEY (image_id) REFERENCES image_refs(id),"
     "    FOREIGN KEY (from_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (to_element_uuid) REFERENCES elements(uuid),"
@@ -404,12 +404,12 @@ int database_read_position_ref(sqlite3 *db, int position_id, ModelPosition **pos
   return 1; // Success (no error occurred)
 }
 
-int database_read_color_ref(sqlite3 *db, int color_id, ModelColor **color) {
+int database_read_color_ref(sqlite3 *db, int bg_color_id, ModelColor **color) {
   // Initialize output to NULL
   *color = NULL;
 
-  if (color_id <= 0) {
-    fprintf(stderr, "Error: Invalid color_id (%d) in database_read_color_ref\n", color_id);
+  if (bg_color_id <= 0) {
+    fprintf(stderr, "Error: Invalid bg_color_id (%d) in database_read_color_ref\n", bg_color_id);
     return 0; // Error - invalid input
   }
 
@@ -421,11 +421,11 @@ int database_read_color_ref(sqlite3 *db, int color_id, ModelColor **color) {
     return 0; // Error
   }
 
-  sqlite3_bind_int(stmt, 1, color_id);
+  sqlite3_bind_int(stmt, 1, bg_color_id);
 
   if (sqlite3_step(stmt) == SQLITE_ROW) {
     ModelColor *model_color = g_new0(ModelColor, 1);
-    model_color->id = color_id;
+    model_color->id = bg_color_id;
     model_color->r = sqlite3_column_double(stmt, 0);
     model_color->g = sqlite3_column_double(stmt, 1);
     model_color->b = sqlite3_column_double(stmt, 2);
@@ -492,7 +492,7 @@ int database_create_size_ref(sqlite3 *db, int width, int height, int *size_id) {
 }
 
 // Color reference operations
-int database_create_color_ref(sqlite3 *db, double r, double g, double b, double a, int *color_id) {
+int database_create_color_ref(sqlite3 *db, double r, double g, double b, double a, int *bg_color_id) {
   const char *sql = "INSERT INTO color_refs (r, g, b, a) VALUES (?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
@@ -512,13 +512,13 @@ int database_create_color_ref(sqlite3 *db, double r, double g, double b, double 
     return 0;
   }
 
-  *color_id = sqlite3_last_insert_rowid(db);
+  *bg_color_id = sqlite3_last_insert_rowid(db);
   sqlite3_finalize(stmt);
   return 1;
 }
 
 int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *element) {
-  int type_id, position_id, size_id, text_id = 0, color_id = 0, image_id = 0;
+  int type_id, position_id, size_id, text_id = 0, bg_color_id = 0, image_id = 0;
 
   // Handle type reference
   if (element->type->id == -1) {
@@ -579,15 +579,15 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   }
 
   // Handle color reference (optional)
-  if (element->color) {
-    if (element->color->id == -1) {
+  if (element->bg_color) {
+    if (element->bg_color->id == -1) {
       // Create new color reference
-      if (!database_create_color_ref(db, element->color->r, element->color->g, element->color->b, element->color->a, &color_id)) return 0;
-      element->color->id = color_id;
+      if (!database_create_color_ref(db, element->bg_color->r, element->bg_color->g, element->bg_color->b, element->bg_color->a, &bg_color_id)) return 0;
+      element->bg_color->id = bg_color_id;
     } else {
       // Update existing color reference
-      if (!database_update_color_ref(db, element->color)) return 0;
-      color_id = element->color->id;
+      if (!database_update_color_ref(db, element->bg_color)) return 0;
+      bg_color_id = element->bg_color->id;
     }
   }
 
@@ -596,7 +596,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id) "
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id) "
     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
@@ -618,8 +618,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     sqlite3_bind_null(stmt, param_index++);
   }
 
-  if (color_id > 0) {
-    sqlite3_bind_int(stmt, param_index++, color_id);
+  if (bg_color_id > 0) {
+    sqlite3_bind_int(stmt, param_index++, bg_color_id);
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
@@ -663,7 +663,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 }
 
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
-  const char *sql = "SELECT type_id, position_id, size_id, text_id, color_id, "
+  const char *sql = "SELECT type_id, position_id, size_id, text_id, bg_color_id, "
     "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
@@ -719,9 +719,9 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
     }
 
     // Read color
-    int color_id = sqlite3_column_int(stmt, col++);
-    if (color_id > 0) {
-      if (!database_read_color_ref(db, color_id, &elem->color)) {
+    int bg_color_id = sqlite3_column_int(stmt, col++);
+    if (bg_color_id > 0) {
+      if (!database_read_color_ref(db, bg_color_id, &elem->bg_color)) {
         sqlite3_finalize(stmt);
         model_element_free(elem);
         return 0; // Error
@@ -796,8 +796,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
       return 0;
     }
   }
-  if (element->color && element->color->id > 0) {
-    if (!database_update_color_ref(db, element->color)) {
+  if (element->bg_color && element->bg_color->id > 0) {
+    if (!database_update_color_ref(db, element->bg_color)) {
       fprintf(stderr, "Failed to update color ref for element %s\n", element->uuid);
       return 0;
     }
@@ -812,7 +812,7 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   // Update the element record with all reference IDs
   const char *sql = "UPDATE elements SET "
     "type_id = ?, position_id = ?, size_id = ?, "
-    "text_id = ?, color_id = ?, image_id = ?, "
+    "text_id = ?, bg_color_id = ?, image_id = ?, "
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ? "
     "WHERE uuid = ?";
@@ -837,8 +837,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     sqlite3_bind_null(stmt, param_index++);
   }
 
-  if (element->color && element->color->id > 0) {
-    sqlite3_bind_int(stmt, param_index++, element->color->id);
+  if (element->bg_color && element->bg_color->id > 0) {
+    sqlite3_bind_int(stmt, param_index++, element->bg_color->id);
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
@@ -974,7 +974,7 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
 
 int database_load_space(sqlite3 *db, Model *model) {
   const char *sql =
-    "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.color_id, "
+    "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
     "e.image_id "
     "FROM elements e "
@@ -1084,20 +1084,20 @@ int database_load_space(sqlite3 *db, Model *model) {
     }
 
     // Extract color (check if already loaded in model)
-    int color_id = sqlite3_column_int(stmt, COL_COLOR_ID);
-    if (color_id > 0) {
-      ModelColor *color = g_hash_table_lookup(model->colors, GINT_TO_POINTER(color_id));
+    int bg_color_id = sqlite3_column_int(stmt, COL_COLOR_ID);
+    if (bg_color_id > 0) {
+      ModelColor *color = g_hash_table_lookup(model->colors, GINT_TO_POINTER(bg_color_id));
       if (!color) {
         // Not in cache, load from database
-        if (database_read_color_ref(db, color_id, &color)) {
-          g_hash_table_insert(model->colors, GINT_TO_POINTER(color_id), color);
+        if (database_read_color_ref(db, bg_color_id, &color)) {
+          g_hash_table_insert(model->colors, GINT_TO_POINTER(bg_color_id), color);
         } else {
-          fprintf(stderr, "Failed to load color %d for element %s\n", color_id, uuid);
+          fprintf(stderr, "Failed to load color %d for element %s\n", bg_color_id, uuid);
           model_element_free(element);
           continue;
         }
       }
-      element->color = color;
+      element->bg_color = color;
     }
 
     // Extract connection data
@@ -1397,7 +1397,7 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
 // Color reference update with ModelColor struct
 int database_update_color_ref(sqlite3 *db, ModelColor *color) {
   if (color->id <= 0) {
-    fprintf(stderr, "Error: Invalid color_id (%d) in database_update_color_ref\n", color->id);
+    fprintf(stderr, "Error: Invalid bg_color_id (%d) in database_update_color_ref\n", color->id);
     return 0;
   }
 

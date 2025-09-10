@@ -20,17 +20,27 @@ static ElementVTable image_note_vtable = {
   .free = image_note_free
 };
 
-ImageNote* image_note_create(int x, int y, int z, int width, int height,
-                             const unsigned char *image_data, int image_size,
-                             const char *text, CanvasData *data) {
+ImageNote* image_note_create(ElementPosition position,
+                             ElementColor bg_color,
+                             ElementSize size,
+                             const unsigned char *image_data,
+                             int image_size,
+                             const char *text,
+                             CanvasData *data) {
   ImageNote *image_note = g_new0(ImageNote, 1);
   image_note->base.type = ELEMENT_IMAGE_NOTE;
   image_note->base.vtable = &image_note_vtable;
-  image_note->base.x = x;
-  image_note->base.y = y;
-  image_note->base.z = z;
-  image_note->base.width = width;
-  image_note->base.height = height;
+  image_note->base.x = position.x;
+  image_note->base.y = position.y;
+  image_note->base.z = position.z;
+
+  image_note->base.bg_r = bg_color.r;
+  image_note->base.bg_g = bg_color.g;
+  image_note->base.bg_b = bg_color.b;
+  image_note->base.bg_a = bg_color.a;
+
+  image_note->base.width = size.width;
+  image_note->base.height = size.height;
   image_note->base.canvas_data = data;
   image_note->text = g_strdup(text ? text : "");
   image_note->text_view = NULL;
@@ -83,7 +93,7 @@ void image_note_finish_editing(Element *element) {
 
   // Queue redraw using the stored canvas data
   if (image_note->base.canvas_data && image_note->base.canvas_data->drawing_area) {
-    canvas_recreate_visual_elements(image_note->base.canvas_data);
+    canvas_sync_with_model(image_note->base.canvas_data);
     gtk_widget_queue_draw(image_note->base.canvas_data->drawing_area);
   }
 }

@@ -1,18 +1,39 @@
 #include "canvas_actions.h"
 #include "canvas_core.h"
 #include "canvas_spaces.h"
+#include "element.h"
 #include "paper_note.h"
 #include "note.h"
 #include "space.h"
 
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
-
-  ModelElement *model_element = model_create_paper_note(data->model, 50, 50, data->next_z_index++, 200, 150, "Paper Note");
+  ElementPosition position = {
+    .x = 100,
+    .y = 100,
+    .z = data->next_z_index++,
+  };
+  ElementColor bg_color = {
+    .r = 1.0,
+    .g = 1.0,
+    .b = 0.8,
+    .a = 1.0,
+  };
+  ElementSize size = {
+    .width = 200,
+    .height = 150,
+  };
+  ModelElement *model_element = model_create_element(data->model,
+                                                     ELEMENT_PAPER_NOTE,
+                                                     bg_color, position, size,
+                                                     NULL, 0,
+                                                     0, NULL, -1, -1,
+                                                     "Paper note");
   if (!model_element) {
     g_printerr("Failed to create paper note model element\n");
     return;
   }
+  // Link model and visual elements
   model_element->visual_element = create_visual_element(model_element, data);
   gtk_widget_queue_draw(data->drawing_area);
 }
@@ -20,7 +41,28 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
 void canvas_on_add_note(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
-  ModelElement *model_element = model_create_note(data->model, 100, 100, data->next_z_index++, 200, 150, "Note");
+  ElementPosition position = {
+    .x = 100,
+    .y = 100,
+    .z = data->next_z_index++,
+  };
+  ElementColor bg_color = {
+    .r = 1.0,
+    .g = 1.0,
+    .b = 1.0,
+    .a = 1.0,
+  };
+  ElementSize size = {
+    .width = 200,
+    .height = 150,
+  };
+
+  ModelElement *model_element = model_create_element(data->model,
+                                                     ELEMENT_NOTE,
+                                                     bg_color, position, size,
+                                                     NULL, 0,
+                                                     0, NULL, -1, -1,
+                                                     "Note");
   if (!model_element) {
     g_printerr("Failed to create note model element\n");
     return;
@@ -28,12 +70,6 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
 
   // Link model and visual elements
   model_element->visual_element = create_visual_element(model_element, data);
-
-
-  if (data->model == NULL) {
-    g_printerr("%s:%d:0 Failed to initialize model\n", __FILE__, __LINE__);
-  }
-
   gtk_widget_queue_draw(data->drawing_area);
 }
 
