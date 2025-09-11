@@ -9,7 +9,7 @@ Note taking brainstorming app
 * organize elements into nested spaces
 * paste images from clipboard and annotate them
 * stora all data in a single portable SQLite3 database file
-* resize, move, fork, clone (by text or by size) and delete elements
+* resize, move, fork, clone (by text or by size), delete, change color of elements
 * infinite canvas space
 
 ## Dependencies
