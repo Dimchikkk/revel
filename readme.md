@@ -5,7 +5,7 @@ Note taking brainstorming app
 # Features:
 
 * stora all data in a single portable SQLite3 database file
-- full-text search using BM25 ranking
+* full-text search using BM25 ranking
 * create notes, paper notes
 * connect elements with arrows
 * paste images from clipboard and annotate them
