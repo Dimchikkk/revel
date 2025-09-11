@@ -25,3 +25,10 @@ sudo apt install libsqlite3-dev
 ## To run on x86_64 GNU/Linux:
 
 `make -B -j 7 && ./revel`
+
+## How to add app launcher
+
+1. Copy `revel.desktop` to `~/.local/share/applications/`.  
+2. Update Exec and Icon path.  
+3. `update-desktop-database ~/.local/share/applications/`  
+

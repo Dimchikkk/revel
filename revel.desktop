@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Revel
+Comment=My awesome app
+Exec=<PATH_TO_REVEL_BIN>
+Icon=<PATH_TO_REVEL_ICON>
+Terminal=false
+Type=Application
+Categories=Utility;Application;
