@@ -136,4 +136,14 @@ ModelElement* model_get_by_visual(Model *model, Element *visual_element);
 gint model_compare_for_saving_loading(const ModelElement *a, const ModelElement *b);
 gint model_compare_for_deletion(const ModelElement *a, const ModelElement *b);
 
+typedef struct {
+    char *element_uuid;
+    char *text_content;
+    char *space_uuid;
+    char *space_name;
+} ModelSearchResult;
+
+int model_search_elements(Model *model, const char *search_term, GList **results);
+void model_free_search_result(ModelSearchResult *result);
+
 #endif

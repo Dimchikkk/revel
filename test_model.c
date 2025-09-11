@@ -196,6 +196,65 @@ static void test_delete_element(TestFixture *fixture, gconstpointer user_data) {
   g_assert_null(g_hash_table_lookup(fixture->model->elements, uuid));
 }
 
+static void test_search_multiple_spaces(TestFixture *fixture, gconstpointer user_data) {
+    // Create a new space
+    char *new_space_uuid = NULL;
+    int result = database_create_space(fixture->db, "Test Space", fixture->model->current_space_uuid, &new_space_uuid);
+    g_assert_cmpint(result, ==, 1);
+    g_assert_nonnull(new_space_uuid);
+
+    // Create elements in different spaces
+    ElementPosition pos = {100, 200, 1};
+    ElementColor color = {1.0, 1.0, 1.0, 1.0};
+    ElementSize size = {50, 30};
+
+    // Element in current space
+    ModelElement *note1 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+                                             NULL, 0, NULL, NULL, -1, -1, "Note in default space");
+    g_assert_nonnull(note1);
+
+    // Temporarily switch to new space to create element there
+    char *old_space = fixture->model->current_space_uuid;
+    fixture->model->current_space_uuid = new_space_uuid;
+
+    ModelElement *note2 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+                                             NULL, 0, NULL, NULL, -1, -1, "Note in test space");
+    g_assert_nonnull(note2);
+
+    // Switch back to original space
+    fixture->model->current_space_uuid = old_space;
+
+    // Save elements
+    model_save_elements(fixture->model);
+
+    // Search should find elements from both spaces
+    GList *results = NULL;
+    int search_result = model_search_elements(fixture->model, "space", &results);
+    g_assert_cmpint(search_result, ==, 0);
+    g_assert_nonnull(results);
+    g_assert_cmpuint(g_list_length(results), ==, 2);
+
+    // Verify both spaces are represented in results
+    int found_default_space = 0, found_test_space = 0;
+    GList *iter = results;
+    while (iter != NULL) {
+        ModelSearchResult *search_result = (ModelSearchResult*)iter->data;
+        if (strstr(search_result->text_content, "default")) {
+            found_default_space = 1;
+        } else if (strstr(search_result->text_content, "test")) {
+            found_test_space = 1;
+        }
+        iter = iter->next;
+    }
+
+    g_assert_true(found_default_space);
+    g_assert_true(found_test_space);
+
+    // Clean up
+    g_list_free_full(results, (GDestroyNotify)model_free_search_result);
+    g_free(new_space_uuid);
+}
+
 int main(int argc, char *argv[]) {
   g_test_init(&argc, &argv, NULL);
 
@@ -205,6 +264,7 @@ int main(int argc, char *argv[]) {
   g_test_add("/model/update-elements", TestFixture, NULL, test_setup, test_update_elements, test_teardown);
   g_test_add("/model/save-load-elements", TestFixture, NULL, test_setup, test_save_load_elements, test_teardown);
   g_test_add("/model/delete-element", TestFixture, NULL, test_setup, test_delete_element, test_teardown);
+  g_test_add("/model/search", TestFixture, NULL, test_setup, test_search_multiple_spaces, test_teardown);
 
   return g_test_run();
 }

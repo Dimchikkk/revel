@@ -4,7 +4,7 @@ LIBS = `pkg-config --libs gtk4 sqlite3` -lm -luuid
 
 SRCS = main.c canvas_core.c canvas_input.c canvas_actions.c canvas_spaces.c \
        element.c paper_note.c note.c connection.c image_note.c vector.c space.c \
-       database.c model.c
+       database.c model.c canvas_search.c
 OBJS = $(SRCS:.c=.o)
 TARGET = velo2
 

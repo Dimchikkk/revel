@@ -127,6 +127,56 @@ int database_create_tables(sqlite3 *db) {
     return 0;
   }
 
+  const char *fts_sql =
+    "CREATE VIRTUAL TABLE IF NOT EXISTS element_text_fts USING fts5("
+    "    element_uuid,"
+    "    space_uuid,"
+    "    text_content,"
+    "    tokenize = 'porter'"
+    ");"
+
+    "CREATE TRIGGER IF NOT EXISTS text_refs_after_insert AFTER INSERT ON text_refs "
+    "BEGIN"
+    "    INSERT INTO element_text_fts(element_uuid, space_uuid, text_content) "
+    "    SELECT e.uuid, e.space_uuid, tr.text "
+    "    FROM elements e "
+    "    JOIN text_refs tr ON e.text_id = tr.id "
+    "    WHERE tr.id = NEW.id;"
+    "END;"
+
+    "CREATE TRIGGER IF NOT EXISTS text_refs_after_update AFTER UPDATE ON text_refs "
+    "BEGIN"
+    "    UPDATE element_text_fts "
+    "    SET text_content = NEW.text "
+    "    WHERE element_uuid IN (SELECT uuid FROM elements WHERE text_id = NEW.id);"
+    "END;"
+
+    "CREATE TRIGGER IF NOT EXISTS text_refs_after_delete AFTER DELETE ON text_refs "
+    "BEGIN"
+    "    DELETE FROM element_text_fts "
+    "    WHERE element_uuid IN (SELECT uuid FROM elements WHERE text_id = OLD.id);"
+    "END;"
+
+    "CREATE TRIGGER IF NOT EXISTS elements_after_insert AFTER INSERT ON elements "
+    "WHEN NEW.text_id IS NOT NULL "
+    "BEGIN"
+    "    INSERT INTO element_text_fts(element_uuid, space_uuid, text_content) "
+    "    SELECT NEW.uuid, NEW.space_uuid, tr.text "
+    "    FROM text_refs tr "
+    "    WHERE tr.id = NEW.text_id;"
+    "END;"
+
+    "CREATE TRIGGER IF NOT EXISTS elements_after_update AFTER UPDATE ON elements "
+    "WHEN NEW.text_id IS NOT NULL AND (OLD.text_id IS NULL OR OLD.text_id != NEW.text_id)"
+    "BEGIN"
+    "    INSERT OR REPLACE INTO element_text_fts(element_uuid, space_uuid, text_content) "
+    "    SELECT NEW.uuid, NEW.space_uuid, tr.text "
+    "    FROM text_refs tr "
+    "    WHERE tr.id = NEW.text_id;"
+    "END;";
+
+  sqlite3_exec(db, fts_sql, NULL, NULL, NULL);
+
   return 1;
 }
 
@@ -1573,4 +1623,54 @@ int database_update_image_ref(sqlite3 *db, ModelImage *image) {
 
   sqlite3_finalize(stmt);
   return 1;
+}
+
+// Add to database.c
+int database_search_elements(sqlite3 *db, const char *search_term, GList **results) {
+  if (!db || !search_term || strlen(search_term) < 1) {
+    return -1;
+  }
+
+  const char *sql =
+    "SELECT ets.element_uuid, ets.text_content, ets.space_uuid, s.name as space_name "
+    "FROM element_text_fts ets "
+    "JOIN spaces s ON ets.space_uuid = s.uuid "
+    "WHERE ets.text_content MATCH ? "
+    "ORDER BY bm25(element_text_fts)";
+
+  sqlite3_stmt *stmt;
+  int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+    g_printerr("Failed to prepare search statement: %s\n", sqlite3_errmsg(db));
+    return -1;
+  }
+
+  // Prepare search term with wildcards for prefix matching
+  char *search_pattern = g_strdup_printf("%s*", search_term);
+  sqlite3_bind_text(stmt, 1, search_pattern, -1, SQLITE_TRANSIENT);
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    SearchResult *result = g_new0(SearchResult, 1);
+
+    result->element_uuid = g_strdup((const char*)sqlite3_column_text(stmt, 0));
+    result->text_content = g_strdup((const char*)sqlite3_column_text(stmt, 1));
+    result->space_uuid = g_strdup((const char*)sqlite3_column_text(stmt, 2));
+    result->space_name = g_strdup((const char*)sqlite3_column_text(stmt, 3));
+
+    *results = g_list_append(*results, result);
+  }
+
+  g_free(search_pattern);
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+void database_free_search_result(SearchResult *result) {
+  if (result) {
+    g_free(result->element_uuid);
+    g_free(result->text_content);
+    g_free(result->space_uuid);
+    g_free(result->space_name);
+    g_free(result);
+  }
 }

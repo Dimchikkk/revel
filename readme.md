@@ -4,13 +4,14 @@ Note taking brainstorming app
 
 # Features:
 
+* stora all data in a single portable SQLite3 database file
+- full-text search using BM25 ranking
 * create notes, paper notes
 * connect elements with arrows
-* organize elements into nested spaces
 * paste images from clipboard and annotate them
-* stora all data in a single portable SQLite3 database file
 * resize, move, fork, clone (by text or by size), delete, change color of elements
 * infinite canvas space
+* organize elements into nested spaces (infinite space depth)
 
 ## Dependencies
 

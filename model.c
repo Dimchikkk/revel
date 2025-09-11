@@ -715,3 +715,14 @@ ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
 int model_get_amount_of_elements(Model *model, const char *space_uuid) {
   return database_get_amount_of_elements(model->db, space_uuid);
 }
+
+int model_search_elements(Model *model, const char *search_term, GList **results) {
+    if (!model || !model->db) {
+        return -1;
+    }
+    return database_search_elements(model->db, search_term, results);
+}
+
+void model_free_search_result(ModelSearchResult *result) {
+    database_free_search_result((SearchResult*)result);
+}

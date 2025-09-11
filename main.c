@@ -2,6 +2,7 @@
 #include "canvas_input.h"
 #include "canvas_actions.h"
 #include "canvas_spaces.h"
+#include "canvas_search.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
@@ -33,6 +34,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   // Add back button
   GtkWidget *back_btn = gtk_button_new_with_label("Back to Parent");
   gtk_box_append(GTK_BOX(toolbar), back_btn);
+
+  GtkWidget *search_btn = gtk_button_new_with_label("Search");
+  gtk_box_append(GTK_BOX(toolbar), search_btn);
 
   GtkWidget *overlay = gtk_overlay_new();
   gtk_widget_set_hexpand(overlay, TRUE);
@@ -78,6 +82,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   /* g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data); */
   g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
   g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);
+  g_signal_connect(search_btn, "clicked", G_CALLBACK(canvas_show_search_dialog), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);
   gtk_window_present(GTK_WINDOW(window));

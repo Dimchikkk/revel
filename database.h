@@ -67,4 +67,14 @@ int database_get_amount_of_elements(sqlite3 *db, const char *space_uuid);
 // This fills-in model state from DB
 int database_load_space(sqlite3 *db, Model* model);
 
+typedef struct {
+    char *element_uuid;
+    char *text_content;
+    char *space_uuid;
+    char *space_name;
+} SearchResult;
+
+int database_search_elements(sqlite3 *db, const char *search_term, GList **results);
+void database_free_search_result(SearchResult *result);
+
 #endif
