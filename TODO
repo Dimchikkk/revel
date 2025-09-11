@@ -2,6 +2,7 @@
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [new feature] time-travel on row click in action log window
 - [new feature] allow choosing DB file
+- [new feature] ability to change text color, text font
 - [improvement] disable back to parent button if at root space
 - [new feature] drawing shapes like arrows, cylinder (vertical / horizontal)
 - [new feature] drawing using pencil feature
