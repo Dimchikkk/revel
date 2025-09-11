@@ -135,28 +135,6 @@ int database_create_tables(sqlite3 *db) {
     "    tokenize = 'porter'"
     ");"
 
-    "CREATE TRIGGER IF NOT EXISTS text_refs_after_insert AFTER INSERT ON text_refs "
-    "BEGIN"
-    "    INSERT INTO element_text_fts(element_uuid, space_uuid, text_content) "
-    "    SELECT e.uuid, e.space_uuid, tr.text "
-    "    FROM elements e "
-    "    JOIN text_refs tr ON e.text_id = tr.id "
-    "    WHERE tr.id = NEW.id;"
-    "END;"
-
-    "CREATE TRIGGER IF NOT EXISTS text_refs_after_update AFTER UPDATE ON text_refs "
-    "BEGIN"
-    "    UPDATE element_text_fts "
-    "    SET text_content = NEW.text "
-    "    WHERE element_uuid IN (SELECT uuid FROM elements WHERE text_id = NEW.id);"
-    "END;"
-
-    "CREATE TRIGGER IF NOT EXISTS text_refs_after_delete AFTER DELETE ON text_refs "
-    "BEGIN"
-    "    DELETE FROM element_text_fts "
-    "    WHERE element_uuid IN (SELECT uuid FROM elements WHERE text_id = OLD.id);"
-    "END;"
-
     "CREATE TRIGGER IF NOT EXISTS elements_after_insert AFTER INSERT ON elements "
     "WHEN NEW.text_id IS NOT NULL "
     "BEGIN"
@@ -173,6 +151,12 @@ int database_create_tables(sqlite3 *db) {
     "    SELECT NEW.uuid, NEW.space_uuid, tr.text "
     "    FROM text_refs tr "
     "    WHERE tr.id = NEW.text_id;"
+    "END;"
+
+    "CREATE TRIGGER IF NOT EXISTS elements_after_delete AFTER DELETE ON elements "
+    "BEGIN"
+    "    DELETE FROM element_text_fts "
+    "    WHERE element_uuid = OLD.uuid;"
     "END;";
 
   sqlite3_exec(db, fts_sql, NULL, NULL, NULL);
