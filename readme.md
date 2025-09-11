@@ -9,7 +9,8 @@ Note taking brainstorming app
 * create notes, paper notes
 * connect elements with arrows
 * paste images from clipboard and annotate them
-* resize, move, fork, clone (by text or by size), delete, change color of elements
+* fork = independent copy. clone = by text or size, with properties kept in sync between elements
+* resize, move, delete, change color of elements
 * infinite canvas space
 * organize elements into nested spaces (infinite space depth)
 
