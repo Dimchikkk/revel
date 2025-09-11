@@ -13,7 +13,7 @@ Note taking brainstorming app
 * infinite canvas space
 * organize elements into nested spaces (infinite space depth)
 
-![Revel Image](photo_2025-09-11_15-05-08.jpg)
+![Revel Image](photo_2025-09-11_15-13-26.jpg)
 
 ## Dependencies
 
