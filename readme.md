@@ -13,6 +13,7 @@ Note taking brainstorming app
 * resize, move, delete, change color of elements
 * infinite canvas space
 * organize elements into nested spaces (infinite space depth)
+* move elements between spaces
 
 ![Revel Image](photo_2025-09-11_15-13-26.jpg)
 
