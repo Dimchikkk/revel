@@ -717,14 +717,38 @@ int model_get_amount_of_elements(Model *model, const char *space_uuid) {
 }
 
 int model_search_elements(Model *model, const char *search_term, GList **results) {
-  if (!model || !model->db) {
-    return -1;
+  if (!model || !model->db) return -1;
+
+  GList *db_results = NULL;
+  int rc = database_search_elements(model->db, search_term, &db_results);
+  if (rc != 0) return rc;
+
+  // Convert SearchResult to ModelSearchResult
+  for (GList *iter = db_results; iter != NULL; iter = iter->next) {
+    SearchResult *db_result = (SearchResult*)iter->data;
+    ModelSearchResult *model_result = g_new0(ModelSearchResult, 1);
+
+    model_result->element_uuid = g_strdup(db_result->element_uuid);
+    model_result->text_content = g_strdup(db_result->text_content);
+    model_result->space_uuid = g_strdup(db_result->space_uuid);
+    model_result->space_name = g_strdup(db_result->space_name);
+
+    *results = g_list_append(*results, model_result);
   }
-  return database_search_elements(model->db, search_term, results);
+
+  // Free the database results list (but not the items - they were copied)
+  g_list_free(db_results);
+  return 0;
 }
 
 void model_free_search_result(ModelSearchResult *result) {
-  database_free_search_result((SearchResult*)result);
+    if (result) {
+        g_free(result->element_uuid);
+        g_free(result->text_content);
+        g_free(result->space_uuid);
+        g_free(result->space_name);
+        g_free(result);
+    }
 }
 
 GList* find_connected_elements_bfs(Model *model, const char *start_uuid) {
@@ -814,10 +838,27 @@ int move_element_to_space(Model *model, ModelElement *element, const char *new_s
 }
 
 int model_get_all_spaces(Model *model, GList **spaces) {
-    if (!model || !model->db) {
-        return 0;
-    }
-    return database_get_all_spaces(model->db, spaces);
+  if (!model || !model->db) return 0;
+
+  GList *db_spaces = NULL;
+  int rc = database_get_all_spaces(model->db, &db_spaces);
+  if (!rc) return 0;
+
+  // Convert SpaceInfo to ModelSpaceInfo
+  for (GList *iter = db_spaces; iter != NULL; iter = iter->next) {
+    SpaceInfo *db_space = (SpaceInfo*)iter->data;
+    ModelSpaceInfo *model_space = g_new0(ModelSpaceInfo, 1);
+
+    model_space->uuid = g_strdup(db_space->uuid);
+    model_space->name = g_strdup(db_space->name);
+    model_space->created_at = g_strdup(db_space->created_at);
+
+    *spaces = g_list_append(*spaces, model_space);
+  }
+
+  // Free the database results list (but not the items - they were copied)
+  g_list_free(db_spaces);
+  return 1;
 }
 
 void model_free_space_info(ModelSpaceInfo *space) {

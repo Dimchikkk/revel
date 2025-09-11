@@ -135,6 +135,18 @@ int database_create_tables(sqlite3 *db) {
     "    tokenize = 'porter'"
     ");"
 
+    "CREATE TRIGGER IF NOT EXISTS text_refs_after_update AFTER UPDATE ON text_refs "
+    "WHEN OLD.text != NEW.text "
+    "BEGIN"
+    "    UPDATE element_text_fts "
+    "    SET text_content = NEW.text "
+    "    WHERE element_uuid IN ("
+    "        SELECT e.uuid "
+    "        FROM elements e "
+    "        WHERE e.text_id = NEW.id"
+    "    );"
+    "END;"
+
     "CREATE TRIGGER IF NOT EXISTS elements_after_insert AFTER INSERT ON elements "
     "WHEN NEW.text_id IS NOT NULL "
     "BEGIN"

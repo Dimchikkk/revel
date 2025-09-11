@@ -44,8 +44,9 @@ static void on_space_selected(GtkListBox *list, GtkListBoxRow *row, gpointer use
     return;
   }
 
-  // Get the index from the row
-  gint index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(row), "space_index"));
+  // FIX: Use GTK's built-in function to get the row index
+  gint index = gtk_list_box_row_get_index(row);
+
   ModelSpaceInfo *space = g_list_nth_data(select_data->spaces, index);
 
   if (!space || !space->uuid) {
@@ -62,7 +63,11 @@ static void on_space_selected(GtkListBox *list, GtkListBoxRow *row, gpointer use
       if (result) {
         canvas_sync_with_model(select_data->canvas_data);
         gtk_widget_queue_draw(select_data->canvas_data->drawing_area);
+      } else {
+        g_printerr("Failed to move element\n");
       }
+    } else {
+      g_printerr("Element not found: %s\n", element_uuid);
     }
   }
 
@@ -118,9 +123,6 @@ static void on_search_entry_changed(GtkEntry *entry, gpointer user_data) {
 
     gtk_box_append(GTK_BOX(row_widget), name_label);
     gtk_box_append(GTK_BOX(row_widget), date_label);
-
-    // Store index in the row for later retrieval
-    g_object_set_data(G_OBJECT(row_widget), "space_index", GINT_TO_POINTER(index));
 
     gtk_list_box_append(GTK_LIST_BOX(spaces_list), row_widget);
   }

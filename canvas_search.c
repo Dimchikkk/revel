@@ -112,9 +112,6 @@ static void on_search_entry_changed(GtkEntry *entry, gpointer user_data) {
         gtk_box_append(GTK_BOX(row_widget), text_label);
         gtk_box_append(GTK_BOX(row_widget), space_label);
 
-        // Store index in the row for later retrieval
-        g_object_set_data(G_OBJECT(row_widget), "result_index", GINT_TO_POINTER(index));
-
         gtk_list_box_append(results_list, row_widget);
     }
 }
@@ -130,8 +127,10 @@ static void on_result_selected(GtkListBox *list, GtkListBoxRow *row, gpointer us
         return;
     }
 
-    // Get the index from the row
-    gint index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(row), "result_index"));
+    // Get the row index using GTK's built-in function
+    gint index = gtk_list_box_row_get_index(row);
+
+    // Get the result using the index
     ModelSearchResult *result = g_list_nth_data(dialog_data->search_results, index);
 
     if (!result || !result->space_uuid) {
