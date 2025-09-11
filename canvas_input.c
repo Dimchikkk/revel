@@ -642,9 +642,10 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
       .b = 1.0,
       .a = 1.0,
     };
+    int scale = gtk_widget_get_scale_factor(GTK_WIDGET(data->drawing_area));
     ElementSize size = {
-      .width = gdk_pixbuf_get_width(pixbuf),
-      .height = gdk_pixbuf_get_height(pixbuf),
+      .width = gdk_pixbuf_get_width(pixbuf) / scale,
+      .height = gdk_pixbuf_get_height(pixbuf) / scale,
     };
 
     ModelElement *model_element = model_create_element(data->model,
