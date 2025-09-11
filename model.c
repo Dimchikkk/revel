@@ -82,7 +82,7 @@ Model* model_new() {
   model->images = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->db = NULL;
 
-  if (!database_init(&model->db, "velo2.db")) {
+  if (!database_init(&model->db, "revel.db")) {
     g_free(model);
     return NULL;
   }

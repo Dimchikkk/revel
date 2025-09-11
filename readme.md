@@ -1,4 +1,4 @@
-# Velo2
+# Revel
 
 Note taking brainstorming app
 
@@ -24,4 +24,4 @@ sudo apt install libsqlite3-dev
 
 ## To run on x86_64 GNU/Linux:
 
-`make -B -j 7 && ./velo2`
+`make -B -j 7 && ./revel`

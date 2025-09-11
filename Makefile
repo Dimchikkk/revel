@@ -6,7 +6,7 @@ SRCS = main.c canvas_core.c canvas_input.c canvas_actions.c canvas_spaces.c \
        element.c paper_note.c note.c connection.c image_note.c vector.c space.c \
        database.c model.c canvas_search.c
 OBJS = $(SRCS:.c=.o)
-TARGET = velo2
+TARGET = revel
 
 # Test configuration
 TEST_SRCS = test_model.c
@@ -32,6 +32,6 @@ $(TEST_TARGET): $(TEST_OBJS_FULL)
 	$(CC) -o $@ $(TEST_OBJS_FULL) $(LIBS) `pkg-config --libs glib-2.0`
 
 clean:
-	rm -f $(OBJS) $(TARGET) $(TEST_OBJS) $(TEST_TARGET) velo2.db test.db
+	rm -f $(OBJS) $(TARGET) $(TEST_OBJS) $(TEST_TARGET) revel.db test.db
 
 .PHONY: all clean test
