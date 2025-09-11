@@ -39,6 +39,7 @@ PaperNote* paper_note_create(ElementPosition position,
   note->base.height = size.height;
   note->text = g_strdup(text);
   note->text_view = NULL;
+  note->scrolled_window = NULL;
   note->editing = FALSE;
   note->base.canvas_data = data;
   return note;
@@ -166,18 +167,30 @@ void paper_note_start_editing(Element *element, GtkWidget *overlay) {
   note->editing = TRUE;
 
   if (!note->text_view) {
-    note->text_view = gtk_text_view_new();
-    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(note->text_view), GTK_WRAP_WORD);
-    gtk_widget_set_size_request(note->text_view, element->width, element->height);
+    // Create scrolled window
+    GtkWidget *scrolled_window = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
+                                  GTK_POLICY_AUTOMATIC,
+                                  GTK_POLICY_AUTOMATIC);
 
-    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), note->text_view);
-    gtk_widget_set_halign(note->text_view, GTK_ALIGN_START);
-    gtk_widget_set_valign(note->text_view, GTK_ALIGN_START);
+    // Create text view
+    note->text_view = gtk_text_view_new();
+
+    // Add text view to scrolled window
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), note->text_view);
+
+    // Set size with some padding for scrollbars
+    gtk_widget_set_size_request(scrolled_window, element->width + 20, element->height + 20);
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), scrolled_window);
+    gtk_widget_set_halign(scrolled_window, GTK_ALIGN_START);
+    gtk_widget_set_valign(scrolled_window, GTK_ALIGN_START);
+
+    // Convert canvas coordinates to screen coordinates
     int screen_x, screen_y;
     canvas_canvas_to_screen(element->canvas_data, element->x, element->y, &screen_x, &screen_y);
-
-    gtk_widget_set_margin_start(note->text_view, screen_x);
-    gtk_widget_set_margin_top(note->text_view, screen_y);
+    gtk_widget_set_margin_start(scrolled_window, screen_x - 10); // Adjust for padding
+    gtk_widget_set_margin_top(scrolled_window, screen_y - 10);   // Adjust for padding
 
     GtkEventController *focus_controller = gtk_event_controller_focus_new();
     g_signal_connect(focus_controller, "leave", G_CALLBACK(paper_note_on_text_view_focus_leave), note);
@@ -186,12 +199,15 @@ void paper_note_start_editing(Element *element, GtkWidget *overlay) {
     GtkEventController *key_controller = gtk_event_controller_key_new();
     g_signal_connect(key_controller, "key-pressed", G_CALLBACK(paper_note_on_textview_key_press), note);
     gtk_widget_add_controller(note->text_view, key_controller);
+
+    // Store the scrolled window reference
+    note->scrolled_window = scrolled_window;
   }
 
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(note->text_view));
   gtk_text_buffer_set_text(buffer, note->text, -1);
 
-  gtk_widget_show(note->text_view);
+  gtk_widget_show(note->scrolled_window);
   gtk_widget_grab_focus(note->text_view);
 }
 
@@ -213,7 +229,11 @@ void paper_note_finish_editing(Element *element) {
   model_update_text(model, model_element, new_text);
 
   note->editing = FALSE;
-  gtk_widget_hide(note->text_view);
+
+  // Hide the scrolled window
+  if (note->scrolled_window) {
+    gtk_widget_hide(note->scrolled_window);
+  }
 
   // Queue redraw using the stored canvas data
   if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
@@ -227,11 +247,11 @@ void paper_note_update_position(Element *element, int x, int y, int z) {
   element->x = x;
   element->y = y;
   element->z = z;
-  if (note->text_view) {
+  if (note->scrolled_window) {
     int screen_x, screen_y;
     canvas_canvas_to_screen(element->canvas_data, x, y, &screen_x, &screen_y);
-    gtk_widget_set_margin_start(note->text_view, screen_x);
-    gtk_widget_set_margin_top(note->text_view, screen_y);
+    gtk_widget_set_margin_start(note->scrolled_window, screen_x - 10);
+    gtk_widget_set_margin_top(note->scrolled_window, screen_y - 10);
   }
 }
 
@@ -239,16 +259,17 @@ void paper_note_update_size(Element *element, int width, int height) {
   PaperNote *note = (PaperNote*)element;
   element->width = width;
   element->height = height;
-  if (note->text_view) {
-    gtk_widget_set_size_request(note->text_view, width, height);
+  if (note->scrolled_window) {
+    gtk_widget_set_size_request(note->scrolled_window, width + 20, height + 20);
   }
 }
 
 void paper_note_free(Element *element) {
   PaperNote *note = (PaperNote*)element;
   if (note->text) g_free(note->text);
-  if (note->text_view && GTK_IS_WIDGET(note->text_view) && gtk_widget_get_parent(note->text_view)) {
-    gtk_widget_unparent(note->text_view);
+  if (note->scrolled_window && GTK_IS_WIDGET(note->scrolled_window) &&
+      gtk_widget_get_parent(note->scrolled_window)) {
+    gtk_widget_unparent(note->scrolled_window);
   }
   g_free(note);
 }

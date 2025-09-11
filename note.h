@@ -8,6 +8,7 @@ typedef struct _CanvasData CanvasData;
 typedef struct {
   Element base;
   char *text;
+  GtkWidget *scrolled_window;
   GtkWidget *text_view;
   gboolean editing;
 } Note;
