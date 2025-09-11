@@ -13,6 +13,8 @@ Note taking brainstorming app
 * infinite canvas space
 * organize elements into nested spaces (infinite space depth)
 
+![Revel Image](photo_2025-09-11_15-05-08.jpg)
+
 ## Dependencies
 
 GTK4, sqlite3
@@ -28,7 +30,7 @@ sudo apt install libsqlite3-dev
 
 ## How to add app launcher:
 
-1. Copy `revel.desktop` to `~/.local/share/applications/`.  
-2. Update Exec and Icon path.  
+1. Copy `revel.desktop` to `~/.local/share/applications/`  
+2. Update Exec and Icon path  
 3. `update-desktop-database ~/.local/share/applications/`  
 
