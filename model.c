@@ -793,13 +793,23 @@ int move_element_to_space(Model *model, ModelElement *element, const char *new_s
   // Update space and mark as updated
   for (GList *iter = all_elements_to_move; iter != NULL; iter = iter->next) {
     ModelElement *elem = (ModelElement*)iter->data;
-    g_free(elem->space_uuid);
-    elem->space_uuid = g_strdup(new_space_uuid);
+
+    // Check if this space UUID is the same content as model's current space UUID
+    if (elem->space_uuid && model->current_space_uuid &&
+        strcmp(elem->space_uuid, model->current_space_uuid) == 0) {
+      // This element's space UUID matches the model's current space UUID
+      // Don't free it - just duplicate the new one
+      elem->space_uuid = g_strdup(new_space_uuid);
+    } else {
+      // Safe to free and replace
+      g_free(elem->space_uuid);
+      elem->space_uuid = g_strdup(new_space_uuid);
+    }
+
     elem->state = MODEL_STATE_UPDATED;
   }
 
   g_list_free(all_elements_to_move);
-
   return 1;
 }
 
