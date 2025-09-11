@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Revel
-Comment=My awesome app
+Comment=Note taking brainstorming app
 Exec=<PATH_TO_REVEL_BIN>
 Icon=<PATH_TO_REVEL_ICON>
 Terminal=false

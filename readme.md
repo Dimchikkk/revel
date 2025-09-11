@@ -26,7 +26,7 @@ sudo apt install libsqlite3-dev
 
 `make -B -j 7 && ./revel`
 
-## How to add app launcher
+## How to add app launcher:
 
 1. Copy `revel.desktop` to `~/.local/share/applications/`.  
 2. Update Exec and Icon path.  
