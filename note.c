@@ -86,7 +86,7 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   if (is_selected) {
     cairo_set_source_rgb(cr, 0.9, 0.9, 1.0); // Light blue when selected
   } else {
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // White background
+    cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
   }
   cairo_fill_preserve(cr);
 
@@ -192,8 +192,10 @@ void note_start_editing(Element *element, GtkWidget *overlay) {
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), note->text_view);
     gtk_widget_set_halign(note->text_view, GTK_ALIGN_START);
     gtk_widget_set_valign(note->text_view, GTK_ALIGN_START);
-    int screen_x = element->x + element->canvas_data->offset_x;
-    int screen_y = element->y + element->canvas_data->offset_y;
+
+    // Convert canvas coordinates to screen coordinates
+    int screen_x, screen_y;
+    canvas_canvas_to_screen(element->canvas_data, element->x, element->y, &screen_x, &screen_y);
     gtk_widget_set_margin_start(note->text_view, screen_x);
     gtk_widget_set_margin_top(note->text_view, screen_y);
 
@@ -246,8 +248,10 @@ void note_update_position(Element *element, int x, int y, int z) {
   element->y = y;
   element->z = z;
   if (note->text_view) {
-    gtk_widget_set_margin_start(note->text_view, x);
-    gtk_widget_set_margin_top(note->text_view, y);
+    int screen_x, screen_y;
+    canvas_canvas_to_screen(element->canvas_data, x, y, &screen_x, &screen_y);
+    gtk_widget_set_margin_start(note->text_view, screen_x);
+    gtk_widget_set_margin_top(note->text_view, screen_y);
   }
 }
 

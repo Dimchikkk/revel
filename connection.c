@@ -167,7 +167,7 @@ void connection_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_set_source_rgb(cr, 0.0, 0.4, 1.0); // Blue when selected
     cairo_set_line_width(cr, 3);
   } else {
-    cairo_set_source_rgb(cr, 0.85, 0.85, 0.85); // Gray normally
+    cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
     cairo_set_line_width(cr, 2);
   }
 

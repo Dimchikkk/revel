@@ -5,6 +5,7 @@
 #include "model.h"
 #include "paper_note.h"
 #include "note.h"
+#include "image_note.h"
 #include "connection.h"
 #include "space.h"
 #include <pango/pangocairo.h>
@@ -121,7 +122,7 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     }
 
     if (!((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
-          (element->type == ELEMENT_IMAGE_NOTE && ((Note*)element)->editing) ||
+          (element->type == ELEMENT_IMAGE_NOTE && ((ImageNote*)element)->editing) ||
           (element->type == ELEMENT_NOTE && ((Note*)element)->editing))) {
       if (!(data->modifier_state & GDK_SHIFT_MASK)) {
         canvas_clear_selection(data);

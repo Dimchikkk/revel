@@ -26,7 +26,7 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   if (is_selected) {
     cairo_set_source_rgb(cr, 0.7, 0.7, 1.0);  // Light blue when selected
   } else {
-    cairo_set_source_rgb(cr, 0.8, 0.8, 1.0);  // Light blue
+    cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
   }
   cairo_fill_preserve(cr);
 

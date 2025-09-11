@@ -144,9 +144,12 @@ void image_note_start_editing(Element *element, GtkWidget *overlay) {
     int text_view_width, text_view_height;
     gtk_widget_get_size_request(image_note->text_view, &text_view_width, &text_view_height);
 
-    // Convert canvas coordinates to screen coordinates for margin positioning
-    int screen_x = draw_x + draw_width - text_view_width - 10 + element->canvas_data->offset_x;
-    int screen_y = draw_y + draw_height - text_view_height - 10 + element->canvas_data->offset_y;
+    // Convert canvas coordinates to screen coordinates
+    int screen_x, screen_y;
+    canvas_canvas_to_screen(element->canvas_data,
+                            draw_x + draw_width - text_view_width - 10,
+                            draw_y + draw_height - text_view_height - 10,
+                            &screen_x, &screen_y);
 
     gtk_widget_set_margin_start(image_note->text_view, screen_x);
     gtk_widget_set_margin_top(image_note->text_view, screen_y);
@@ -155,9 +158,12 @@ void image_note_start_editing(Element *element, GtkWidget *overlay) {
     int text_view_width, text_view_height;
     gtk_widget_get_size_request(image_note->text_view, &text_view_width, &text_view_height);
 
-    // Convert canvas coordinates to screen coordinates for margin positioning
-    int screen_x = element->x + element->width - text_view_width - 10 + element->canvas_data->offset_x;
-    int screen_y = element->y + element->height - text_view_height - 10 + element->canvas_data->offset_y;
+    // Convert canvas coordinates to screen coordinates
+    int screen_x, screen_y;
+    canvas_canvas_to_screen(element->canvas_data,
+                            element->x + element->width - text_view_width - 10,
+                            element->y + element->height - text_view_height - 10,
+                            &screen_x, &screen_y);
 
     gtk_widget_set_margin_start(image_note->text_view, screen_x);
     gtk_widget_set_margin_top(image_note->text_view, screen_y);
@@ -191,15 +197,26 @@ void image_note_update_position(Element *element, int x, int y, int z) {
       int text_view_width, text_view_height;
       gtk_widget_get_size_request(image_note->text_view, &text_view_width, &text_view_height);
 
-      gtk_widget_set_margin_start(image_note->text_view, draw_x + draw_width - text_view_width - 10);
-      gtk_widget_set_margin_top(image_note->text_view, draw_y + draw_height - text_view_height - 10);
+      int screen_draw_x, screen_draw_y;
+      canvas_canvas_to_screen(element->canvas_data, draw_x, draw_y, &screen_draw_x, &screen_draw_y);
+
+      gtk_widget_set_margin_start(image_note->text_view,
+                                  screen_draw_x + draw_width - text_view_width - 10);
+      gtk_widget_set_margin_top(image_note->text_view,
+                           screen_draw_y + draw_height - text_view_height - 10);
     } else {
       // Fallback to element bounds if no pixbuf
       int text_view_width, text_view_height;
       gtk_widget_get_size_request(image_note->text_view, &text_view_width, &text_view_height);
 
-      gtk_widget_set_margin_start(image_note->text_view, element->x + element->width - text_view_width - 10);
-      gtk_widget_set_margin_top(image_note->text_view, element->y + element->height - text_view_height - 10);
+      int screen_x, screen_y;
+      canvas_canvas_to_screen(element->canvas_data,
+                              element->x + element->width - text_view_width - 10,
+                              element->y + element->height - text_view_height - 10,
+                              &screen_x, &screen_y);
+
+      gtk_widget_set_margin_start(image_note->text_view, screen_x);
+      gtk_widget_set_margin_top(image_note->text_view, screen_y);
     }
   }
 
