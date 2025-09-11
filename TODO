@@ -1,5 +1,3 @@
-- [fix] textview position unsync while panning
-- [new feature] change color in right click on element (utilize color_refs table, use GTK4 color picker)
 - [new feature] make index on element text and utilise sqlite to have search functionality (show element text and space name in table and load space on selection)
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
