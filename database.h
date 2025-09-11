@@ -77,4 +77,13 @@ typedef struct {
 int database_search_elements(sqlite3 *db, const char *search_term, GList **results);
 void database_free_search_result(SearchResult *result);
 
+typedef struct {
+    char *uuid;
+    char *name;
+    char *created_at;
+} SpaceInfo;
+
+int database_get_all_spaces(sqlite3 *db, GList **spaces);
+void database_free_space_info(SpaceInfo *space);
+
 #endif

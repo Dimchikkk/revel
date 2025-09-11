@@ -77,7 +77,7 @@ static void test_create_elements(TestFixture *fixture, gconstpointer user_data) 
   ElementSize size = {50, 30};
 
   ModelElement *note = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                           NULL, 0, NULL, NULL, -1, -1, "Test Note");
+                                            NULL, 0, NULL, NULL, -1, -1, "Test Note");
   g_assert_nonnull(note);
   g_assert_cmpint(note->type->type, ==, ELEMENT_NOTE);
   g_assert_cmpstr(note->text->text, ==, "Test Note");
@@ -85,13 +85,13 @@ static void test_create_elements(TestFixture *fixture, gconstpointer user_data) 
   // Create paper note element
   ElementColor paper_color = {1.0, 1.0, 0.8, 1.0};
   ModelElement *paper_note = model_create_element(fixture->model, ELEMENT_PAPER_NOTE, paper_color, pos, size,
-                                                 NULL, 0, NULL, NULL, -1, -1, "Test Paper Note");
+                                                  NULL, 0, NULL, NULL, -1, -1, "Test Paper Note");
   g_assert_nonnull(paper_note);
   g_assert_cmpint(paper_note->type->type, ==, ELEMENT_PAPER_NOTE);
 
   // Create connection between elements
   ModelElement *connection = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
-                                                 NULL, 0, note->uuid, paper_note->uuid, 0, 2, NULL);
+                                                  NULL, 0, note->uuid, paper_note->uuid, 0, 2, NULL);
   g_assert_nonnull(connection);
   g_assert_cmpint(connection->type->type, ==, ELEMENT_CONNECTION);
   g_assert_cmpstr(connection->from_element_uuid, ==, note->uuid);
@@ -106,7 +106,7 @@ static void test_update_elements(TestFixture *fixture, gconstpointer user_data) 
   ElementSize size = {50, 30};
 
   ModelElement *element = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                              NULL, 0, NULL, NULL, -1, -1, "Initial Text");
+                                               NULL, 0, NULL, NULL, -1, -1, "Initial Text");
   g_assert_nonnull(element);
 
   // Update text
@@ -141,7 +141,7 @@ static void test_save_load_elements(TestFixture *fixture, gconstpointer user_dat
   ElementSize size = {50, 30};
 
   ModelElement *element = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                              NULL, 0, NULL, NULL, -1, -1, "Test Note");
+                                               NULL, 0, NULL, NULL, -1, -1, "Test Note");
   g_assert_nonnull(element);
 
   // Save to database
@@ -177,7 +177,7 @@ static void test_delete_element(TestFixture *fixture, gconstpointer user_data) {
   ElementSize size = {50, 30};
 
   ModelElement *element = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                              NULL, 0, NULL, NULL, -1, -1, "Test Note");
+                                               NULL, 0, NULL, NULL, -1, -1, "Test Note");
   char* uuid = g_strdup(element->uuid);
   g_assert_nonnull(element);
 
@@ -197,62 +197,175 @@ static void test_delete_element(TestFixture *fixture, gconstpointer user_data) {
 }
 
 static void test_search_multiple_spaces(TestFixture *fixture, gconstpointer user_data) {
-    // Create a new space
-    char *new_space_uuid = NULL;
-    int result = database_create_space(fixture->db, "Test Space", fixture->model->current_space_uuid, &new_space_uuid);
-    g_assert_cmpint(result, ==, 1);
-    g_assert_nonnull(new_space_uuid);
+  // Create a new space
+  char *new_space_uuid = NULL;
+  int result = database_create_space(fixture->db, "Test Space", fixture->model->current_space_uuid, &new_space_uuid);
+  g_assert_cmpint(result, ==, 1);
+  g_assert_nonnull(new_space_uuid);
 
-    // Create elements in different spaces
-    ElementPosition pos = {100, 200, 1};
-    ElementColor color = {1.0, 1.0, 1.0, 1.0};
-    ElementSize size = {50, 30};
+  // Create elements in different spaces
+  ElementPosition pos = {100, 200, 1};
+  ElementColor color = {1.0, 1.0, 1.0, 1.0};
+  ElementSize size = {50, 30};
 
-    // Element in current space
-    ModelElement *note1 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+  // Element in current space
+  ModelElement *note1 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
                                              NULL, 0, NULL, NULL, -1, -1, "Note in default space");
-    g_assert_nonnull(note1);
+  g_assert_nonnull(note1);
 
-    // Temporarily switch to new space to create element there
-    char *old_space = fixture->model->current_space_uuid;
-    fixture->model->current_space_uuid = new_space_uuid;
+  // Temporarily switch to new space to create element there
+  char *old_space = fixture->model->current_space_uuid;
+  fixture->model->current_space_uuid = new_space_uuid;
 
-    ModelElement *note2 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+  ModelElement *note2 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
                                              NULL, 0, NULL, NULL, -1, -1, "Note in test space");
-    g_assert_nonnull(note2);
+  g_assert_nonnull(note2);
 
-    // Switch back to original space
-    fixture->model->current_space_uuid = old_space;
+  // Switch back to original space
+  fixture->model->current_space_uuid = old_space;
 
-    // Save elements
-    model_save_elements(fixture->model);
+  // Save elements
+  model_save_elements(fixture->model);
 
-    // Search should find elements from both spaces
-    GList *results = NULL;
-    int search_result = model_search_elements(fixture->model, "space", &results);
-    g_assert_cmpint(search_result, ==, 0);
-    g_assert_nonnull(results);
-    g_assert_cmpuint(g_list_length(results), ==, 2);
+  // Search should find elements from both spaces
+  GList *results = NULL;
+  int search_result = model_search_elements(fixture->model, "space", &results);
+  g_assert_cmpint(search_result, ==, 0);
+  g_assert_nonnull(results);
+  g_assert_cmpuint(g_list_length(results), ==, 2);
 
-    // Verify both spaces are represented in results
-    int found_default_space = 0, found_test_space = 0;
-    GList *iter = results;
-    while (iter != NULL) {
-        ModelSearchResult *search_result = (ModelSearchResult*)iter->data;
-        if (strstr(search_result->text_content, "default")) {
-            found_default_space = 1;
-        } else if (strstr(search_result->text_content, "test")) {
-            found_test_space = 1;
-        }
-        iter = iter->next;
+  // Verify both spaces are represented in results
+  int found_default_space = 0, found_test_space = 0;
+  GList *iter = results;
+  while (iter != NULL) {
+    ModelSearchResult *search_result = (ModelSearchResult*)iter->data;
+    if (strstr(search_result->text_content, "default")) {
+      found_default_space = 1;
+    } else if (strstr(search_result->text_content, "test")) {
+      found_test_space = 1;
     }
+    iter = iter->next;
+  }
 
-    g_assert_true(found_default_space);
-    g_assert_true(found_test_space);
+  g_assert_true(found_default_space);
+  g_assert_true(found_test_space);
 
-    // Clean up
-    g_list_free_full(results, (GDestroyNotify)model_free_search_result);
-    g_free(new_space_uuid);
+  // Clean up
+  g_list_free_full(results, (GDestroyNotify)model_free_search_result);
+  g_free(new_space_uuid);
+}
+
+// Test: Cyclic connection space movement
+static void test_cyclic_connection_space_movement(TestFixture *fixture, gconstpointer user_data) {
+  // Create a new space
+  char *target_space_uuid = NULL;
+  int result = database_create_space(fixture->db, "Target Space", fixture->model->current_space_uuid, &target_space_uuid);
+  g_assert_cmpint(result, ==, 1);
+  g_assert_nonnull(target_space_uuid);
+
+  // Create elements
+  ElementPosition pos = {100, 200, 1};
+  ElementColor color = {1.0, 1.0, 1.0, 1.0};
+  ElementSize size = {50, 30};
+
+  // Create 4 notes: 3 in a cycle, 1 separate
+  ModelElement *note1 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+                                             NULL, 0, 0, NULL, -1, -1, "Note 1");
+  ModelElement *note2 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+                                             NULL, 0, 0, NULL, -1, -1, "Note 2");
+  ModelElement *note3 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+                                             NULL, 0, 0, NULL, -1, -1, "Note 3");
+  ModelElement *note4 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
+                                             NULL, 0, 0, NULL, -1, -1, "Note 4 (separate)");
+
+  // Create cyclic connections: note1 -> note2 -> note3 -> note1
+  ModelElement *conn1 = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
+                                             NULL, 0, note1->uuid, note2->uuid, 0, 1, NULL);
+  ModelElement *conn2 = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
+                                             NULL, 0, note2->uuid, note3->uuid, 2, 3, NULL);
+  ModelElement *conn3 = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
+                                             NULL, 0, note3->uuid, note1->uuid, 0, 2, NULL);
+
+  // Save everything first
+  model_save_elements(fixture->model);
+
+  // Verify all elements are in current space initially
+  g_assert_cmpstr(note1->space_uuid, ==, fixture->model->current_space_uuid);
+  g_assert_cmpstr(note2->space_uuid, ==, fixture->model->current_space_uuid);
+  g_assert_cmpstr(note3->space_uuid, ==, fixture->model->current_space_uuid);
+  g_assert_cmpstr(note4->space_uuid, ==, fixture->model->current_space_uuid);
+  g_assert_cmpstr(conn1->space_uuid, ==, fixture->model->current_space_uuid);
+  g_assert_cmpstr(conn2->space_uuid, ==, fixture->model->current_space_uuid);
+  g_assert_cmpstr(conn3->space_uuid, ==, fixture->model->current_space_uuid);
+
+  // Move note1 to target space - should move the entire cycle
+  result = move_element_to_space(fixture->model, note1, target_space_uuid);
+  g_assert_cmpint(result, ==, 1);
+
+  // Verify the entire cycle moved to target space
+  g_assert_cmpstr(note1->space_uuid, ==, target_space_uuid);
+  g_assert_cmpstr(note2->space_uuid, ==, target_space_uuid);
+  g_assert_cmpstr(note3->space_uuid, ==, target_space_uuid);
+  g_assert_cmpstr(conn1->space_uuid, ==, target_space_uuid);
+  g_assert_cmpstr(conn2->space_uuid, ==, target_space_uuid);
+  g_assert_cmpstr(conn3->space_uuid, ==, target_space_uuid);
+
+  // Verify the separate note stayed in original space
+  g_assert_cmpstr(note4->space_uuid, ==, fixture->model->current_space_uuid);
+
+  // Verify all moved elements are marked as updated
+  g_assert_cmpint(note1->state, ==, MODEL_STATE_UPDATED);
+  g_assert_cmpint(note2->state, ==, MODEL_STATE_UPDATED);
+  g_assert_cmpint(note3->state, ==, MODEL_STATE_UPDATED);
+  g_assert_cmpint(conn1->state, ==, MODEL_STATE_UPDATED);
+  g_assert_cmpint(conn2->state, ==, MODEL_STATE_UPDATED);
+  g_assert_cmpint(conn3->state, ==, MODEL_STATE_UPDATED);
+
+  // Verify the separate note is not marked as updated
+  g_assert_cmpint(note4->state, !=, MODEL_STATE_UPDATED);
+
+  // Save changes
+  int save_count = model_save_elements(fixture->model);
+  g_assert_cmpint(save_count, ==, 6); // 3 notes + 3 connections
+
+  // Cleanup
+  g_free(target_space_uuid);
+}
+
+static void test_model_get_all_spaces(TestFixture *fixture, gconstpointer user_data) {
+  // Create a test space
+  char *test_space_uuid = NULL;
+  int result = database_create_space(fixture->db, "Model Test Space", fixture->model->current_space_uuid, &test_space_uuid);
+  g_assert_cmpint(result, ==, 1);
+  g_assert_nonnull(test_space_uuid);
+
+  // Get all spaces using model function
+  GList *spaces = NULL;
+  result = model_get_all_spaces(fixture->model, &spaces);
+  g_assert_cmpint(result, ==, 1);
+  g_assert_nonnull(spaces);
+
+  // Should have at least 2 spaces (default + test space)
+  g_assert_cmpuint(g_list_length(spaces), >=, 2);
+
+  // Verify we can find our test space
+  int found_test_space = 0;
+
+  for (GList *iter = spaces; iter != NULL; iter = iter->next) {
+    SpaceInfo *space = (SpaceInfo*)iter->data;
+
+    if (g_strcmp0(space->uuid, test_space_uuid) == 0) {
+      found_test_space = 1;
+      g_assert_cmpstr(space->name, ==, "Model Test Space");
+      break;
+    }
+  }
+
+  g_assert_true(found_test_space);
+
+  // Cleanup
+  g_list_free_full(spaces, (GDestroyNotify)database_free_space_info);
+  g_free(test_space_uuid);
 }
 
 int main(int argc, char *argv[]) {
@@ -265,6 +378,8 @@ int main(int argc, char *argv[]) {
   g_test_add("/model/save-load-elements", TestFixture, NULL, test_setup, test_save_load_elements, test_teardown);
   g_test_add("/model/delete-element", TestFixture, NULL, test_setup, test_delete_element, test_teardown);
   g_test_add("/model/search", TestFixture, NULL, test_setup, test_search_multiple_spaces, test_teardown);
+  g_test_add("/model/cyclic-connection-sapace-movement", TestFixture, NULL, test_setup, test_cyclic_connection_space_movement, test_teardown);
+  g_test_add("/model/get-all-spaces", TestFixture, NULL, test_setup, test_model_get_all_spaces, test_teardown);
 
   return g_test_run();
 }

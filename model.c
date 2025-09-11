@@ -717,12 +717,104 @@ int model_get_amount_of_elements(Model *model, const char *space_uuid) {
 }
 
 int model_search_elements(Model *model, const char *search_term, GList **results) {
-    if (!model || !model->db) {
-        return -1;
-    }
-    return database_search_elements(model->db, search_term, results);
+  if (!model || !model->db) {
+    return -1;
+  }
+  return database_search_elements(model->db, search_term, results);
 }
 
 void model_free_search_result(ModelSearchResult *result) {
-    database_free_search_result((SearchResult*)result);
+  database_free_search_result((SearchResult*)result);
+}
+
+GList* find_connected_elements_bfs(Model *model, const char *start_uuid) {
+    GList *result = NULL;
+    GQueue *queue = g_queue_new();
+    GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
+
+    g_queue_push_tail(queue, g_strdup(start_uuid));
+    g_hash_table_add(visited, g_strdup(start_uuid));
+
+    while (!g_queue_is_empty(queue)) {
+        char *current_uuid = g_queue_pop_head(queue);
+        ModelElement *current_element = g_hash_table_lookup(model->elements, current_uuid);
+
+        if (current_element) {
+            // Add current element to result
+            result = g_list_append(result, current_element);
+
+            GHashTableIter iter;
+            gpointer key, value;
+            g_hash_table_iter_init(&iter, model->elements);
+
+            while (g_hash_table_iter_next(&iter, &key, &value)) {
+                ModelElement *element = (ModelElement*)value;
+                char *element_uuid = (char*)key;
+
+                // Check if this element is connected to the current element
+                int is_connected = 0;
+                if ((element->from_element_uuid && g_strcmp0(element->from_element_uuid, current_uuid) == 0) ||
+                    (element->to_element_uuid && g_strcmp0(element->to_element_uuid, current_uuid) == 0)) {
+                    is_connected = 1;
+                }
+
+                // Also check if current element is connected to this element
+                if (!is_connected && current_element->from_element_uuid &&
+                    g_strcmp0(current_element->from_element_uuid, element_uuid) == 0) {
+                    is_connected = 1;
+                }
+                if (!is_connected && current_element->to_element_uuid &&
+                    g_strcmp0(current_element->to_element_uuid, element_uuid) == 0) {
+                    is_connected = 1;
+                }
+
+                if (is_connected && !g_hash_table_contains(visited, element_uuid)) {
+                    g_queue_push_tail(queue, g_strdup(element_uuid));
+                    g_hash_table_add(visited, g_strdup(element_uuid));
+                }
+            }
+        }
+
+        g_free(current_uuid);
+    }
+
+    g_queue_free(queue);
+    g_hash_table_destroy(visited);
+    return result;
+}
+
+int move_element_to_space(Model *model, ModelElement *element, const char *new_space_uuid) {
+  if (!element || !new_space_uuid) return 0;
+
+  // Find all connected elements using BFS
+  GList *all_elements_to_move = find_connected_elements_bfs(model, element->uuid);
+  all_elements_to_move = g_list_prepend(all_elements_to_move, element);
+
+  // Update space and mark as updated
+  for (GList *iter = all_elements_to_move; iter != NULL; iter = iter->next) {
+    ModelElement *elem = (ModelElement*)iter->data;
+    g_free(elem->space_uuid);
+    elem->space_uuid = g_strdup(new_space_uuid);
+    elem->state = MODEL_STATE_UPDATED;
+  }
+
+  g_list_free(all_elements_to_move);
+
+  return 1;
+}
+
+int model_get_all_spaces(Model *model, GList **spaces) {
+    if (!model || !model->db) {
+        return 0;
+    }
+    return database_get_all_spaces(model->db, spaces);
+}
+
+void model_free_space_info(ModelSpaceInfo *space) {
+    if (space) {
+        g_free(space->uuid);
+        g_free(space->name);
+        g_free(space->created_at);
+        g_free(space);
+    }
 }

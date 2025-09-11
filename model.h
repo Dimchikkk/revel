@@ -146,4 +146,16 @@ typedef struct {
 int model_search_elements(Model *model, const char *search_term, GList **results);
 void model_free_search_result(ModelSearchResult *result);
 
+int move_element_to_space(Model *model, ModelElement *element, const char *new_space_uuid);
+GList* find_connected_elements_bfs(Model *model, const char *start_uuid);
+
+typedef struct {
+    char *uuid;
+    char *name;
+    char *created_at;
+} ModelSpaceInfo;
+
+int model_get_all_spaces(Model *model, GList **spaces);
+void model_free_space_info(ModelSpaceInfo *space);
+
 #endif

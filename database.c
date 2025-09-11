@@ -153,6 +153,14 @@ int database_create_tables(sqlite3 *db) {
     "    WHERE tr.id = NEW.text_id;"
     "END;"
 
+    "CREATE TRIGGER IF NOT EXISTS elements_after_update_space AFTER UPDATE ON elements "
+    "WHEN OLD.space_uuid != NEW.space_uuid AND NEW.text_id IS NOT NULL "
+    "BEGIN"
+    "    UPDATE element_text_fts "
+    "    SET space_uuid = NEW.space_uuid "
+    "    WHERE element_uuid = NEW.uuid;"
+    "END;"
+
     "CREATE TRIGGER IF NOT EXISTS elements_after_delete AFTER DELETE ON elements "
     "BEGIN"
     "    DELETE FROM element_text_fts "
@@ -848,7 +856,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "type_id = ?, position_id = ?, size_id = ?, "
     "text_id = ?, bg_color_id = ?, image_id = ?, "
     "from_element_uuid = ?, to_element_uuid = ?, "
-    "from_point = ?, to_point = ?, target_space_uuid = ? "
+    "from_point = ?, to_point = ?, target_space_uuid = ?, "
+    "space_uuid = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -899,11 +908,18 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   sqlite3_bind_int(stmt, param_index++, element->from_point);
   sqlite3_bind_int(stmt, param_index++, element->to_point);
 
-  // Handle target_space_uuid
   if (element->target_space_uuid && database_is_valid_uuid(element->target_space_uuid)) {
     sqlite3_bind_text(stmt, param_index++, element->target_space_uuid, -1, SQLITE_STATIC);
   } else {
     sqlite3_bind_null(stmt, param_index++);
+  }
+
+  if (element->space_uuid && database_is_valid_uuid(element->space_uuid)) {
+    sqlite3_bind_text(stmt, param_index++, element->space_uuid, -1, SQLITE_STATIC);
+  } else {
+    fprintf(stderr, "Error: space_uuid is required for element %s\n", element_uuid);
+    sqlite3_finalize(stmt);
+    return 0;
   }
 
   // Where clause
@@ -1656,5 +1672,35 @@ void database_free_search_result(SearchResult *result) {
     g_free(result->space_uuid);
     g_free(result->space_name);
     g_free(result);
+  }
+}
+
+int database_get_all_spaces(sqlite3 *db, GList **spaces) {
+  const char *sql = "SELECT uuid, name, created_at FROM spaces ORDER BY created_at DESC";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    SpaceInfo *space = g_new0(SpaceInfo, 1);
+    space->uuid = g_strdup((const char*)sqlite3_column_text(stmt, 0));
+    space->name = g_strdup((const char*)sqlite3_column_text(stmt, 1));
+    space->created_at = g_strdup((const char*)sqlite3_column_text(stmt, 2));
+    *spaces = g_list_append(*spaces, space);
+  }
+
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+void database_free_space_info(SpaceInfo *space) {
+  if (space) {
+    g_free(space->uuid);
+    g_free(space->name);
+    g_free(space->created_at);
+    g_free(space);
   }
 }

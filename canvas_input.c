@@ -1,6 +1,7 @@
 #include "canvas_input.h"
 #include "canvas_core.h"
 #include "canvas_spaces.h"
+#include "canvas_space_select.h"
 #include "element.h"
 #include "model.h"
 #include "paper_note.h"
@@ -511,6 +512,15 @@ static void on_change_color_action(GSimpleAction *action, GVariant *parameter, g
   }
 }
 
+static void on_change_space_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+    if (data && data->model && element_uuid) {
+        canvas_show_space_select_dialog(data, element_uuid);
+    }
+}
+
 void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
@@ -537,8 +547,11 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         GSimpleAction *fork_action = g_simple_action_new("fork", NULL);
         GSimpleAction *clone_text_action = g_simple_action_new("clone-text", NULL);
         GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
+        GSimpleAction *change_space_action = g_simple_action_new("change-space", NULL);
 
         // Store data for existing actions
+        g_object_set_data(G_OBJECT(change_space_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(change_space_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_object_set_data(G_OBJECT(fork_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(fork_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_object_set_data(G_OBJECT(clone_text_action), "canvas_data", data);
@@ -551,6 +564,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_signal_connect(clone_text_action, "activate", G_CALLBACK(on_clone_by_text_action), NULL);
         g_signal_connect(clone_size_action, "activate", G_CALLBACK(on_clone_by_size_action), NULL);
         g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
+        g_signal_connect(change_space_action, "activate", G_CALLBACK(on_change_space_action), NULL);
 
         // Add all actions to the action group
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
@@ -558,9 +572,11 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_text_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
 
         // Create the menu model with delete option first
         GMenu *menu_model = g_menu_new();
+        g_menu_append(menu_model, "Change Space", "menu.change-space");
         g_menu_append(menu_model, "Change Color", "menu.change-color");
         g_menu_append(menu_model, "Fork Element", "menu.fork");
         g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
