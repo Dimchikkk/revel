@@ -136,8 +136,8 @@ void image_note_start_editing(Element *element, GtkWidget *overlay) {
     double scale_y = element->height / (double)pixbuf_height;
     double scale = MIN(scale_x, scale_y);
 
-    int draw_width = pixbuf_width * scale;
-    int draw_height = pixbuf_height * scale;
+    int draw_width = (int) pixbuf_width * scale;
+    int draw_height = (int) pixbuf_height * scale;
     int draw_x = element->x + (element->width - draw_width) / 2;
     int draw_y = element->y + (element->height - draw_height) / 2;
 
