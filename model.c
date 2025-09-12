@@ -646,6 +646,13 @@ int model_save_elements(Model *model) {
         fprintf(stderr, "Failed to save element %s to database\n", element->uuid);
       }
     } else if (element->state == MODEL_STATE_UPDATED) {
+      // Handle space element updates - set parent UUID
+      if (element->type->type == ELEMENT_SPACE && element->target_space_uuid) {
+        if (!database_set_space_parent_id(model->db, element->target_space_uuid, element->space_uuid)) {
+          fprintf(stderr, "Failed to update parent for space %s\n", element->target_space_uuid);
+        }
+      }
+
       if (database_update_element(model->db, element->uuid, element)) {
         // Change state back to SAVED
         element->state = MODEL_STATE_SAVED;

@@ -6,7 +6,6 @@
 
 void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   if (!space_uuid) {
-    g_print("App is in root space\n");
     return;
   }
 

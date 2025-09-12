@@ -1262,6 +1262,42 @@ int database_get_space_parent_id(sqlite3 *db, const char *space_uuid, char **spa
   return 0;
 }
 
+int database_set_space_parent_id(sqlite3 *db, const char *space_uuid, const char *parent_uuid) {
+    const char *sql = "UPDATE spaces SET parent_uuid = ? WHERE uuid = ?";
+    sqlite3_stmt *stmt;
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    // Bind the parent_uuid parameter (can be NULL to remove parent)
+    if (parent_uuid != NULL) {
+        sqlite3_bind_text(stmt, 1, parent_uuid, -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_null(stmt, 1);
+    }
+
+    // Bind the space_uuid parameter
+    sqlite3_bind_text(stmt, 2, space_uuid, -1, SQLITE_STATIC);
+
+    int result = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (result != SQLITE_DONE) {
+        fprintf(stderr, "Failed to update parent ID: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    // Check if any row was actually updated
+    if (sqlite3_changes(db) > 0) {
+        return 1;
+    } else {
+        fprintf(stderr, "No space found with UUID: %s\n", space_uuid);
+        return 0;
+    }
+}
+
 // Remove references with ref_count < 1 from database and return total rows deleted
 // Remove references with ref_count < 1 from database and return total rows deleted
 int cleanup_database_references(sqlite3 *db) {

@@ -62,6 +62,7 @@ int database_get_current_space_uuid(sqlite3 *db, char **space_uuid);
 int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid);
 int database_get_space_name(sqlite3 *db, const char *space_uuid, char **space_name);
 int database_get_space_parent_id(sqlite3 *db, const char *space_uuid, char **space_parent_id);
+int database_set_space_parent_id(sqlite3 *db, const char *space_uuid, const char *parent_uuid);
 int database_get_amount_of_elements(sqlite3 *db, const char *space_uuid);
 
 // This fills-in model state from DB
