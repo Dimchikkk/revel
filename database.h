@@ -48,6 +48,15 @@ int database_update_image_ref(sqlite3 *db, ModelImage *image);
 
 int cleanup_database_references(sqlite3 *db);
 
+// Video reference operations
+int database_create_video_ref(sqlite3 *db,
+                             const unsigned char *thumbnail_data, int thumbnail_size,
+                             const unsigned char *video_data, int video_size,
+                             int duration, int *video_id);
+int database_read_video_ref(sqlite3 *db, int video_id, ModelVideo **video);
+// This method doesn't update video data (it needs to be like that since video data is loaded lazyly).
+int database_update_video_ref(sqlite3 *db, ModelVideo *video);
+
 // Element operations
 int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *element);
 // Read element can be used to check whether element exists in table, if model element is NULL it doesn't exist
@@ -86,5 +95,7 @@ typedef struct {
 
 int database_get_all_spaces(sqlite3 *db, GList **spaces);
 void database_free_space_info(SpaceInfo *space);
+
+int database_load_video_data(sqlite3 *db, int video_id, unsigned char **video_data, int *video_size);
 
 #endif

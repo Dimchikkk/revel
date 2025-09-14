@@ -4,7 +4,7 @@
 #include "connection.h"
 #include "element.h"
 #include "paper_note.h"
-#include "image_note.h"
+#include "media_note.h"
 #include "note.h"
 #include <pango/pangocairo.h>
 #include "model.h"
@@ -104,41 +104,41 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
       // Handle text updates for specific element types
       if (model_element->text && model_element->text->text) {
         switch (visual_element->type) {
-          case ELEMENT_NOTE: {
-            Note *note = (Note *)visual_element;
-            if (note->text == NULL || strcmp(note->text, model_element->text->text) != 0) {
-              g_free(note->text);
-              note->text = g_strdup(model_element->text->text);
-            }
-            break;
+        case ELEMENT_NOTE: {
+          Note *note = (Note *)visual_element;
+          if (note->text == NULL || strcmp(note->text, model_element->text->text) != 0) {
+            g_free(note->text);
+            note->text = g_strdup(model_element->text->text);
           }
-          case ELEMENT_PAPER_NOTE: {
-            PaperNote *paper_note = (PaperNote *)visual_element;
-            if (paper_note->text == NULL || strcmp(paper_note->text, model_element->text->text) != 0) {
-              g_free(paper_note->text);
-              paper_note->text = g_strdup(model_element->text->text);
-            }
-            break;
+          break;
+        }
+        case ELEMENT_PAPER_NOTE: {
+          PaperNote *paper_note = (PaperNote *)visual_element;
+          if (paper_note->text == NULL || strcmp(paper_note->text, model_element->text->text) != 0) {
+            g_free(paper_note->text);
+            paper_note->text = g_strdup(model_element->text->text);
           }
-          case ELEMENT_IMAGE_NOTE: {
-            ImageNote *image_note = (ImageNote *)visual_element;
-            if (image_note->text == NULL || strcmp(image_note->text, model_element->text->text) != 0) {
-              g_free(image_note->text);
-              image_note->text = g_strdup(model_element->text->text);
-            }
-            break;
+          break;
+        }
+        case ELEMENT_MEDIA_FILE: {
+          MediaNote *media_note = (MediaNote *)visual_element;
+          if (media_note->text == NULL || strcmp(media_note->text, model_element->text->text) != 0) {
+            g_free(media_note->text);
+            media_note->text = g_strdup(model_element->text->text);
           }
-          case ELEMENT_SPACE: {
-            SpaceElement *space = (SpaceElement *)visual_element;
-            if (space->name == NULL || strcmp(space->name, model_element->text->text) != 0) {
-              g_free(space->name);
-              space->name = g_strdup(model_element->text->text);
-            }
-            break;
+          break;
+        }
+        case ELEMENT_SPACE: {
+          SpaceElement *space = (SpaceElement *)visual_element;
+          if (space->name == NULL || strcmp(space->name, model_element->text->text) != 0) {
+            g_free(space->name);
+            space->name = g_strdup(model_element->text->text);
           }
-          case ELEMENT_CONNECTION:
-            // Connections typically don't have text
-            break;
+          break;
+        }
+        case ELEMENT_CONNECTION:
+          // Connections typically don't have text
+          break;
         }
       }
 
@@ -362,11 +362,27 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       }
     }
     break;
-  case ELEMENT_IMAGE_NOTE:
-    if (model_element->position && model_element->size &&
-        model_element->image->image_data && model_element->image->image_size > 0) {
-      visual_element = (Element*)image_note_create(position, bg_color, size,
-                                                   model_element->image->image_data, model_element->image->image_size, model_element->text->text, data);
+  case ELEMENT_MEDIA_FILE:
+    if (model_element->video && model_element->video->duration > 0) {
+      ElementMedia media = {
+        .type = MEDIA_TYPE_VIDEO,
+        .image_data = model_element->video->thumbnail_data,
+        .image_size = model_element->video->thumbnail_size,
+        .video_data = model_element->video->video_data,
+        .video_size = model_element->video->video_size,
+        .duration = model_element->video->duration
+      };
+      visual_element = (Element*)media_note_create(position, bg_color, size, media, model_element->text->text, data);
+    } else if(model_element->image->image_data && model_element->image->image_size > 0) {
+      ElementMedia media = {
+        .type = MEDIA_TYPE_IMAGE,
+        .image_data = model_element->image->image_data,
+        .image_size = model_element->image->image_size,
+        .video_data = NULL,
+        .video_size = 0,
+        .duration = 0
+      };
+      visual_element = (Element*)media_note_create(position, bg_color, size, media, model_element->text->text, data);
     }
     break;
 

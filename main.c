@@ -3,6 +3,7 @@
 #include "canvas_actions.h"
 #include "canvas_spaces.h"
 #include "canvas_search.h"
+#include "canvas_drop.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
@@ -49,6 +50,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_overlay_set_child(GTK_OVERLAY(overlay), drawing_area);
 
   CanvasData *data = canvas_data_new(drawing_area, overlay);
+  canvas_setup_drop_target(data);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), canvas_on_draw, data, NULL);
 

@@ -23,10 +23,10 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     .width = 200,
     .height = 150,
   };
+  ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ModelElement *model_element = model_create_element(data->model,
                                                      ELEMENT_PAPER_NOTE,
-                                                     bg_color, position, size,
-                                                     NULL, 0,
+                                                     bg_color, position, size, media,
                                                      0, NULL, -1, -1,
                                                      "Paper note");
   if (!model_element) {
@@ -56,11 +56,10 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     .width = 200,
     .height = 150,
   };
-
+  ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ModelElement *model_element = model_create_element(data->model,
                                                      ELEMENT_NOTE,
-                                                     bg_color, position, size,
-                                                     NULL, 0,
+                                                     bg_color, position, size, media,
                                                      0, NULL, -1, -1,
                                                      "Note");
   if (!model_element) {

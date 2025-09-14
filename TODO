@@ -1,5 +1,4 @@
-- [new feature] store and play short video (max 1 min, mp4 format)
-- [new feature] ability to change space
+- [doc] write a blog post
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [new feature] time-travel on row click in action log window
@@ -11,6 +10,6 @@
 - [improvement] put text in center of note
 - [improvement] different type of connections
 - [new feature] zoom out feature
+- [new feature] save images/videos to file via context menu
 - [idea to explore] collaborative editing
 - [idea to explore] different type of spaces (e.g. task board space, music player space)
-

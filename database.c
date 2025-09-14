@@ -50,6 +50,17 @@ int database_create_tables(sqlite3 *db) {
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"
 
+    "CREATE TABLE IF NOT EXISTS video_refs ("
+    "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "    thumbnail_data BLOB NOT NULL,"      // Thumbnail image data
+    "    thumbnail_size INTEGER NOT NULL,"   // Thumbnail size in bytes
+    "    video_data BLOB NOT NULL,"          // Video file data (stored as BLOB)
+    "    video_size INTEGER NOT NULL,"       // Video file size in bytes
+    "    duration INTEGER,"                  // Video duration in seconds
+    "    ref_count INTEGER DEFAULT 1,"
+    "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+    ");"
+
     "CREATE TABLE IF NOT EXISTS position_refs ("
     "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
     "    x INTEGER NOT NULL,"
@@ -107,6 +118,7 @@ int database_create_tables(sqlite3 *db) {
     "    to_point INTEGER,"          // For connections 0,1,2,3 (connection point location)
     "    target_space_uuid TEXT,"    // For space elements, UUID of the target space
     "    image_id INTEGER,"          // Image note related
+    "    video_id INTEGER,"          // Video note related
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -115,6 +127,7 @@ int database_create_tables(sqlite3 *db) {
     "    FOREIGN KEY (text_id) REFERENCES text_refs(id),"
     "    FOREIGN KEY (bg_color_id) REFERENCES color_refs(id),"
     "    FOREIGN KEY (image_id) REFERENCES image_refs(id),"
+    "    FOREIGN KEY (video_id) REFERENCES video_refs(id),"
     "    FOREIGN KEY (from_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (to_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (target_space_uuid) REFERENCES spaces(uuid)"
@@ -572,7 +585,7 @@ int database_create_color_ref(sqlite3 *db, double r, double g, double b, double 
 }
 
 int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *element) {
-  int type_id, position_id, size_id, text_id = 0, bg_color_id = 0, image_id = 0;
+  int type_id, position_id, size_id, text_id = 0, bg_color_id = 0, image_id = 0, video_id = 0;
 
   // Handle type reference
   if (element->type->id == -1) {
@@ -632,6 +645,26 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     }
   }
 
+  if (element->video) {
+    if (element->video->id == -1) {
+      if (!database_create_video_ref(db,
+                                     element->video->thumbnail_data, element->video->thumbnail_size,
+                                     element->video->video_data, element->video->video_size,
+                                     element->video->duration,
+                                     &video_id)) {
+        fprintf(stderr, "Failed to create video ref for element %s\n", element->uuid);
+        return 0;
+      }
+      element->video->id = video_id;
+    } else {
+      if (!database_update_video_ref(db, element->video)) {
+        fprintf(stderr, "Failed to update video ref for element %s\n", element->uuid);
+        return 0;
+      }
+      video_id = element->video->id;
+    }
+  }
+
   // Handle color reference (optional)
   if (element->bg_color) {
     if (element->bg_color->id == -1) {
@@ -650,8 +683,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -705,6 +738,12 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     sqlite3_bind_null(stmt, param_index++);
   }
 
+  if (video_id > 0) {
+    sqlite3_bind_int(stmt, param_index++, video_id);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
+  }
+
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create element: %s\n", sqlite3_errmsg(db));
     sqlite3_finalize(stmt);
@@ -718,7 +757,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, bg_color_id, "
-    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id "
+    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id, video_id "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
 
@@ -815,6 +854,15 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
       }
     }
 
+    int video_id = sqlite3_column_int(stmt, col++);
+    if (video_id > 0) {
+      if (!database_read_video_ref(db, video_id, &elem->video)) {
+        sqlite3_finalize(stmt);
+        model_element_free(elem);
+        return 0; // Error
+      }
+    }
+
     *element = elem;
     sqlite3_finalize(stmt);
     return 1; // Success
@@ -862,11 +910,17 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
       return 0;
     }
   }
+  if (element->video && element->video->id > 0) {
+    if (!database_update_video_ref(db, element->video)) {
+      fprintf(stderr, "Failed to update video ref for element %s\n", element->uuid);
+      return 0;
+    }
+  }
 
   // Update the element record with all reference IDs
   const char *sql = "UPDATE elements SET "
     "type_id = ?, position_id = ?, size_id = ?, "
-    "text_id = ?, bg_color_id = ?, image_id = ?, "
+    "text_id = ?, bg_color_id = ?, image_id = ?, video_id = ?, "
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ?, "
     "space_uuid = ? "
@@ -900,6 +954,12 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
 
   if (element->image && element->image->id > 0) {
     sqlite3_bind_int(stmt, param_index++, element->image->id);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
+  }
+
+  if (element->video && element->video->id > 0) {
+    sqlite3_bind_int(stmt, param_index++, element->video->id);
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
@@ -1038,7 +1098,7 @@ int database_load_space(sqlite3 *db, Model *model) {
   const char *sql =
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
-    "e.image_id "
+    "e.image_id, e.video_id "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -1065,6 +1125,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_TARGET_SPACE_UUID,
     COL_SPACE_UUID,
     COL_IMAGE_ID,
+    COL_VIDEO_ID,
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1205,6 +1266,23 @@ int database_load_space(sqlite3 *db, Model *model) {
       element->image = image;
     }
 
+    // Extract image (check if already loaded in model)
+    int video_id = sqlite3_column_int(stmt, COL_VIDEO_ID);
+    if (video_id > 0) {
+      ModelVideo *video = g_hash_table_lookup(model->videos, GINT_TO_POINTER(video_id));
+      if (!video) {
+        // Not in cache, load from database
+        if (database_read_video_ref(db, video_id, &video)) {
+          g_hash_table_insert(model->videos, GINT_TO_POINTER(video_id), video);
+        } else {
+          fprintf(stderr, "Failed to load video %d for element %s\n", video_id, uuid);
+          model_element_free(element);
+          continue;
+        }
+      }
+      element->video = video;
+    }
+
     element->visual_element = NULL;
 
     g_hash_table_insert(model->elements, g_strdup(uuid), element);
@@ -1316,6 +1394,7 @@ int cleanup_database_references(sqlite3 *db) {
     "position_refs",
     "size_refs",
     "image_refs",
+    "video_refs",
     "text_refs",
     "color_refs",
     NULL
@@ -1751,4 +1830,148 @@ void database_free_space_info(SpaceInfo *space) {
     g_free(space->created_at);
     g_free(space);
   }
+}
+
+int database_load_video_data(sqlite3 *db, int video_id, unsigned char **video_data, int *video_size) {
+  if (video_id <= 0) {
+    fprintf(stderr, "Error: Invalid video_id (%d) in database_load_video_data\n", video_id);
+    return 0;
+  }
+
+  const char *sql = "SELECT video_data, video_size FROM video_refs WHERE id = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_int(stmt, 1, video_id);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    const void *blob_data = sqlite3_column_blob(stmt, 0);
+    *video_size = sqlite3_column_int(stmt, 1);
+
+    if (blob_data && *video_size > 0) {
+      *video_data = g_malloc(*video_size);
+      memcpy(*video_data, blob_data, *video_size);
+      sqlite3_finalize(stmt);
+      return 1;
+    }
+  }
+
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int database_create_video_ref(sqlite3 *db,
+                             const unsigned char *thumbnail_data, int thumbnail_size,
+                             const unsigned char *video_data, int video_size,
+                             int duration, int *video_id) {
+  const char *sql = "INSERT INTO video_refs (thumbnail_data, thumbnail_size, video_data, video_size, duration) VALUES (?, ?, ?, ?, ?)";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  int param_index = 1;
+  sqlite3_bind_blob(stmt, param_index++, thumbnail_data, thumbnail_size, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, param_index++, thumbnail_size);
+  sqlite3_bind_blob(stmt, param_index++, video_data, video_size, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, param_index++, video_size);
+  sqlite3_bind_int(stmt, param_index++, duration);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    fprintf(stderr, "Failed to create video: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    return 0;
+  }
+
+  *video_id = sqlite3_last_insert_rowid(db);
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+int database_read_video_ref(sqlite3 *db, int video_id, ModelVideo **video) {
+  // Initialize output to NULL
+  *video = NULL;
+
+  if (video_id <= 0) {
+    fprintf(stderr, "Error: Invalid video_id (%d) in database_read_video_ref\n", video_id);
+    return 0;
+  }
+
+  const char *sql = "SELECT thumbnail_data, thumbnail_size, video_size, duration, ref_count FROM video_refs WHERE id = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_int(stmt, 1, video_id);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    ModelVideo *model_video = g_new0(ModelVideo, 1);
+    model_video->id = video_id;
+    model_video->is_loaded = FALSE;
+
+    // Get thumbnail data (load this immediately)
+    const void *thumb_data = sqlite3_column_blob(stmt, 0);
+    int thumb_size = sqlite3_column_bytes(stmt, 0);
+    model_video->thumbnail_size = sqlite3_column_int(stmt, 1);
+
+    if (thumb_data && thumb_size > 0) {
+      model_video->thumbnail_data = g_malloc(thumb_size);
+      memcpy(model_video->thumbnail_data, thumb_data, thumb_size);
+    }
+
+    // Store video metadata but don't load video data yet
+    model_video->video_size = sqlite3_column_int(stmt, 2);
+    model_video->duration = sqlite3_column_int(stmt, 3);
+
+    model_video->ref_count = sqlite3_column_int(stmt, 4);
+    model_video->video_data = NULL;  // Video data will be loaded on demand
+
+    *video = model_video;
+    sqlite3_finalize(stmt);
+    return 1;
+  }
+
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+int database_update_video_ref(sqlite3 *db, ModelVideo *video) {
+  if (video->id <= 0) {
+    fprintf(stderr, "Error: Invalid video_id (%d) in database_update_video_ref\n", video->id);
+    return 0;
+  }
+
+  const char *sql = "UPDATE video_refs SET thumbnail_data = ?, thumbnail_size = ?, video_size = ?, duration = ?, ref_count = ? WHERE id = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  int param_index = 1;
+  sqlite3_bind_blob(stmt, param_index++, video->thumbnail_data, video->thumbnail_size, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, param_index++, video->thumbnail_size);
+  sqlite3_bind_int(stmt, param_index++, video->video_size);
+  sqlite3_bind_int(stmt, param_index++, video->duration);
+  sqlite3_bind_int(stmt, param_index++, video->ref_count);
+  sqlite3_bind_int(stmt, param_index++, video->id);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    fprintf(stderr, "Failed to update video: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    return 0;
+  }
+
+  sqlite3_finalize(stmt);
+  return 1;
 }

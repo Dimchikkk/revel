@@ -6,7 +6,7 @@
 #include "model.h"
 #include "paper_note.h"
 #include "note.h"
-#include "image_note.h"
+#include "media_note.h"
 #include "connection.h"
 #include "space.h"
 #include <pango/pangocairo.h>
@@ -34,6 +34,15 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
   }
 
   Element *element = canvas_pick_element(data, (int)x, (int)y);
+
+  // Handle video playback toggle on SINGLE click only
+  if (element && element->type == ELEMENT_MEDIA_FILE && n_press == 2) {
+    MediaNote *media_note = (MediaNote*)element;
+    if (media_note->media_type == MEDIA_TYPE_VIDEO) {
+      media_note_toggle_video_playback(element);
+      return;
+    }
+  }
 
   // If no visible element was found, clear any potential hidden element selection
   if (!element && !(data->modifier_state & GDK_SHIFT_MASK)) {
@@ -97,11 +106,11 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
               .width = 1,
               .height = 1,
             };
+            ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
 
             ModelElement *model_conn = model_create_element(data->model,
                                                             ELEMENT_CONNECTION,
-                                                            bg_color, position, size,
-                                                            NULL, 0,
+                                                            bg_color, position, size, media,
                                                             from_model->uuid, to_model->uuid, connection_start_point, cp,
                                                             NULL);
             model_conn->visual_element = create_visual_element(model_conn, data);
@@ -123,7 +132,7 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     }
 
     if (!((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
-          (element->type == ELEMENT_IMAGE_NOTE && ((ImageNote*)element)->editing) ||
+          (element->type == ELEMENT_MEDIA_FILE && ((MediaNote*)element)->editing) ||
           (element->type == ELEMENT_NOTE && ((Note*)element)->editing))) {
       if (!(data->modifier_state & GDK_SHIFT_MASK)) {
         canvas_clear_selection(data);
@@ -134,7 +143,6 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       element->dragging = TRUE;
       element->drag_offset_x = (int)x - element->x;
       element->drag_offset_y = (int)y - element->y;
-
     }
   } else {
     connection_start = NULL;
@@ -663,11 +671,10 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
       .width = gdk_pixbuf_get_width(pixbuf) / scale,
       .height = gdk_pixbuf_get_height(pixbuf) / scale,
     };
-
+    ElementMedia media = { .type = MEDIA_TYPE_IMAGE, .image_data = (unsigned char*) buffer, .image_size = buffer_size, .video_data = NULL, .video_size = 0, .duration = 0 };
     ModelElement *model_element = model_create_element(data->model,
-                                                       ELEMENT_IMAGE_NOTE,
-                                                       bg_color, position, size,
-                                                       (const unsigned char*)buffer, buffer_size,
+                                                       ELEMENT_MEDIA_FILE,
+                                                       bg_color, position, size, media,
                                                        0, NULL, -1, -1,
                                                        "");
 

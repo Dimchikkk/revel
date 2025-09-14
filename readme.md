@@ -6,9 +6,10 @@ Note taking brainstorming app
 
 * stora all data in a single portable SQLite3 database file
 * full-text search using BM25 ranking
+* store & play short MP4 clips
 * create notes, paper notes
 * connect elements with arrows
-* paste images from clipboard and annotate them
+* paste images and annotate them
 * fork = independent copy. clone = by text or size, with properties kept in sync between elements
 * resize, move, delete, change color of elements
 * infinite canvas space
@@ -19,11 +20,15 @@ Note taking brainstorming app
 
 ## Dependencies
 
-GTK4, sqlite3
+GTK4, SQLite3, GStreamer
 
 ```
+# UI
 sudo apt install libgtk-4-dev
+# Storage
 sudo apt install libsqlite3-dev
+# Video support
+sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav
 ```
 
 ## To run on x86_64 GNU/Linux:

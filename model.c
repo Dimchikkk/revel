@@ -17,8 +17,16 @@ void model_free(Model *model) {
   g_hash_table_destroy(model->sizes);
   g_hash_table_destroy(model->colors);
   g_hash_table_destroy(model->images);
+  g_hash_table_destroy(model->videos);
   g_free(model->current_space_uuid);
   g_free(model);
+}
+
+void model_video_free(ModelVideo *video) {
+  if (!video) return;
+  if (video->thumbnail_data) g_free(video->thumbnail_data);
+  if (video->video_data) g_free(video->video_data);
+  g_free(video);
 }
 
 void model_image_free(ModelImage *image) {
@@ -80,6 +88,7 @@ Model* model_new() {
   model->sizes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->colors = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->images = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+  model->videos = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->db = NULL;
 
   if (!database_init(&model->db, "revel.db")) {
@@ -140,7 +149,7 @@ ModelElement* model_create_element(Model *model,
                                    ElementColor bg_color,
                                    ElementPosition pos,
                                    ElementSize s,
-                                   const unsigned char *image_data, int image_size,
+                                   ElementMedia media,
                                    const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
                                    const char *text) {
   if (model == NULL) {
@@ -213,14 +222,29 @@ ModelElement* model_create_element(Model *model,
     element->to_point = to_point;
   }
 
-  if (image_data && image_size > 0) {
+  if (media.type == MEDIA_TYPE_IMAGE && media.image_data && media.image_size > 0) {
     ModelImage *model_image = g_new0(ModelImage, 1);
     model_image->id = -1;
-    model_image->image_data = g_malloc(image_size);
-    memcpy(model_image->image_data, image_data, image_size);
-    model_image->image_size = image_size;
+    model_image->image_data = g_malloc(media.image_size);
+    memcpy(model_image->image_data, media.image_data, media.image_size);
+    model_image->image_size = media.image_size;
     model_image->ref_count = 1;
     element->image = model_image;
+  }
+
+  if (media.type == MEDIA_TYPE_VIDEO && media.video_data && media.video_size > 0) {
+    ModelVideo *model_video = g_new0(ModelVideo, 1);
+    model_video->id = -1;
+    model_video->thumbnail_data = g_malloc(media.image_size);
+    memcpy(model_video->thumbnail_data, media.image_data, media.image_size);
+    model_video->thumbnail_size = media.image_size;
+    model_video->video_data = g_malloc(media.video_size);
+    memcpy(model_video->video_data, media.video_data, media.video_size);
+    model_video->video_size = media.video_size;
+    model_video->duration = media.duration;
+    model_video->is_loaded = TRUE;
+    model_video->ref_count = 1;
+    element->video = model_video;
   }
 
   // Add the element to the model's elements hash table
@@ -352,6 +376,7 @@ int model_delete_element(Model *model, ModelElement *element) {
   if (element->text && element->text->ref_count > 0) element->text->ref_count--;
   if (element->bg_color && element->bg_color->ref_count > 0) element->bg_color->ref_count--;
   if (element->image && element->image->ref_count > 0) element->image->ref_count--;
+  if (element->video && element->video->ref_count > 0) element->video->ref_count--;
 
   // Mark element as deleted
   element->state = MODEL_STATE_DELETED;
@@ -409,11 +434,24 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .width = element->size->width,
     .height = element->size->height,
   };
+  MediaType media_type = MEDIA_TYPE_NONE;
+  if (element->image) {
+    media_type = MEDIA_TYPE_IMAGE;
+  } else if (element->video) {
+    media_type = MEDIA_TYPE_VIDEO;
+  }
+  ElementMedia media = {
+    .type = media_type,
+    .image_data = element->image ? element->image->image_data : NULL,
+    .image_size = element->image ? element->image->image_size : 0,
+    .video_data = element->video ? element->video->video_data : NULL,
+    .video_size = element->video ? element->video->video_size : 0,
+    .duration = element->video ? element->video->duration : 0,
+  };
 
   return model_create_element(model,
                               element->type->type,
-                              bg_color, position, size,
-                              element->image ? element->image->image_data : NULL, element-> image ? element->image->image_size : 0,
+                              bg_color, position, size, media,
                               element->from_element_uuid, element->to_element_uuid, element->from_point, element->to_point,
                               element->text->text);
 }
@@ -570,6 +608,14 @@ int model_save_elements(Model *model) {
           }
         }
 
+        if (element->video && element->video->id > 0) {
+          database_update_video_ref(model->db, element->video);
+          if (element->video->ref_count < 1) {
+            g_hash_table_remove(model->videos, GINT_TO_POINTER(element->video->id));
+            model_video_free(element->video);
+          }
+        }
+
         cleanup_database_references(model->db);
         saved_count++;
       } else {
@@ -637,6 +683,9 @@ int model_save_elements(Model *model) {
         }
         if (element->image && element->image->id > 0) {
           g_hash_table_insert(model->images, GINT_TO_POINTER(element->image->id), element->image);
+        }
+        if (element->video && element->video->id > 0) {
+          g_hash_table_insert(model->videos, GINT_TO_POINTER(element->video->id), element->video);
         }
 
         // Change state to SAVED
@@ -875,4 +924,17 @@ void model_free_space_info(ModelSpaceInfo *space) {
         g_free(space->created_at);
         g_free(space);
     }
+}
+
+int model_load_video_data(Model *model, ModelVideo *video) {
+  if (!video || video->is_loaded) {
+    return 0;  // Already loaded or invalid
+  }
+
+  if (database_load_video_data(model->db, video->id, &video->video_data, &video->video_size)) {
+    video->is_loaded = TRUE;
+    return 1;
+  }
+
+  return 0;
 }

@@ -21,6 +21,20 @@ typedef struct _ModelPosition ModelPosition;
 typedef struct _ModelElement ModelElement;
 typedef struct _Model Model;
 typedef struct _ModelImage ModelImage;
+typedef struct _ModelVideo ModelVideo;
+
+struct _ModelVideo {
+  gint id;
+  unsigned char *thumbnail_data;  // Thumbnail image data (loaded immediately)
+  int thumbnail_size;             // Thumbnail size in bytes
+
+  // Video data - loaded on demand
+  unsigned char *video_data;      // Video file data (NULL until loaded)
+  int video_size;                 // Video file size in bytes
+  gint duration;                  // Video duration in seconds
+  gboolean is_loaded;             // Flag to track if video data is loaded
+  gint ref_count;
+};
 
 struct _ModelType {
   gint id;                    // Unique ID for this element type
@@ -67,6 +81,7 @@ struct _ModelElement {
   ModelSize* size;            // Shared size
   ModelText* text;            // Shared text
   ModelColor* bg_color;       // Shared bg_color
+  ModelVideo* video;          // Shared video
   ModelImage* image;
   Element* visual_element;    // Pointer to visual representation
   ModelState state;
@@ -91,6 +106,7 @@ struct _Model {
   GHashTable *sizes;          // size_id -> ModelSize* (shared size)
   GHashTable *colors;         // bg_color_id -> ModelColor* (shared color)
   GHashTable *images;         // image_id -> ModelImage (shared image)
+  GHashTable *videos;         // video_id -> ModelVideo (shared video)
   sqlite3 *db;
 };
 
@@ -111,7 +127,7 @@ ModelElement* model_create_element(Model *model,
                                    ElementColor bg_color,
                                    ElementPosition position,
                                    ElementSize size,
-                                   const unsigned char *image_data, int image_size,
+                                   ElementMedia media,
                                    const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
                                    const char *text);
 
@@ -157,5 +173,7 @@ typedef struct {
 
 int model_get_all_spaces(Model *model, GList **spaces);
 void model_free_space_info(ModelSpaceInfo *space);
+
+int model_load_video_data(Model *model, ModelVideo *video);
 
 #endif

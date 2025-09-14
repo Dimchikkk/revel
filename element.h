@@ -12,8 +12,14 @@ typedef enum {
   ELEMENT_PAPER_NOTE,
   ELEMENT_CONNECTION,
   ELEMENT_SPACE,
-  ELEMENT_IMAGE_NOTE,
+  ELEMENT_MEDIA_FILE,
 } ElementType;
+
+typedef enum {
+  MEDIA_TYPE_IMAGE,
+  MEDIA_TYPE_VIDEO,
+  MEDIA_TYPE_NONE
+} MediaType;
 
 typedef struct {
   void (*draw)(Element *element, cairo_t *cr, gboolean is_selected);
@@ -37,6 +43,15 @@ typedef struct {
 typedef struct {
     int width, height;
 } ElementSize;
+
+typedef struct {
+  MediaType type;
+  unsigned char *image_data;
+  int image_size;
+  unsigned char *video_data;
+  int  video_size;
+  int duration;
+} ElementMedia;
 
 struct Element {
   ElementType type;
