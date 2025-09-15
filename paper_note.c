@@ -53,9 +53,21 @@ void paper_note_on_text_view_focus_leave(GtkEventController *controller, gpointe
 gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   PaperNote *note = (PaperNote*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & GDK_CONTROL_MASK) return FALSE;
-    paper_note_finish_editing((Element*)note);
-    return TRUE;
+    if (state & GDK_CONTROL_MASK) {
+      // Ctrl+Enter finishes editing
+      paper_note_finish_editing((Element*)note);
+      return TRUE;
+    } else {
+      // Regular Enter inserts a newline
+      GtkTextView *text_view = GTK_TEXT_VIEW(note->text_view);
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);
+
+      GtkTextIter iter;
+      gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
+      gtk_text_buffer_insert(buffer, &iter, "\n", 1);
+
+      return TRUE; // Handled - prevent default behavior
+    }
   }
   return FALSE;
 }
@@ -157,7 +169,7 @@ int paper_note_pick_connection_point(Element *element, int x, int y) {
     int px, py;
     paper_note_get_connection_point(element, i, &px, &py);
     int dx = cx - px, dy = cy - py;
-    if (dx * dx + dy * dy < 36) return i;
+    if (dx * dx + dy * dy < 100) return i;
   }
   return -1;
 }

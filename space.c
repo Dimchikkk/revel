@@ -101,7 +101,7 @@ int space_element_pick_connection_point(Element *element, int x, int y) {
     int cx, cy;
     space_element_get_connection_point(element, i, &cx, &cy);
     int dx = canvas_x - cx, dy = canvas_y - cy;
-    if (dx * dx + dy * dy < 36) return i;
+    if (dx * dx + dy * dy < 100) return i;
   }
   return -1;
 }

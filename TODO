@@ -1,9 +1,10 @@
 - [doc] write a blog post
+- [new feature] ability to change text color, font, size
 - [new feature] restore undo/redo/log action (see git commit with undo_manager.c) but make it work on Model layer rather than UI
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
+- [fix] support mp4 files without audio channel
 - [new feature] time-travel on row click in action log window
 - [new feature] allow choosing DB file
-- [new feature] ability to change text color, text font
 - [improvement] disable back to parent button if at root space
 - [new feature] drawing shapes like arrows, cylinder (vertical / horizontal)
 - [new feature] drawing using pencil feature

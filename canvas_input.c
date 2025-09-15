@@ -712,6 +712,24 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
                                guint keycode, GdkModifierType state, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
+  // Check if any element is currently being edited
+  gboolean is_editing = FALSE;
+  GList *visual_elements = canvas_get_visual_elements(data);
+  for (GList *l = visual_elements; l != NULL; l = l->next) {
+    Element *element = (Element*)l->data;
+    if ((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
+        (element->type == ELEMENT_MEDIA_FILE && ((MediaNote*)element)->editing) ||
+        (element->type == ELEMENT_NOTE && ((Note*)element)->editing)) {
+      is_editing = TRUE;
+      break;
+    }
+  }
+
+  // If editing, let the text widget handle Enter and other keys
+  if (is_editing) {
+    return FALSE;
+  }
+
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_v) {
     canvas_on_paste(data->drawing_area, data);
     return TRUE;

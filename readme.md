@@ -16,7 +16,7 @@ Note taking brainstorming app
 * organize elements into nested spaces (infinite space depth)
 * move elements between spaces
 
-![Revel Image](photo_2025-09-11_15-13-26.jpg)
+![Revel Image](photo_2025-09-15_10-51-56.jpg)
 
 ## Dependencies
 
