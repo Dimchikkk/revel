@@ -5,10 +5,6 @@
 #include <pango/pangocairo.h>
 #include <math.h>
 
-#ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#endif
-
 static ElementVTable paper_note_vtable = {
   .draw = paper_note_draw,
   .get_connection_point = paper_note_get_connection_point,

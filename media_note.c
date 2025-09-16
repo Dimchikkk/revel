@@ -9,10 +9,6 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
 
-#ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#endif
-
 gboolean gst_initialized = FALSE;
 
 static ElementVTable media_note_vtable = {

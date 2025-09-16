@@ -12,17 +12,6 @@
 #include <pango/pangocairo.h>
 #include <gtk/gtkdialog.h>
 
-#ifndef ABS
-#define ABS(a) ((a) < 0 ? -(a) : (a))
-#endif
-#ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#endif
-
-#ifndef MAX
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#endif
-
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
   static Element *connection_start = NULL;

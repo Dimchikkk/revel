@@ -9,13 +9,6 @@
 #include <pango/pangocairo.h>
 #include "model.h"
 
-#ifndef ABS
-#define ABS(a) ((a) < 0 ? -(a) : (a))
-#endif
-#ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#endif
-
 static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
   const Element *element_a = (const Element*)a;
   const Element *element_b = (const Element*)b;
