@@ -1,6 +1,5 @@
 #include "connection.h"
 #include "element.h"
-#include "vector.h"
 #include <math.h>
 
 static ElementVTable connection_vtable = {
@@ -13,6 +12,14 @@ static ElementVTable connection_vtable = {
   .update_size = NULL,
   .free = NULL // Connections are freed by canvas
 };
+
+Vec2 vec2_add(Vec2 a, Vec2 b) {
+  return (Vec2){a.x + b.x, a.y + b.y};
+}
+
+Vec2 vec2_div(Vec2 v, double scalar) {
+  return (Vec2){v.x / scalar, v.y / scalar};
+}
 
 Connection* connection_create(Element *from, int from_point,
                               Element *to, int to_point,

@@ -2,7 +2,6 @@
 #define ELEMENT_H
 
 #include <gtk/gtk.h>
-#include "vector.h"
 
 typedef struct _CanvasData CanvasData;
 typedef struct Element Element;

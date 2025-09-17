@@ -2,9 +2,16 @@
 #define CONNECTION_H
 
 #include "element.h"
-#include "vector.h"
 
 typedef struct _CanvasData CanvasData;
+
+typedef struct {
+  double x, y;
+} Vec2;
+
+Vec2 vec2_add(Vec2 a, Vec2 b);
+Vec2 vec2_div(Vec2 v, double scalar);
+
 
 typedef struct {
   Element base;
