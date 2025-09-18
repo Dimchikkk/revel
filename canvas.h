@@ -8,9 +8,10 @@
 #include "connection.h"
 
 typedef struct _CanvasData CanvasData;
+typedef struct _UndoManager UndoManager;
 
 typedef struct {
-  Element *element;
+  ModelElement *element;
   double x;
   double y;
 } PositionData;
@@ -36,6 +37,10 @@ struct _CanvasData {
   int pan_start_y;
   int offset_x;
   int offset_y;
+
+  UndoManager *undo_manager;
+  GHashTable *drag_start_positions;
+  GHashTable *drag_start_sizes;
 
   Model *model;
 };

@@ -8,6 +8,7 @@
 #include <glib.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
+#include "undo_manager.h"
 
 gboolean gst_initialized = FALSE;
 
@@ -362,11 +363,6 @@ void media_note_toggle_video_playback(Element *element) {
   gtk_widget_queue_draw(GTK_WIDGET(media_note->base.canvas_data->drawing_area));
 }
 
-void media_note_on_text_view_focus_leave(GtkEventController *controller, gpointer user_data) {
-  MediaNote *media_note = (MediaNote*)user_data;
-  media_note_finish_editing((Element*)media_note);
-}
-
 gboolean media_note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   MediaNote *media_note = (MediaNote*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
@@ -399,11 +395,14 @@ void media_note_finish_editing(Element *element) {
   gtk_text_buffer_get_end_iter(buffer, &end);
 
   char *new_text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+
+  char* old_text = g_strdup(media_note->text);
   g_free(media_note->text);
   media_note->text = new_text;
 
   Model* model = media_note->base.canvas_data->model;
   ModelElement* model_element = model_get_by_visual(model, element);
+  undo_manager_push_text_action(media_note->base.canvas_data->undo_manager, model_element, old_text, new_text);
   model_update_text(model, model_element, new_text);
 
   media_note->editing = FALSE;
@@ -438,10 +437,6 @@ void media_note_start_editing(Element *element, GtkWidget *overlay) {
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), media_note->text_view);
     gtk_widget_set_halign(media_note->text_view, GTK_ALIGN_START);
     gtk_widget_set_valign(media_note->text_view, GTK_ALIGN_START);
-
-    GtkEventController *focus_controller = gtk_event_controller_focus_new();
-    g_signal_connect(focus_controller, "leave", G_CALLBACK(media_note_on_text_view_focus_leave), media_note);
-    gtk_widget_add_controller(media_note->text_view, focus_controller);
 
     GtkEventController *key_controller = gtk_event_controller_key_new();
     g_signal_connect(key_controller, "key-pressed", G_CALLBACK(media_note_on_textview_key_press), media_note);

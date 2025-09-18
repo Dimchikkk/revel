@@ -11,6 +11,7 @@
 #include "space.h"
 #include <pango/pangocairo.h>
 #include <gtk/gtkdialog.h>
+#include "undo_manager.h"
 
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
@@ -45,6 +46,29 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     return;
   }
 
+  // Initialize drag_start_positions if it doesn't exist
+  if (!data->drag_start_positions) {
+    data->drag_start_positions = g_hash_table_new(g_direct_hash, g_direct_equal);
+  } else {
+    // Clear any existing drag positions
+    g_hash_table_remove_all(data->drag_start_positions);
+  }
+
+  // Store original positions for all selected elements
+  for (GList *sel = data->selected_elements; sel != NULL; sel = sel->next) {
+    Element *selected_element = (Element*)sel->data;
+    ModelElement *model_element = model_get_by_visual(data->model, selected_element);
+
+    if (model_element && model_element->position) {
+      PositionData *pos_data = g_new0(PositionData, 1);
+      pos_data->element = model_element;
+      pos_data->x = model_element->position->x;
+      pos_data->y = model_element->position->y;
+
+      g_hash_table_insert(data->drag_start_positions, model_element, pos_data);
+    }
+  }
+
   if (element) {
     int rh = element_pick_resize_handle(element, (int)x, (int)y);
     if (rh >= 0) {
@@ -62,8 +86,16 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       element->resize_start_y = (int)y;
       element->orig_x = element->x;
       element->orig_y = element->y;
-      element->orig_width = element->width;
-      element->orig_height = element->height;
+
+      // Store original size from model for resize undo
+      ModelElement *model_element = model_get_by_visual(data->model, element);
+      if (model_element && model_element->size) {
+        element->orig_width = model_element->size->width;
+        element->orig_height = model_element->size->height;
+      } else {
+        element->orig_width = element->width;
+        element->orig_height = element->height;
+      }
 
       return;
     }
@@ -103,6 +135,9 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
                                                             from_model->uuid, to_model->uuid, connection_start_point, cp,
                                                             NULL);
             model_conn->visual_element = create_visual_element(model_conn, data);
+
+            // Push undo action for connection creation
+            undo_manager_push_create_action(data->undo_manager, model_conn);
           }
         }
         connection_start = NULL;
@@ -128,6 +163,17 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       }
       if (!canvas_is_element_selected(data, element)) {
         data->selected_elements = g_list_append(data->selected_elements, element);
+
+        // Store position for the newly selected element
+        ModelElement *model_element = model_get_by_visual(data->model, element);
+        if (model_element && model_element->position) {
+          PositionData *pos_data = g_new0(PositionData, 1);
+          pos_data->element = model_element;
+          pos_data->x = model_element->position->x;
+          pos_data->y = model_element->position->y;
+
+          g_hash_table_insert(data->drag_start_positions, model_element, pos_data);
+        }
       }
       element->dragging = TRUE;
       element->drag_offset_x = (int)x - element->x;
@@ -207,8 +253,11 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
       if (new_width < 50) new_width = 50;
       if (new_height < 30) new_height = 30;
 
-      element_update_position(element, new_x, new_y, element->z);
-      element_update_size(element, new_width, new_height);
+      // Only update visual position/size during resize, not model
+      element->x = new_x;
+      element->y = new_y;
+      element->width = new_width;
+      element->height = new_height;
 
       gtk_widget_queue_draw(data->drawing_area);
       return;
@@ -222,7 +271,10 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
         Element *selected_element = (Element*)sel->data;
         int new_x = selected_element->x + dx;
         int new_y = selected_element->y + dy;
-        element_update_position(selected_element, new_x, new_y, element->z);
+
+        // Only update visual position during drag, not model
+        selected_element->x = new_x;
+        selected_element->y = new_y;
       }
 
       gtk_widget_queue_draw(data->drawing_area);
@@ -246,7 +298,6 @@ void canvas_on_right_click_release(GtkGestureClick *gesture, int n_press, double
     return;
   }
 }
-
 
 void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
@@ -279,18 +330,64 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
     }
   }
 
+  // Handle undo for drag operations
+  if (data->drag_start_positions && g_hash_table_size(data->drag_start_positions) > 0) {
+    GHashTableIter iter;
+    gpointer key, value;
+
+    g_hash_table_iter_init(&iter, data->drag_start_positions);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      ModelElement *model_element = (ModelElement*)key;
+      PositionData *start_pos = (PositionData*)value;
+
+      // Get the current visual position from the element
+      Element *visual_element = model_element->visual_element;
+
+      if (visual_element && model_element->position &&
+          (visual_element->x != start_pos->x ||
+           visual_element->y != start_pos->y)) {
+
+        // Update the model with the new position
+        model_update_position(data->model, model_element,
+                              visual_element->x, visual_element->y,
+                              model_element->position->z);
+
+        // Push undo action for the move
+        undo_manager_push_move_action(data->undo_manager, model_element,
+                                      start_pos->x, start_pos->y,
+                                      visual_element->x, visual_element->y);
+      }
+
+      g_free(start_pos);
+    }
+
+    g_hash_table_remove_all(data->drag_start_positions);
+  }
+
   gboolean was_resized = FALSE;
   GList *visual_elements = canvas_get_visual_elements(data);
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
     if (element->resizing) {
       was_resized = TRUE;
+
+      // For resize operations, update model and push undo action
+      ModelElement *model_element = model_get_by_visual(data->model, element);
+      if (model_element && model_element->size) {
+        // Push resize undo action
+        undo_manager_push_resize_action(data->undo_manager, model_element,
+                                        element->orig_width, element->orig_height,
+                                        element->width, element->height);
+
+        // Update model size
+        model_update_size(data->model, model_element, element->width, element->height);
+      }
     }
     element->dragging = FALSE;
     element->resizing = FALSE;
   }
 
-  // Re-create visual elements since some sizes may be changed due to resizing of cloned element
+  // Re-create visual elements since some sizes may be changed due to resizing
   if (was_resized) canvas_sync_with_model(data);
 
   gtk_widget_queue_draw(data->drawing_area);
@@ -374,6 +471,8 @@ static void on_fork_element_action(GSimpleAction *action, GVariant *parameter, g
       ModelElement *forked = model_element_fork(data->model, original);
       if (forked) {
         forked->visual_element = create_visual_element(forked, data);
+        // Push undo action for fork
+        undo_manager_push_create_action(data->undo_manager, forked);
         gtk_widget_queue_draw(data->drawing_area);
       }
     }
@@ -391,6 +490,8 @@ static void on_clone_by_text_action(GSimpleAction *action, GVariant *parameter, 
       ModelElement *clone = model_element_clone_by_text(data->model, original);
       if (clone) {
         clone->visual_element = create_visual_element(clone, data);
+        // Push undo action for clone
+        undo_manager_push_create_action(data->undo_manager, clone);
         gtk_widget_queue_draw(data->drawing_area);
       }
     }
@@ -408,13 +509,14 @@ static void on_clone_by_size_action(GSimpleAction *action, GVariant *parameter, 
       ModelElement *clone = model_element_clone_by_size(data->model, original);
       if (clone) {
         clone->visual_element = create_visual_element(clone, data);
+        // Push undo action for clone
+        undo_manager_push_create_action(data->undo_manager, clone);
         gtk_widget_queue_draw(data->drawing_area);
       }
     }
   }
 }
 
-// Add this helper function
 static gboolean destroy_popover_callback(gpointer user_data) {
   GtkWidget *popover = user_data;
   gtk_widget_unparent(popover);
@@ -422,7 +524,6 @@ static gboolean destroy_popover_callback(gpointer user_data) {
 }
 
 static void on_popover_closed(GtkPopover *popover, gpointer user_data) {
-  // Defer the destruction until after the action handlers have finished
   g_idle_add(destroy_popover_callback, popover);
 }
 
@@ -435,7 +536,6 @@ static void on_delete_element_action(GSimpleAction *action, GVariant *parameter,
     if (model_element) {
       // Check if it's a space with elements
       if (model_element->type->type == ELEMENT_SPACE) {
-        // No need to query DB if it's a new space
         if (model_element->state != MODEL_STATE_NEW) {
           int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
           if (element_count > 0) {
@@ -444,6 +544,9 @@ static void on_delete_element_action(GSimpleAction *action, GVariant *parameter,
           }
         }
       }
+
+      // Push undo action BEFORE deletion
+      undo_manager_push_delete_action(data->undo_manager, model_element);
 
       model_delete_element(data->model, model_element);
       canvas_sync_with_model(data);
@@ -463,7 +566,18 @@ static void on_color_dialog_response(GtkDialog *dialog, int response_id, gpointe
 
     if (data && data->model && element_uuid) {
       ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
-      if (model_element) {
+      if (model_element && model_element->bg_color) {
+        // Save old color for undo
+        double old_r = model_element->bg_color->r;
+        double old_g = model_element->bg_color->g;
+        double old_b = model_element->bg_color->b;
+        double old_a = model_element->bg_color->a;
+
+        // Push undo action
+        undo_manager_push_color_action(data->undo_manager, model_element,
+                                       old_r, old_g, old_b, old_a,
+                                       color.red, color.green, color.blue, color.alpha);
+
         model_update_color(data->model, model_element, color.red, color.green, color.blue, color.alpha);
         canvas_sync_with_model(data);
         gtk_widget_queue_draw(data->drawing_area);
@@ -481,11 +595,9 @@ static void on_change_color_action(GSimpleAction *action, GVariant *parameter, g
   if (data && data->model && element_uuid) {
     ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
     if (model_element) {
-      // Create color chooser dialog
       GtkWidget *dialog = gtk_color_chooser_dialog_new("Choose Element Color",
                                                        GTK_WINDOW(gtk_widget_get_root(data->drawing_area)));
 
-      // Set initial color if exists
       if (model_element->bg_color) {
         GdkRGBA initial_color = {
           .red = model_element->bg_color->r / 255.0,
@@ -496,26 +608,22 @@ static void on_change_color_action(GSimpleAction *action, GVariant *parameter, g
         gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog), &initial_color);
       }
 
-      // Store data for the callback
       g_object_set_data(G_OBJECT(dialog), "canvas_data", data);
       g_object_set_data_full(G_OBJECT(dialog), "element_uuid", g_strdup(element_uuid), g_free);
 
-      // Connect response signal
       g_signal_connect(dialog, "response", G_CALLBACK(on_color_dialog_response), NULL);
-
-      // Show dialog
       gtk_window_present(GTK_WINDOW(dialog));
     }
   }
 }
 
 static void on_change_space_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
-    CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
-    const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
 
-    if (data && data->model && element_uuid) {
-        canvas_show_space_select_dialog(data, element_uuid);
-    }
+  if (data && data->model && element_uuid) {
+    canvas_show_space_select_dialog(data, element_uuid);
+  }
 }
 
 void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
@@ -668,10 +776,14 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
                                                        "");
 
     model_element->visual_element = create_visual_element(model_element, data);
+
+    undo_manager_push_create_action(data->undo_manager, model_element);
+
     gtk_widget_queue_draw(data->drawing_area);
 
     g_free(buffer);
   }
+
 
   // Queue redraw
   gtk_widget_queue_draw(data->drawing_area);
@@ -723,6 +835,10 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     canvas_on_paste(data->drawing_area, data);
     return TRUE;
   }
+
+  // Add undo/redo keyboard shortcuts
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) on_undo_clicked(NULL, data);
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);
 
   return FALSE;
 }

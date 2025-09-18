@@ -3,6 +3,7 @@
 #include "model.h"
 #include <gtk/gtk.h>
 #include <string.h>
+#include "undo_manager.h"
 
 // Structure to hold space selection data
 typedef struct {
@@ -54,10 +55,12 @@ static void on_space_selected(GtkListBox *list, GtkListBoxRow *row, gpointer use
     return;
   }
 
+
   // Move the element to the selected space
   if (element_uuid) {
     ModelElement *element = g_hash_table_lookup(select_data->canvas_data->model->elements, element_uuid);
     if (element) {
+      undo_manager_remove_actions_for_element(select_data->canvas_data->undo_manager, element);
       model_save_elements(select_data->canvas_data->model);
       int result = move_element_to_space(select_data->canvas_data->model, element, space->uuid);
       if (result) {

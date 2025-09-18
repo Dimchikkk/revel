@@ -5,6 +5,7 @@
 #include "paper_note.h"
 #include "note.h"
 #include "space.h"
+#include "undo_manager.h"
 
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
@@ -35,6 +36,7 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   }
   // Link model and visual elements
   model_element->visual_element = create_visual_element(model_element, data);
+  undo_manager_push_create_action(data->undo_manager, model_element);
   gtk_widget_queue_draw(data->drawing_area);
 }
 
@@ -69,6 +71,7 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
 
   // Link model and visual elements
   model_element->visual_element = create_visual_element(model_element, data);
+  undo_manager_push_create_action(data->undo_manager, model_element);
   gtk_widget_queue_draw(data->drawing_area);
 }
 

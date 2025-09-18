@@ -3,11 +3,14 @@
 #include "element.h"
 #include "space.h"
 #include "model.h"
+#include "undo_manager.h"
 
 void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   if (!space_uuid) {
     return;
   }
+
+  undo_manager_reset(data->undo_manager);
 
   if (data->model->current_space_uuid) {
     g_free(data->model->current_space_uuid);
@@ -59,12 +62,7 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
 
         // Link model and visual elements
         model_element->visual_element = (Element*)space_element;
-
-        // Update next_z_index
-        if (model_element->position->z >= data->next_z_index) {
-          data->next_z_index = model_element->position->z + 1;
-        }
-
+        undo_manager_push_create_action(data->undo_manager, model_element);
         gtk_widget_queue_draw(data->drawing_area);
       } else {
         g_print("Space name cannot be empty\n");

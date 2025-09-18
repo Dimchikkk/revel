@@ -1,5 +1,6 @@
 main
 revel
 revel.db
-test_runner
+test_model_runner
+test_undo_runner
 *.o

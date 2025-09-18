@@ -15,6 +15,7 @@ Note taking brainstorming app
 * infinite canvas space
 * organize elements into nested spaces (infinite space depth)
 * move elements between spaces
+* undo/redo for the current space
 
 ![Revel Image](photo_2025-09-15_10-51-56.jpg)
 

@@ -4,6 +4,7 @@
 #include "element.h"
 #include <pango/pangocairo.h>
 #include <math.h>
+#include "undo_manager.h"
 
 static ElementVTable note_vtable = {
   .draw = note_draw,
@@ -42,9 +43,18 @@ Note* note_create(ElementPosition position,
   return note;
 }
 
-void note_on_text_view_focus_leave(GtkEventController *controller, gpointer user_data) {
-  Note *note = (Note*)user_data;
-  note_finish_editing((Element*)note);
+static void note_update_text_view_position(Note *note) {
+  if (!note->scrolled_window || !GTK_IS_WIDGET(note->scrolled_window)) return;
+
+  int screen_x, screen_y;
+  canvas_canvas_to_screen(note->base.canvas_data,
+                          note->base.x, note->base.y,
+                          &screen_x, &screen_y);
+  gtk_widget_set_margin_start(note->scrolled_window, screen_x - 10);
+  gtk_widget_set_margin_top(note->scrolled_window, screen_y - 10);
+  gtk_widget_set_size_request(note->scrolled_window,
+                              note->base.width + 20,
+                              note->base.height + 20);
 }
 
 gboolean note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
@@ -76,6 +86,10 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   double y = element->y;
   double width = element->width;
   double height = element->height;
+
+  if (note->editing) {
+    note_update_text_view_position(note);
+  }
 
   // Create rounded rectangle path
   cairo_new_path(cr);
@@ -218,10 +232,6 @@ void note_start_editing(Element *element, GtkWidget *overlay) {
     gtk_widget_set_margin_start(scrolled_window, screen_x - 10); // Adjust for padding
     gtk_widget_set_margin_top(scrolled_window, screen_y - 10);   // Adjust for padding
 
-    GtkEventController *focus_controller = gtk_event_controller_focus_new();
-    g_signal_connect(focus_controller, "leave", G_CALLBACK(note_on_text_view_focus_leave), note);
-    gtk_widget_add_controller(note->text_view, focus_controller);
-
     GtkEventController *key_controller = gtk_event_controller_key_new();
     g_signal_connect(key_controller, "key-pressed", G_CALLBACK(note_on_textview_key_press), note);
     gtk_widget_add_controller(note->text_view, key_controller);
@@ -247,11 +257,14 @@ void note_finish_editing(Element *element) {
   gtk_text_buffer_get_end_iter(buffer, &end);
 
   char *new_text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+
+  char* old_text = g_strdup(note->text);
   g_free(note->text);
   note->text = new_text;
 
   Model* model = note->base.canvas_data->model;
   ModelElement* model_element = model_get_by_visual(model, element);
+  undo_manager_push_text_action(note->base.canvas_data->undo_manager, model_element, old_text, new_text);
   model_update_text(model, model_element, new_text);
 
   note->editing = FALSE;
@@ -281,6 +294,9 @@ void note_update_position(Element *element, int x, int y, int z) {
     gtk_widget_set_margin_start(note->scrolled_window, screen_x - 10);
     gtk_widget_set_margin_top(note->scrolled_window, screen_y - 10);
   }
+  if (note->editing) {
+    note_update_text_view_position(note);
+  }
 }
 
 void note_update_size(Element *element, int width, int height) {
@@ -289,6 +305,9 @@ void note_update_size(Element *element, int width, int height) {
   element->height = height;
   if (note->scrolled_window) {
     gtk_widget_set_size_request(note->scrolled_window, width + 20, height + 20);
+  }
+  if (note->editing) {
+    note_update_text_view_position(note);
   }
 }
 

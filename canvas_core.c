@@ -8,6 +8,7 @@
 #include "note.h"
 #include <pango/pangocairo.h>
 #include "model.h"
+#include "undo_manager.h"
 
 static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
   const Element *element_a = (const Element*)a;
@@ -40,7 +41,12 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->offset_x = 0;
   data->offset_y = 0;
 
+
   data->model = model_new();
+  data->undo_manager = undo_manager_new(data->model);
+  data->drag_start_positions = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+  data->drag_start_sizes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+
 
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
