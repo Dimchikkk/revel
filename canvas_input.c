@@ -1,5 +1,7 @@
 #include "canvas_input.h"
 #include "canvas_core.h"
+#include "canvas_actions.h"
+#include "canvas_search.h"
 #include "canvas_spaces.h"
 #include "canvas_space_select.h"
 #include "element.h"
@@ -833,6 +835,18 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
 
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_v) {
     canvas_on_paste(data->drawing_area, data);
+    return TRUE;
+  }
+
+  // Add Ctrl+S for search
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_s) {
+    canvas_show_search_dialog(NULL, data);
+    return TRUE;
+  }
+
+  // Add Ctrl+N for new note
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_n) {
+    canvas_on_add_note(NULL, data);
     return TRUE;
   }
 
