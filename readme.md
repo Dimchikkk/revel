@@ -16,6 +16,7 @@ Note taking brainstorming app
 * organize elements into nested spaces (infinite space depth)
 * move elements between spaces
 * undo/redo for the current space
+* execute a simple DSL to programmatically create notes and connections
 
 ![Revel Image](photo_2025-09-15_10-51-56.jpg)
 

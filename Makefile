@@ -4,7 +4,8 @@ LIBS = `pkg-config --libs gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstream
 
 SRCS = main.c canvas_core.c canvas_input.c canvas_actions.c canvas_spaces.c \
        element.c paper_note.c note.c connection.c media_note.c space.c \
-       database.c model.c canvas_search.c canvas_space_select.c canvas_drop.c undo_manager.c
+       database.c model.c canvas_search.c canvas_space_select.c canvas_drop.c undo_manager.c \
+       dsl_executor.c
 OBJS = $(SRCS:.c=.o)
 TARGET = revel
 

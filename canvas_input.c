@@ -14,6 +14,7 @@
 #include <pango/pangocairo.h>
 #include <gtk/gtkdialog.h>
 #include "undo_manager.h"
+#include "dsl_executor.h"
 
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
@@ -847,6 +848,12 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
   // Add Ctrl+N for new note
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_n) {
     canvas_on_add_note(NULL, data);
+    return TRUE;
+  }
+
+  // Add Ctrl+E for DSL executor window
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_e) {
+    canvas_show_script_dialog(NULL, data);
     return TRUE;
   }
 
