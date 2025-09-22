@@ -840,9 +840,13 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         GMenu *menu_model = g_menu_new();
         g_menu_append(menu_model, "Change Space", "menu.change-space");
         g_menu_append(menu_model, "Change Color", "menu.change-color");
-        g_menu_append(menu_model, "Fork Element", "menu.fork");
-        g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
-        g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
+
+        if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE) {
+          g_menu_append(menu_model, "Fork Element", "menu.fork");
+          g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
+          g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
+        }
+
         g_menu_append(menu_model, "Delete", "menu.delete");
 
         // Create the popover menu
