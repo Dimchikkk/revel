@@ -17,7 +17,7 @@ Note taking brainstorming app
 * move elements between spaces
 * undo/redo for the current space
 * execute a simple DSL to programmatically create notes and connections
-* draw on canvas (keep Shift for straight lines)
+* draw on canvas (freehand drawing and straight line mode)
 
 ![Revel Image](photo_2025-09-15_10-51-56.jpg)
 
