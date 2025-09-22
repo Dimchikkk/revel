@@ -254,6 +254,7 @@ static void create_media_note_from_pixbuf(CanvasData *data, GdkPixbuf *pixbuf,
                                                        bg_color, position, size,
                                                        media,
                                                        NULL, NULL, -1, -1,
+                                                       NULL, 0,
                                                        filename);
 
     if (model_element) {
@@ -477,6 +478,7 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
                                                                  bg_color, position, size,
                                                                  media,
                                                                  NULL, NULL, -1, -1,
+                                                                 NULL, 0,
                                                                  filename);
 
               if (model_element) {

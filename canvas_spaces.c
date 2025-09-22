@@ -57,7 +57,7 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
           .height = 150,
         };
         ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
-        ModelElement *model_element = model_create_element(data->model, ELEMENT_SPACE, bg_color, position, size, media, 0, NULL, -1, -1, space_name);
+        ModelElement *model_element = model_create_element(data->model, ELEMENT_SPACE, bg_color, position, size, media, 0, NULL, -1, -1, NULL, 0, space_name);
         SpaceElement *space_element = space_element_create(position, bg_color, size, space_name, data);
 
         // Link model and visual elements

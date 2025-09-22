@@ -15,6 +15,7 @@
 #include <gtk/gtkdialog.h>
 #include "undo_manager.h"
 #include "dsl_executor.h"
+#include "freehand_drawing.h"
 
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
@@ -24,6 +25,28 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
   GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
   if (event) {
     data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  if (data->drawing_mode) {
+    int cx, cy;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
+    if (!data->current_drawing) {
+      ElementPosition position = { cx, cy, data->next_z_index++ };
+
+      gboolean is_straight_line = (data->modifier_state & GDK_SHIFT_MASK) != 0;
+      data->current_drawing = freehand_drawing_create(position, data->drawing_color,
+                                                      data->drawing_stroke_width, data);
+      freehand_drawing_add_point(data->current_drawing, cx, cy);
+
+      if (is_straight_line) {
+        // Store the start point for straight line
+        freehand_drawing_add_point(data->current_drawing, cx, cy);
+      }
+    }
+
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
   }
 
   Element *element = canvas_pick_element(data, (int)x, (int)y);
@@ -136,6 +159,7 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
                                                             ELEMENT_CONNECTION,
                                                             bg_color, position, size, media,
                                                             from_model->uuid, to_model->uuid, connection_start_point, cp,
+                                                            NULL, 0,
                                                             NULL);
             model_conn->visual_element = create_visual_element(model_conn, data);
 
@@ -202,6 +226,75 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 
 void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller));
+  if (event) {
+    data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  if (data->drawing_mode) {
+    if (data->modifier_state & GDK_SHIFT_MASK) {
+      canvas_set_cursor(data, data->line_cursor);
+    } else {
+      canvas_set_cursor(data, data->draw_cursor);
+    }
+  }
+
+  if (data->drawing_mode && data->current_drawing) {
+    int cx, cy;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
+    gboolean is_straight_line = (data->modifier_state & GDK_SHIFT_MASK) != 0;
+
+    if (is_straight_line) {
+      // For straight lines, update the second point
+      if (data->current_drawing->points->len >= 2) {
+        DrawingPoint *points = (DrawingPoint*)data->current_drawing->points->data;
+
+        // Calculate relative coordinates (relative to the drawing's position)
+        float rel_x = (float)(cx - data->current_drawing->base.x);
+        float rel_y = (float)(cy - data->current_drawing->base.y);
+
+        points[1].x = rel_x;
+        points[1].y = rel_y;
+
+        // Update bounding box
+        float min_x = MIN(points[0].x, rel_x);
+        float min_y = MIN(points[0].y, rel_y);
+        float max_x = MAX(points[0].x, rel_x);
+        float max_y = MAX(points[0].y, rel_y);
+
+        // Add padding for stroke width
+        float padding = data->current_drawing->stroke_width / 2.0f;
+        data->current_drawing->base.width = (int)(max_x - min_x + padding * 2);
+        data->current_drawing->base.height = (int)(max_y - min_y + padding * 2);
+
+        // Adjust position if needed to maintain the relative points
+        if (min_x < 0) {
+          data->current_drawing->base.x += (int)min_x;
+          // Adjust all points to be relative to new position
+          for (guint i = 0; i < data->current_drawing->points->len; i++) {
+            points[i].x -= min_x;
+          }
+          data->current_drawing->base.width += (int)(-min_x);
+        }
+
+        if (min_y < 0) {
+          data->current_drawing->base.y += (int)min_y;
+          for (guint i = 0; i < data->current_drawing->points->len; i++) {
+            points[i].y -= min_y;
+          }
+          data->current_drawing->base.height += (int)(-min_y);
+        }
+      }
+    } else {
+      freehand_drawing_add_point(data->current_drawing, cx, cy);
+    }
+
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
+  }
+
   canvas_update_cursor(data, (int)x, (int)y);
 
   if (data->panning) {
@@ -304,6 +397,57 @@ void canvas_on_right_click_release(GtkGestureClick *gesture, int n_press, double
 
 void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  if (data->drawing_mode && data->current_drawing) {
+    int cx, cy;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
+    gboolean is_straight_line = (data->modifier_state & GDK_SHIFT_MASK) != 0;
+
+    if (is_straight_line) {
+      if (data->current_drawing->points->len >= 2) {
+        DrawingPoint *points = (DrawingPoint*)data->current_drawing->points->data;
+
+        // Calculate relative coordinates
+        float rel_x = (float)(cx - data->current_drawing->base.x);
+        float rel_y = (float)(cy - data->current_drawing->base.y);
+
+        points[1].x = rel_x;
+        points[1].y = rel_y;
+      }
+    } else {
+      freehand_drawing_add_point(data->current_drawing, cx, cy);
+    }
+    ElementPosition position = {
+      .x = data->current_drawing->base.x,
+      .y = data->current_drawing->base.y,
+      .z = data->next_z_index++,
+    };
+    ElementColor bg_color = {
+      .r = data->current_drawing->base.bg_r,
+      .g = data->current_drawing->base.bg_g,
+      .b = data->current_drawing->base.bg_b,
+      .a = data->current_drawing->base.bg_a,
+    };
+    ElementSize size = { .width = data->current_drawing->base.width, .height = data->current_drawing->base.height };
+    ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
+    ModelElement *model_element = model_create_element(data->model,
+                                                       ELEMENT_FREEHAND_DRAWING,
+                                                       bg_color, position, size, media,
+                                                       0, NULL, -1, -1,
+                                                       data->current_drawing->points, data->current_drawing->stroke_width,
+                                                       NULL);
+
+    if (!model_element) {
+      g_printerr("Failed to create drawing element\n");
+      return;
+    }
+    model_element->visual_element = create_visual_element(model_element, data);
+    undo_manager_push_create_action(data->undo_manager, model_element);
+    data->current_drawing = NULL;
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
+  }
 
   if (data->selecting) {
     data->selecting = FALSE;
@@ -424,6 +568,16 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
 }
 
 void canvas_update_cursor(CanvasData *data, int x, int y) {
+  if (data->drawing_mode) {
+    // Use appropriate cursor based on shift state
+    if (data->modifier_state & GDK_SHIFT_MASK) {
+      canvas_set_cursor(data, data->line_cursor);
+    } else {
+      canvas_set_cursor(data, data->draw_cursor);
+    }
+    return;
+  }
+
   int cx, cy;
   canvas_screen_to_canvas(data, x, y, &cx, &cy);
 
@@ -776,6 +930,7 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
                                                        ELEMENT_MEDIA_FILE,
                                                        bg_color, position, size, media,
                                                        0, NULL, -1, -1,
+                                                       NULL, 0,
                                                        "");
 
     model_element->visual_element = create_visual_element(model_element, data);

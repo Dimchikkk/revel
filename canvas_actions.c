@@ -1,6 +1,7 @@
 #include "canvas_actions.h"
 #include "canvas_core.h"
 #include "canvas_spaces.h"
+#include "canvas_input.h"
 #include "element.h"
 #include "paper_note.h"
 #include "note.h"
@@ -29,6 +30,7 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
                                                      ELEMENT_PAPER_NOTE,
                                                      bg_color, position, size, media,
                                                      0, NULL, -1, -1,
+                                                     NULL, 0,
                                                      "Paper note");
   if (!model_element) {
     g_printerr("Failed to create paper note model element\n");
@@ -63,6 +65,7 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
                                                      ELEMENT_NOTE,
                                                      bg_color, position, size, media,
                                                      0, NULL, -1, -1,
+                                                     NULL, 0,
                                                      "Note");
   if (!model_element) {
     g_printerr("Failed to create note model element\n");
@@ -123,4 +126,39 @@ void canvas_on_add_space(GtkButton *button, gpointer user_data) {
 void canvas_on_go_back(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
   go_back_to_parent_space(data);
+}
+
+void canvas_toggle_drawing_mode(GtkButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  data->drawing_mode = !data->drawing_mode;
+
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), data->drawing_mode);
+
+  if (data->drawing_mode) {
+    canvas_set_cursor(data, data->draw_cursor);
+  } else {
+    canvas_set_cursor(data, data->default_cursor);
+    // Cancel any current drawing
+    if (data->current_drawing) {
+      data->current_drawing = NULL;
+    }
+  }
+
+  gtk_widget_queue_draw(data->drawing_area);
+}
+
+void on_drawing_color_changed(GtkColorButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &color);
+
+  data->drawing_color.r = color.red;
+  data->drawing_color.g = color.green;
+  data->drawing_color.b = color.blue;
+  data->drawing_color.a = color.alpha;
+}
+
+void on_drawing_width_changed(GtkSpinButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  data->drawing_stroke_width = gtk_spin_button_get_value_as_int(button);
 }

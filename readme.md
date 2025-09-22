@@ -11,12 +11,13 @@ Note taking brainstorming app
 * connect elements with arrows
 * paste images and annotate them
 * fork = independent copy. clone = by text or size, with properties kept in sync between elements
-* resize, move, delete, change color of elements
+* resize, move, delete, change background color of elements
 * infinite canvas space
 * organize elements into nested spaces (infinite space depth)
 * move elements between spaces
 * undo/redo for the current space
 * execute a simple DSL to programmatically create notes and connections
+* draw on canvas (keep Shift for straight lines)
 
 ![Revel Image](photo_2025-09-15_10-51-56.jpg)
 

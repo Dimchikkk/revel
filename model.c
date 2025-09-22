@@ -71,6 +71,10 @@ void model_element_free(ModelElement *element) {
   g_free(element->to_element_uuid);
   g_free(element->target_space_uuid);
 
+  if (element->drawing_points != NULL) {
+    g_array_free(element->drawing_points, TRUE);
+  }
+
   // Important: Don't free shared resources here!
   // They are managed by the respective hash tables and will be
   // automatically freed when the hash tables are destroyed
@@ -151,6 +155,7 @@ ModelElement* model_create_element(Model *model,
                                    ElementSize s,
                                    ElementMedia media,
                                    const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
+                                   const GArray *drawing_points, int stroke_width,
                                    const char *text) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_element\n");
@@ -197,7 +202,7 @@ ModelElement* model_create_element(Model *model,
     element->text = model_text;
   }
 
-  if (bg_color.r && bg_color.g && bg_color.b && bg_color.a) {
+  if (bg_color.a > 0.0) {
     ModelColor *color = g_new0(ModelColor, 1);
     color->id = -1;  // Temporary ID until saved to database
     color->r = bg_color.r;
@@ -246,6 +251,14 @@ ModelElement* model_create_element(Model *model,
     model_video->ref_count = 1;
     element->video = model_video;
   }
+
+  if (drawing_points != NULL) {
+    element->drawing_points = g_array_copy((GArray*)drawing_points);
+  } else {
+    element->drawing_points = NULL;
+  }
+
+  element->stroke_width = stroke_width;
 
   // Add the element to the model's elements hash table
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
@@ -453,6 +466,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
                               element->type->type,
                               bg_color, position, size, media,
                               element->from_element_uuid, element->to_element_uuid, element->from_point, element->to_point,
+                              NULL, 0,
                               element->text->text);
 }
 

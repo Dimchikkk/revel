@@ -282,8 +282,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
         ModelElement *model_element = model_create_element(
                                                            data->model, element_type, bg_color, position, size, media,
-                                                           0, NULL, -1, -1, clean_text
-                                                           );
+                                                           0, NULL, -1, -1,
+                                                           NULL, 0,
+                                                           clean_text);
 
         if (model_element) {
           model_element->visual_element = create_visual_element(model_element, data);
@@ -333,7 +334,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
       ModelElement *model_conn = model_create_element(
                                                       data->model, ELEMENT_CONNECTION, bg_color, position, size, media,
-                                                      from_model->uuid, to_model->uuid, from_point, to_point, NULL
+                                                      from_model->uuid, to_model->uuid, from_point, to_point,
+                                                      NULL, 0,
+                                                      NULL
                                                       );
 
       if (model_conn) {

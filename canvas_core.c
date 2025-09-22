@@ -3,6 +3,7 @@
 #include "canvas_spaces.h"
 #include "connection.h"
 #include "element.h"
+#include "freehand_drawing.h"
 #include "paper_note.h"
 #include "media_note.h"
 #include "note.h"
@@ -47,6 +48,12 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->drag_start_positions = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   data->drag_start_sizes = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
+  data->drawing_mode = FALSE;
+  data->current_drawing = NULL;
+  data->drawing_color = (ElementColor) INITIAL_DRAWING_COLOR;
+  data->drawing_stroke_width = 3;
+  data->draw_cursor = gdk_cursor_new_from_name("pencil", NULL);
+  data->line_cursor = gdk_cursor_new_from_name("crosshair", NULL);
 
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
@@ -138,6 +145,9 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
         case ELEMENT_CONNECTION:
           // Connections typically don't have text
           break;
+        case ELEMENT_FREEHAND_DRAWING:
+          // Freehand drawings don't have text
+          break;
         }
       }
 
@@ -165,6 +175,10 @@ void canvas_data_free(CanvasData *data) {
   if (data->connect_cursor) g_object_unref(data->connect_cursor);
 
   g_list_free(data->selected_elements);
+
+  if (data->draw_cursor) g_object_unref(data->draw_cursor);
+  if (data->line_cursor) g_object_unref(data->line_cursor);
+  if (data->current_drawing) element_free((Element*)data->current_drawing);
 
   // Don't free the model here - it's freed in canvas_on_app_shutdown
 
@@ -224,6 +238,11 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
 
   g_list_free(sorted_elements);
   g_list_free(visual_elements);
+
+  // Draw current drawing in progress
+  if (data->current_drawing) {
+    element_draw((Element*)data->current_drawing, cr, FALSE);
+  }
 
   if (data->selecting) {
     int start_cx, start_cy, current_cx, current_cy;
@@ -382,6 +401,27 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .duration = 0
       };
       visual_element = (Element*)media_note_create(position, bg_color, size, media, model_element->text->text, data);
+    }
+    break;
+  case ELEMENT_FREEHAND_DRAWING:
+    {
+      ElementColor stroke_color = {
+        .r = model_element->bg_color->r,
+        .g = model_element->bg_color->g,
+        .b = model_element->bg_color->b,
+        .a = model_element->bg_color->a,
+      };
+      int stroke_width = model_element->stroke_width > 0 ? model_element->stroke_width : 3;
+
+      visual_element = (Element*)freehand_drawing_create(position, stroke_color, stroke_width, data);
+
+      // Add all the drawing points
+      if (model_element->drawing_points) {
+        for (guint i = 0; i < model_element->drawing_points->len; i++) {
+          DrawingPoint *point = &g_array_index(model_element->drawing_points, DrawingPoint, i);
+          freehand_drawing_add_point((FreehandDrawing*)visual_element, model_element->position->x + point->x, model_element->position->y + point->y);
+        }
+      }
     }
     break;
 

@@ -6,6 +6,7 @@
 #include "space.h"
 #include "model.h"
 #include "connection.h"
+#include "freehand_drawing.h"
 
 typedef struct _CanvasData CanvasData;
 typedef struct _UndoManager UndoManager;
@@ -41,6 +42,13 @@ struct _CanvasData {
   UndoManager *undo_manager;
   GHashTable *drag_start_positions;
   GHashTable *drag_start_sizes;
+
+  gboolean drawing_mode;
+  FreehandDrawing *current_drawing;
+  ElementColor drawing_color;
+  int drawing_stroke_width;
+  GdkCursor *draw_cursor;
+  GdkCursor *line_cursor;
 
   Model *model;
 };

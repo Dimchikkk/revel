@@ -12,6 +12,7 @@ typedef enum {
   ELEMENT_CONNECTION,
   ELEMENT_SPACE,
   ELEMENT_MEDIA_FILE,
+  ELEMENT_FREEHAND_DRAWING,
 } ElementType;
 
 typedef enum {

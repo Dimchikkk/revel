@@ -1,17 +1,16 @@
 - [new feature] ability to change text color, font, size
-- [new feature] ability to write text above arrows
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [fix] support mp4 files without audio channel
 - [new feature] time-travel on row click in log window
 - [new feature] allow choosing DB file
 - [improvement] disable back to parent button if at root space
 - [new feature] drawing shapes like arrows, cylinder (vertical / horizontal)
-- [new feature] drawing using pencil feature
-- [improvement] put text in center of note
+- [improvement] ability to set text alignment
 - [improvement] different type of connections
 - [new feature] zoom out feature
 - [new feature] save images/videos to file via context menu
 - [improvement] extend DSL to support images, videos, spaces
+- [new feature] ability to write text above arrows
 - [idea to explore] connect connections
 - [idea to explore] collaborative editing
 - [idea to explore] different type of spaces (e.g. task board space, music player space)

@@ -4,3 +4,4 @@ revel.db
 test_model_runner
 test_undo_runner
 *.o
+.gdb_history

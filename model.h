@@ -73,6 +73,8 @@ struct _ModelImage {
   gint ref_count;
 };
 
+typedef graphene_point_t DrawingPoint;
+
 struct _ModelElement {
   gchar* uuid;                // UUID string for the element
   gchar* space_uuid;
@@ -91,6 +93,9 @@ struct _ModelElement {
   gchar *to_element_uuid;
   gint from_point;
   gint to_point;
+
+  gint stroke_width;
+  GArray* drawing_points; // Array of DrawingPoint
 
   // For space elements
   gchar *target_space_uuid;
@@ -129,6 +134,7 @@ ModelElement* model_create_element(Model *model,
                                    ElementSize size,
                                    ElementMedia media,
                                    const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
+                                   const GArray *drawing_points, int stroke_width,
                                    const char *text);
 
 // Fork/cloning

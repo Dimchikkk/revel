@@ -4,6 +4,7 @@
 #include "canvas_spaces.h"
 #include "canvas_search.h"
 #include "canvas_drop.h"
+#include "freehand_drawing.h"
 #include "undo_manager.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
@@ -33,6 +34,18 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   GtkWidget *search_btn = gtk_button_new_with_label("Search");
   gtk_box_append(GTK_BOX(toolbar), search_btn);
+
+  GtkWidget *drawing_btn = gtk_toggle_button_new_with_label("Draw");
+  GtkWidget *color_btn = gtk_color_button_new();
+  GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 10, 1);
+
+  gtk_box_append(GTK_BOX(toolbar), drawing_btn);
+  gtk_box_append(GTK_BOX(toolbar), color_btn);
+  gtk_box_append(GTK_BOX(toolbar), width_spin);
+
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), 3);
+  GdkRGBA initial_color = INITIAL_DRAWING_COLOR;
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_btn), &initial_color);
 
   GtkWidget *overlay = gtk_overlay_new();
   gtk_widget_set_hexpand(overlay, TRUE);
@@ -78,6 +91,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
   g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);
   g_signal_connect(search_btn, "clicked", G_CALLBACK(canvas_show_search_dialog), data);
+  g_signal_connect(drawing_btn, "clicked", G_CALLBACK(canvas_toggle_drawing_mode), data);
+  g_signal_connect(color_btn, "color-set", G_CALLBACK(on_drawing_color_changed), data);
+  g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);
   gtk_window_present(GTK_WINDOW(window));
