@@ -21,17 +21,45 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     .b = 0.8,
     .a = 1.0,
   };
+  ElementColor text_color = {
+    .r = 0.2,
+    .g = 0.2,
+    .b = 0.2,
+    .a = 1.0,
+  };
   ElementSize size = {
     .width = 200,
     .height = 150,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
-  ModelElement *model_element = model_create_element(data->model,
-                                                     ELEMENT_PAPER_NOTE,
-                                                     bg_color, position, size, media,
-                                                     0, NULL, -1, -1,
-                                                     NULL, 0,
-                                                     "Paper note");
+  ElementConnection connection = {
+    .from_element_uuid = NULL,
+    .to_element_uuid = NULL,
+    .from_point = -1,
+    .to_point = -1,
+  };
+  ElementDrawing drawing = {
+    .drawing_points = NULL,
+    .stroke_width = 0,
+  };
+  ElementText text = {
+    .text = "",
+    .text_color = text_color,
+    .font_description = g_strdup("Sans 12"),
+  };
+  ElementConfig config = {
+    .type = ELEMENT_PAPER_NOTE,
+    .bg_color = bg_color,
+    .position = position,
+    .size = size,
+    .media = media,
+    .drawing = drawing,
+    .connection = connection,
+    .text = text,
+  };
+
+
+  ModelElement *model_element = model_create_element(data->model, config);
   if (!model_element) {
     g_printerr("Failed to create paper note model element\n");
     return;
@@ -56,17 +84,46 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     .b = 1.0,
     .a = 1.0,
   };
+  ElementColor text_color = {
+    .r = 0.2,
+    .g = 0.2,
+    .b = 0.2,
+    .a = 1.0,
+  };
   ElementSize size = {
     .width = 200,
     .height = 150,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
-  ModelElement *model_element = model_create_element(data->model,
-                                                     ELEMENT_NOTE,
-                                                     bg_color, position, size, media,
-                                                     0, NULL, -1, -1,
-                                                     NULL, 0,
-                                                     "Note");
+  ElementConnection connection = {
+    .from_element_uuid = NULL,
+    .to_element_uuid = NULL,
+    .from_point = -1,
+    .to_point = -1,
+  };
+  ElementDrawing drawing = {
+    .drawing_points = NULL,
+    .stroke_width = 0,
+  };
+  ElementText text = {
+    .text = "",
+    .text_color = text_color,
+    .font_description = g_strdup("Sans 12"),
+  };
+  ElementConfig config = {
+    .type = ELEMENT_NOTE,
+    .bg_color = bg_color,
+    .position = position,
+    .size = size,
+    .media = media,
+    .drawing = drawing,
+    .connection = connection,
+    .text = text,
+  };
+
+
+  ModelElement *model_element = model_create_element(data->model, config);
+
   if (!model_element) {
     g_printerr("Failed to create note model element\n");
     return;

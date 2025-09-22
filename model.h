@@ -45,6 +45,11 @@ struct _ModelType {
 struct _ModelText {
   gint id;
   gchar *text;
+  gdouble r;
+  gdouble g;
+  gdouble b;
+  gdouble a;
+  gchar *font_description;
   gint ref_count;
 };
 
@@ -127,15 +132,7 @@ int model_get_parent_id(Model *model, char **space_parent_id);
 int model_get_amount_of_elements(Model *model, const char *space_uuid);
 
 // Creation
-ModelElement* model_create_element(Model *model,
-                                   ElementType element_type,
-                                   ElementColor bg_color,
-                                   ElementPosition position,
-                                   ElementSize size,
-                                   ElementMedia media,
-                                   const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
-                                   const GArray *drawing_points, int stroke_width,
-                                   const char *text);
+ModelElement* model_create_element(Model *model, ElementConfig config);
 
 // Fork/cloning
 ModelElement* model_element_fork(Model *model, ModelElement *element);
@@ -144,6 +141,8 @@ ModelElement* model_element_clone_by_size(Model *model, ModelElement *element);
 
 // Updating props
 int model_update_text(Model *model, ModelElement *element, const char *text);
+int model_update_text_color(Model *model, ModelElement *element, double r, double g, double b, double a);
+int model_update_font(Model *model, ModelElement *element, const char *font_description);
 int model_update_position(Model *model, ModelElement *element, int x, int y, int z);
 int model_update_size(Model *model, ModelElement *element, int width, int height);
 // This method slightly inconsistent with other update methods: it doesn't create ModelColor if it is NULL

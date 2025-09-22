@@ -149,18 +149,45 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
               .b = 1.0,
               .a = 1.0,
             };
+            ElementColor text_color = {
+              .r = 0.0,
+              .g = 0.0,
+              .b = 0.0,
+              .a = 0.0,
+            };
             ElementSize size = {
               .width = 1,
               .height = 1,
             };
             ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
+            ElementConnection connection = {
+              .from_element_uuid = from_model->uuid,
+              .to_element_uuid = to_model->uuid,
+              .from_point = connection_start_point,
+              .to_point = cp,
+            };
+            ElementDrawing drawing = {
+              .drawing_points = NULL,
+              .stroke_width = 0,
+            };
+            ElementText text = {
+              .text = NULL,
+              .text_color = text_color,
+              .font_description = NULL,
+            };
+            ElementConfig config = {
+              .type = ELEMENT_CONNECTION,
+              .bg_color = bg_color,
+              .position = position,
+              .size = size,
+              .media = media,
+              .drawing = drawing,
+              .connection = connection,
+              .text = text,
+            };
 
-            ModelElement *model_conn = model_create_element(data->model,
-                                                            ELEMENT_CONNECTION,
-                                                            bg_color, position, size, media,
-                                                            from_model->uuid, to_model->uuid, connection_start_point, cp,
-                                                            NULL, 0,
-                                                            NULL);
+            ModelElement *model_conn = model_create_element(data->model, config);
+
             model_conn->visual_element = create_visual_element(model_conn, data);
 
             // Push undo action for connection creation
@@ -429,14 +456,45 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
       .b = data->current_drawing->base.bg_b,
       .a = data->current_drawing->base.bg_a,
     };
-    ElementSize size = { .width = data->current_drawing->base.width, .height = data->current_drawing->base.height };
+    ElementSize size = {
+      .width = data->current_drawing->base.width,
+      .height = data->current_drawing->base.height
+    };
+    ElementColor text_color = {
+      .r = 0,
+      .g = 0,
+      .b = 0,
+      .a = 0,
+    };
     ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
-    ModelElement *model_element = model_create_element(data->model,
-                                                       ELEMENT_FREEHAND_DRAWING,
-                                                       bg_color, position, size, media,
-                                                       0, NULL, -1, -1,
-                                                       data->current_drawing->points, data->current_drawing->stroke_width,
-                                                       NULL);
+    ElementConnection connection = {
+      .from_element_uuid = NULL,
+      .to_element_uuid = NULL,
+      .from_point = -1,
+      .to_point = -1,
+    };
+    ElementDrawing drawing = {
+      .drawing_points = data->current_drawing->points,
+      .stroke_width = data->current_drawing->stroke_width,
+    };
+    ElementText text = {
+      .text = NULL,
+      .text_color = text_color,
+      .font_description = NULL,
+    };
+    ElementConfig config = {
+      .type = ELEMENT_FREEHAND_DRAWING,
+      .bg_color = bg_color,
+      .position = position,
+      .size = size,
+      .media = media,
+      .drawing = drawing,
+      .connection = connection,
+      .text = text,
+    };
+
+
+    ModelElement *model_element = model_create_element(data->model, config);
 
     if (!model_element) {
       g_printerr("Failed to create drawing element\n");
@@ -924,18 +982,46 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
       .b = 1.0,
       .a = 1.0,
     };
+    ElementColor text_color = {
+      .r = 1.0,
+      .g = 1.0,
+      .b = 1.0,
+      .a = 1.0,
+    };
     int scale = gtk_widget_get_scale_factor(GTK_WIDGET(data->drawing_area));
     ElementSize size = {
       .width = gdk_pixbuf_get_width(pixbuf) / scale,
       .height = gdk_pixbuf_get_height(pixbuf) / scale,
     };
     ElementMedia media = { .type = MEDIA_TYPE_IMAGE, .image_data = (unsigned char*) buffer, .image_size = buffer_size, .video_data = NULL, .video_size = 0, .duration = 0 };
-    ModelElement *model_element = model_create_element(data->model,
-                                                       ELEMENT_MEDIA_FILE,
-                                                       bg_color, position, size, media,
-                                                       0, NULL, -1, -1,
-                                                       NULL, 0,
-                                                       "");
+    ElementConnection connection = {
+      .from_element_uuid = NULL,
+      .to_element_uuid = NULL,
+      .from_point = -1,
+      .to_point = -1,
+    };
+    ElementDrawing drawing = {
+      .drawing_points = NULL,
+      .stroke_width = 0,
+    };
+    ElementText text = {
+      .text = "",
+      .text_color = text_color,
+      .font_description = g_strdup("Sans 10"),
+    };
+    ElementConfig config = {
+      .type = ELEMENT_MEDIA_FILE,
+      .bg_color = bg_color,
+      .position = position,
+      .size = size,
+      .media = media,
+      .drawing = drawing,
+      .connection = connection,
+      .text = text,
+    };
+
+
+    ModelElement *model_element = model_create_element(data->model, config);
 
     model_element->visual_element = create_visual_element(model_element, data);
 

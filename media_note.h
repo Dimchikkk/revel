@@ -11,6 +11,8 @@ typedef struct {
   MediaType media_type;
   GdkPixbuf *pixbuf;
   char *text;
+  double text_r, text_g, text_b, text_a;
+  char* font_description;
   GtkWidget *text_view;
   gboolean editing;
 
@@ -29,7 +31,7 @@ MediaNote* media_note_create(ElementPosition position,
                              ElementColor bg_color,
                              ElementSize size,
                              ElementMedia media,
-                             const char *text,
+                             ElementText text,
                              CanvasData *data);
 void media_note_finish_editing(Element *element);
 void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected);

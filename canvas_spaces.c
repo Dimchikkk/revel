@@ -52,16 +52,45 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
           .b = 1.0,
           .a = 1.0,
         };
+        ElementColor text_color = {
+          .r = 0.1,
+          .g = 0.1,
+          .b = 0.1,
+          .a = 1.0,
+        };
         ElementSize size = {
           .width = 200,
           .height = 150,
         };
         ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
-        ModelElement *model_element = model_create_element(data->model, ELEMENT_SPACE, bg_color, position, size, media, 0, NULL, -1, -1, NULL, 0, space_name);
-        SpaceElement *space_element = space_element_create(position, bg_color, size, space_name, data);
+        ElementConnection connection = {
+          .from_element_uuid = NULL,
+          .to_element_uuid = NULL,
+          .from_point = -1,
+          .to_point = -1,
+        };
+        ElementDrawing drawing = {
+          .drawing_points = NULL,
+          .stroke_width = 0,
+        };
+        ElementText text = {
+          .text = g_strdup(space_name),
+          .text_color = text_color,
+          .font_description = g_strdup("Sans Bold 12"),
+        };
+        ElementConfig config = {
+          .type = ELEMENT_SPACE,
+          .bg_color = bg_color,
+          .position = position,
+          .size = size,
+          .media = media,
+          .drawing = drawing,
+          .connection = connection,
+          .text = text,
+        };
 
-        // Link model and visual elements
-        model_element->visual_element = (Element*)space_element;
+        ModelElement *model_element = model_create_element(data->model, config);
+        model_element->visual_element = create_visual_element(model_element, data);
         undo_manager_push_create_action(data->undo_manager, model_element);
         gtk_widget_queue_draw(data->drawing_area);
       } else {

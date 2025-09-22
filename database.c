@@ -81,6 +81,11 @@ int database_create_tables(sqlite3 *db) {
     "CREATE TABLE IF NOT EXISTS text_refs ("
     "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
     "    text TEXT NOT NULL,"
+    "    text_r REAL NOT NULL DEFAULT 0.1,"
+    "    text_g REAL NOT NULL DEFAULT 0.1,"
+    "    text_b REAL NOT NULL DEFAULT 0.1,"
+    "    text_a REAL NOT NULL DEFAULT 1.0,"
+    "    font_description TEXT DEFAULT 'Sans Bold 12',"
     "    ref_count INTEGER DEFAULT 1,"
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"
@@ -265,9 +270,12 @@ int database_is_valid_uuid(const char *uuid_str) {
   return uuid_parse(uuid_str, uuid) == 0 ? 1 : 0;
 }
 
-// Text reference operations
-int database_create_text_ref(sqlite3 *db, const char *text, int *text_id) {
-  const char *sql = "INSERT INTO text_refs (text) VALUES (?)";
+int database_create_text_ref(sqlite3 *db,
+                             const char *text,
+                             double text_r, double text_g, double text_b, double text_a,
+                             const char *font_description,
+                             int *text_id) {
+  const char *sql = "INSERT INTO text_refs (text, text_r, text_g, text_b, text_a, font_description) VALUES (?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -276,6 +284,11 @@ int database_create_text_ref(sqlite3 *db, const char *text, int *text_id) {
   }
 
   sqlite3_bind_text(stmt, 1, text, -1, SQLITE_STATIC);
+  sqlite3_bind_double(stmt, 2, text_r);
+  sqlite3_bind_double(stmt, 3, text_g);
+  sqlite3_bind_double(stmt, 4, text_b);
+  sqlite3_bind_double(stmt, 5, text_a);
+  sqlite3_bind_text(stmt, 6, font_description, -1, SQLITE_STATIC);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create text: %s\n", sqlite3_errmsg(db));
@@ -297,7 +310,7 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
     return 0; // Error - invalid input
   }
 
-  const char *sql = "SELECT text, ref_count FROM text_refs WHERE id = ?";
+  const char *sql = "SELECT text, text_r, text_g, text_b, text_a, font_description, ref_count FROM text_refs WHERE id = ?";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -311,7 +324,19 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
     ModelText *model_text = g_new0(ModelText, 1);
     model_text->id = text_id;
     model_text->text = g_strdup((const char*)sqlite3_column_text(stmt, 0));
-    model_text->ref_count = sqlite3_column_int(stmt, 1);
+    model_text->r = sqlite3_column_double(stmt, 1);
+    model_text->g = sqlite3_column_double(stmt, 2);
+    model_text->b = sqlite3_column_double(stmt, 3);
+    model_text->a = sqlite3_column_double(stmt, 4);
+
+    const char *font_desc = (const char*)sqlite3_column_text(stmt, 5);
+    if (font_desc) {
+      model_text->font_description = g_strdup(font_desc);
+    } else {
+      model_text->font_description = g_strdup("Sans Bold 12"); // Default
+    }
+
+    model_text->ref_count = sqlite3_column_int(stmt, 6);
 
     *text = model_text;
     sqlite3_finalize(stmt);
@@ -625,8 +650,11 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   // Handle text reference (optional)
   if (element->text) {
     if (element->text->id == -1) {
-      // Create new text reference
-      if (!database_create_text_ref(db, element->text->text, &text_id)) return 0;
+      // Create new text reference with color and font
+      if (!database_create_text_ref(db, element->text->text,
+                                   element->text->r, element->text->g,
+                                   element->text->b, element->text->a,
+                                   element->text->font_description, &text_id)) return 0;
       element->text->id = text_id;
     } else {
       // Update existing text reference
@@ -1510,7 +1538,6 @@ int database_delete_element(sqlite3 *db, const char *element_uuid) {
   return 1;
 }
 
-// Type reference update with ModelType struct
 int database_update_type_ref(sqlite3 *db, ModelType *type) {
   if (type->id <= 0) {
     fprintf(stderr, "Error: Invalid type_id (%d) in database_update_type_ref\n", type->id);
@@ -1539,7 +1566,6 @@ int database_update_type_ref(sqlite3 *db, ModelType *type) {
   return 1;
 }
 
-// Position reference update with ModelPosition struct
 int database_update_position_ref(sqlite3 *db, ModelPosition *position) {
   if (position->id <= 0) {
     fprintf(stderr, "Error: Invalid position_id (%d) in database_update_position_ref\n", position->id);
@@ -1570,7 +1596,6 @@ int database_update_position_ref(sqlite3 *db, ModelPosition *position) {
   return 1;
 }
 
-// Size reference update with ModelSize struct
 int database_update_size_ref(sqlite3 *db, ModelSize *size) {
   if (size->id <= 0) {
     fprintf(stderr, "Error: Invalid size_id (%d) in database_update_size_ref\n", size->id);
@@ -1600,14 +1625,13 @@ int database_update_size_ref(sqlite3 *db, ModelSize *size) {
   return 1;
 }
 
-// Text reference update with ModelText struct
 int database_update_text_ref(sqlite3 *db, ModelText *text) {
   if (text->id <= 0) {
     fprintf(stderr, "Error: Invalid text_id (%d) in database_update_text_ref\n", text->id);
     return 0;
   }
 
-  const char *sql = "UPDATE text_refs SET text = ?, ref_count = ? WHERE id = ?";
+  const char *sql = "UPDATE text_refs SET text = ?, text_r = ?, text_g = ?, text_b = ?, text_a = ?, font_description = ?, ref_count = ? WHERE id = ?";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -1616,8 +1640,13 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
   }
 
   sqlite3_bind_text(stmt, 1, text->text, -1, SQLITE_STATIC);
-  sqlite3_bind_int(stmt, 2, text->ref_count);
-  sqlite3_bind_int(stmt, 3, text->id);
+  sqlite3_bind_double(stmt, 2, text->r);
+  sqlite3_bind_double(stmt, 3, text->g);
+  sqlite3_bind_double(stmt, 4, text->b);
+  sqlite3_bind_double(stmt, 5, text->a);
+  sqlite3_bind_text(stmt, 6, text->font_description, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 7, text->ref_count);
+  sqlite3_bind_int(stmt, 8, text->id);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to update text: %s\n", sqlite3_errmsg(db));
@@ -1629,7 +1658,6 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
   return 1;
 }
 
-// Color reference update with ModelColor struct
 int database_update_color_ref(sqlite3 *db, ModelColor *color) {
   if (color->id <= 0) {
     fprintf(stderr, "Error: Invalid bg_color_id (%d) in database_update_color_ref\n", color->id);

@@ -1,4 +1,4 @@
-- [new feature] ability to change text color, font, size
+- [improvement] update DSL to support text color and font description
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [fix] support mp4 files without audio channel
 - [new feature] time-travel on row click in log window

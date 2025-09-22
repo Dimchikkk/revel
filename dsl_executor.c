@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <math.h>
 #include "canvas_core.h"
+#include "element.h"
 #include "undo_manager.h"
 #include "dsl_executor.h"
 
@@ -276,15 +277,38 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
         ElementPosition position = { .x = x, .y = y, .z = data->next_z_index++ };
         ElementColor bg_color = { .r = r, .g = g, .b = b, .a = a };
+        ElementColor text_color = { .r = 0.1, .g = 0.1, .b = 0.1, .a = 1.0 };
         ElementSize size = { .width = width, .height = height };
         ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0,
                                .video_data = NULL, .video_size = 0, .duration = 0 };
+        ElementConnection connection = {
+          .from_element_uuid = NULL,
+          .to_element_uuid = NULL,
+          .from_point = -1,
+          .to_point = -1,
+        };
+        ElementDrawing drawing = {
+          .drawing_points = NULL,
+          .stroke_width = 0,
+        };
+        ElementText text = {
+          .text = clean_text,
+          .text_color = text_color,
+          .font_description = "Sans 12",
+        };
 
-        ModelElement *model_element = model_create_element(
-                                                           data->model, element_type, bg_color, position, size, media,
-                                                           0, NULL, -1, -1,
-                                                           NULL, 0,
-                                                           clean_text);
+        ElementConfig config = {
+          .type = element_type,
+          .bg_color = bg_color,
+          .position = position,
+          .size = size,
+          .media = media,
+          .drawing = drawing,
+          .connection = connection,
+          .text = text,
+        };
+
+        ModelElement *model_element = model_create_element(data->model, config);
 
         if (model_element) {
           model_element->visual_element = create_visual_element(model_element, data);
@@ -328,16 +352,37 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .z = MAX(from_model->position->z, to_model->position->z) - 1 // Place connection below notes
       };
       ElementColor bg_color = { .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
+      ElementColor text_color = { .r = 0., .g = 0., .b = 0., .a = 0.0 };
       ElementSize size = { .width = 1, .height = 1 };
       ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0,
                              .video_data = NULL, .video_size = 0, .duration = 0 };
+      ElementConnection connection = {
+        .from_element_uuid = from_model->uuid,
+        .to_element_uuid = to_model->uuid,
+        .from_point = from_point,
+        .to_point = to_point,
+      };
+      ElementDrawing drawing = {
+        .drawing_points = NULL,
+        .stroke_width = 0,
+      };
+      ElementText text = {
+        .text = NULL,
+        .text_color = text_color,
+        .font_description = NULL,
+      };
+      ElementConfig config = {
+        .type = ELEMENT_CONNECTION,
+        .bg_color = bg_color,
+        .position = position,
+        .size = size,
+        .media = media,
+        .drawing = drawing,
+        .connection = connection,
+        .text = text,
+      };
 
-      ModelElement *model_conn = model_create_element(
-                                                      data->model, ELEMENT_CONNECTION, bg_color, position, size, media,
-                                                      from_model->uuid, to_model->uuid, from_point, to_point,
-                                                      NULL, 0,
-                                                      NULL
-                                                      );
+      ModelElement *model_conn = model_create_element(data->model, config);
 
       if (model_conn) {
         model_conn->visual_element = create_visual_element(model_conn, data);

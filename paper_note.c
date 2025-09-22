@@ -20,7 +20,7 @@ static ElementVTable paper_note_vtable = {
 PaperNote* paper_note_create(ElementPosition position,
                              ElementColor bg_color,
                              ElementSize size,
-                             const char *text,
+                             ElementText text,
                              CanvasData *data) {
   PaperNote *note = g_new0(PaperNote, 1);
   note->base.type = ELEMENT_PAPER_NOTE;
@@ -34,11 +34,16 @@ PaperNote* paper_note_create(ElementPosition position,
   note->base.bg_a = bg_color.a;
   note->base.width = size.width;
   note->base.height = size.height;
-  note->text = g_strdup(text);
+  note->text = g_strdup(text.text);
   note->text_view = NULL;
   note->scrolled_window = NULL;
   note->editing = FALSE;
   note->base.canvas_data = data;
+  note->text_r = text.text_color.r;
+  note->text_g = text.text_color.g;
+  note->text_b = text.text_color.g;
+  note->text_a = text.text_color.a;
+  note->font_description = g_strdup(text.font_description);
   return note;
 }
 
@@ -113,7 +118,7 @@ void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   if (!note->editing) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *font_desc = pango_font_description_from_string("Sans 12");
+    PangoFontDescription *font_desc = pango_font_description_from_string(note->font_description);
     pango_layout_set_font_description(layout, font_desc);
     pango_font_description_free(font_desc);
 
@@ -125,15 +130,15 @@ void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
+    cairo_set_source_rgba(cr, note->text_r, note->text_g, note->text_b, note->text_a);
+
     if (text_height <= element->height - 10) {
       cairo_move_to(cr, element->x + 5, element->y + 5);
-      cairo_set_source_rgb(cr, 0, 0, 0);
       pango_cairo_show_layout(cr, layout);
     } else {
       pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
       pango_layout_set_height(layout, (element->height - 10) * PANGO_SCALE);
       cairo_move_to(cr, element->x + 5, element->y + 5);
-      cairo_set_source_rgb(cr, 0, 0, 0);
       pango_cairo_show_layout(cr, layout);
     }
 
@@ -295,6 +300,7 @@ void paper_note_update_size(Element *element, int width, int height) {
 void paper_note_free(Element *element) {
   PaperNote *note = (PaperNote*)element;
   if (note->text) g_free(note->text);
+  if (note->font_description) g_free(note->font_description);
   if (note->scrolled_window && GTK_IS_WIDGET(note->scrolled_window) &&
       gtk_widget_get_parent(note->scrolled_window)) {
     gtk_widget_unparent(note->scrolled_window);

@@ -53,6 +53,35 @@ typedef struct {
   int duration;
 } ElementMedia;
 
+typedef struct {
+  char* text;
+  ElementColor text_color;
+  char* font_description;
+} ElementText;
+
+typedef struct {
+  char* from_element_uuid;
+  char* to_element_uuid;
+  int from_point;
+  int to_point;
+} ElementConnection;
+
+typedef struct {
+  GArray* drawing_points;
+  int stroke_width;
+} ElementDrawing;
+
+typedef struct {
+  ElementType type;
+  ElementColor bg_color;
+  ElementPosition position;
+  ElementSize size;
+  ElementMedia media;
+  ElementDrawing drawing;
+  ElementConnection connection;
+  ElementText text;
+} ElementConfig;
+
 struct Element {
   ElementType type;
   ElementVTable *vtable;

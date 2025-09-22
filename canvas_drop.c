@@ -223,6 +223,12 @@ static void create_media_note_from_pixbuf(CanvasData *data, GdkPixbuf *pixbuf,
       .b = 1.0,
       .a = 1.0,
     };
+    ElementColor text_color = {
+      .r = 1.0,
+      .g = 1.0,
+      .b = 1.0,
+      .a = 1.0,
+    };
     int scale = gtk_widget_get_scale_factor(GTK_WIDGET(data->drawing_area));
     ElementSize size = {
       .width = gdk_pixbuf_get_width(pixbuf) / scale,
@@ -247,15 +253,33 @@ static void create_media_note_from_pixbuf(CanvasData *data, GdkPixbuf *pixbuf,
       .video_size = video_size,              // Video size
       .duration = (int)duration_seconds      // Duration in seconds
     };
+    ElementConnection connection = {
+      .from_element_uuid = NULL,
+      .to_element_uuid = NULL,
+      .from_point = -1,
+      .to_point = -1,
+    };
+    ElementDrawing drawing = {
+      .drawing_points = NULL,
+      .stroke_width = 0,
+    };
+    ElementText text = {
+      .text = g_strdup(filename),
+      .text_color = text_color,
+      .font_description = g_strdup("Sans 10"),
+    };
+    ElementConfig config = {
+      .type = ELEMENT_MEDIA_FILE,
+      .bg_color = bg_color,
+      .position = position,
+      .size = size,
+      .media = media,
+      .drawing = drawing,
+      .connection = connection,
+      .text = text,
+    };
 
-    // Create video note element
-    ModelElement *model_element = model_create_element(data->model,
-                                                       ELEMENT_MEDIA_FILE,
-                                                       bg_color, position, size,
-                                                       media,
-                                                       NULL, NULL, -1, -1,
-                                                       NULL, 0,
-                                                       filename);
+    ModelElement *model_element = model_create_element(data->model, config);
 
     if (model_element) {
       model_element->visual_element = create_visual_element(model_element, data);
@@ -456,6 +480,12 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
                 .b = 1.0,
                 .a = 1.0,
               };
+              ElementColor text_color = {
+                .r = 1.0,
+                .g = 1.0,
+                .b = 1.0,
+                .a = 1.0,
+              };
               int scale = gtk_widget_get_scale_factor(GTK_WIDGET(data->drawing_area));
               ElementSize size = {
                 .width = gdk_pixbuf_get_width(pixbuf) / scale,
@@ -472,14 +502,34 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
                 .duration = 0
               };
 
+              ElementConnection connection = {
+                .from_element_uuid = NULL,
+                .to_element_uuid = NULL,
+                .from_point = -1,
+                .to_point = -1,
+              };
+              ElementDrawing drawing = {
+                .drawing_points = NULL,
+                .stroke_width = 0,
+              };
+              ElementText text = {
+                .text = filename,
+                .text_color = text_color,
+                .font_description = g_strdup("Sans 10"),
+              };
+              ElementConfig config = {
+                .type = ELEMENT_MEDIA_FILE,
+                .bg_color = bg_color,
+                .position = position,
+                .size = size,
+                .media = media,
+                .drawing = drawing,
+                .connection = connection,
+                .text = text,
+              };
+
               // Create image note element
-              ModelElement *model_element = model_create_element(data->model,
-                                                                 ELEMENT_MEDIA_FILE,
-                                                                 bg_color, position, size,
-                                                                 media,
-                                                                 NULL, NULL, -1, -1,
-                                                                 NULL, 0,
-                                                                 filename);
+              ModelElement *model_element = model_create_element(data->model, config);
 
               if (model_element) {
                 model_element->visual_element = create_visual_element(model_element, data);

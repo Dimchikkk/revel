@@ -9,6 +9,7 @@
 #include "note.h"
 #include <pango/pangocairo.h>
 #include "model.h"
+#include "space.h"
 #include "undo_manager.h"
 
 static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
@@ -65,6 +66,32 @@ GList* sort_model_elements_for_serialization(GHashTable *elements_table) {
   return g_list_sort(elements_list, (GCompareFunc)model_compare_for_saving_loading);
 }
 
+static void update_text_base(char **dest_text,
+                             char **dest_font,
+                             double *r, double *g, double *b, double *a,
+                             ModelText *src_text) {
+  if (!src_text || !src_text->text) return;
+
+  if (*dest_text == NULL ||
+      strcmp(*dest_text, src_text->text) != 0 ||
+      *r != src_text->r || *g != src_text->g ||
+      *b != src_text->b || *a != src_text->a ||
+      *dest_font == NULL ||
+      strcmp(*dest_font, src_text->font_description) != 0) {
+
+    g_free(*dest_text);
+    *dest_text = g_strdup(src_text->text);
+
+    g_free(*dest_font);
+    *dest_font = g_strdup(src_text->font_description);
+
+    *r = src_text->r;
+    *g = src_text->g;
+    *b = src_text->b;
+    *a = src_text->a;
+  }
+}
+
 void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) {
   GList *iter = sorted_elements;
   while (iter != NULL) {
@@ -112,34 +139,34 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
         switch (visual_element->type) {
         case ELEMENT_NOTE: {
           Note *note = (Note *)visual_element;
-          if (note->text == NULL || strcmp(note->text, model_element->text->text) != 0) {
-            g_free(note->text);
-            note->text = g_strdup(model_element->text->text);
-          }
+          update_text_base(&note->text, &note->font_description,
+                           &note->text_r, &note->text_g,
+                           &note->text_b, &note->text_a,
+                           model_element->text);
           break;
         }
         case ELEMENT_PAPER_NOTE: {
-          PaperNote *paper_note = (PaperNote *)visual_element;
-          if (paper_note->text == NULL || strcmp(paper_note->text, model_element->text->text) != 0) {
-            g_free(paper_note->text);
-            paper_note->text = g_strdup(model_element->text->text);
-          }
+          PaperNote *note = (PaperNote *)visual_element;
+          update_text_base(&note->text, &note->font_description,
+                           &note->text_r, &note->text_g,
+                           &note->text_b, &note->text_a,
+                           model_element->text);
           break;
         }
         case ELEMENT_MEDIA_FILE: {
-          MediaNote *media_note = (MediaNote *)visual_element;
-          if (media_note->text == NULL || strcmp(media_note->text, model_element->text->text) != 0) {
-            g_free(media_note->text);
-            media_note->text = g_strdup(model_element->text->text);
-          }
+          MediaNote *note = (MediaNote *)visual_element;
+          update_text_base(&note->text, &note->font_description,
+                           &note->text_r, &note->text_g,
+                           &note->text_b, &note->text_a,
+                           model_element->text);
           break;
         }
         case ELEMENT_SPACE: {
-          SpaceElement *space = (SpaceElement *)visual_element;
-          if (space->name == NULL || strcmp(space->name, model_element->text->text) != 0) {
-            g_free(space->name);
-            space->name = g_strdup(model_element->text->text);
-          }
+          SpaceElement *note = (SpaceElement *)visual_element;
+          update_text_base(&note->text, &note->font_description,
+                           &note->text_r, &note->text_g,
+                           &note->text_b, &note->text_a,
+                           model_element->text);
           break;
         }
         case ELEMENT_CONNECTION:
@@ -322,18 +349,42 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
   switch (model_element->type->type) {
   case ELEMENT_NOTE:
     if (model_element->text) {
-      visual_element = (Element*)note_create(position, bg_color, size, model_element->text->text, data);
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
+      ElementText text = {
+        .text = model_element->text->text,
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+      };
+
+      visual_element = (Element*)note_create(position, bg_color, size, text, data);
     }
     break;
 
   case ELEMENT_PAPER_NOTE:
     if (model_element->text) {
-      visual_element = (Element*)paper_note_create(position, bg_color, size, model_element->text->text, data);
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
+      ElementText text = {
+        .text = model_element->text->text,
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+      };
+
+
+      visual_element = (Element*)paper_note_create(position, bg_color, size, text, data);
     }
     break;
 
   case ELEMENT_SPACE: {
-    visual_element = (Element*)space_element_create(position, bg_color, size, model_element->text ? model_element->text->text : "Space", data);
+    if (model_element->text) {
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
+      ElementText text = {
+        .text = model_element->text->text ? model_element->text->text : "Space",
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+      };
+
+      visual_element = (Element*)space_element_create(position, bg_color, size, text, data);
+    }
     break;
   }
 
@@ -382,6 +433,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     break;
   case ELEMENT_MEDIA_FILE:
     if (model_element->video && model_element->video->duration > 0) {
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
       ElementMedia media = {
         .type = MEDIA_TYPE_VIDEO,
         .image_data = model_element->video->thumbnail_data,
@@ -390,8 +442,15 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .video_size = model_element->video->video_size,
         .duration = model_element->video->duration
       };
-      visual_element = (Element*)media_note_create(position, bg_color, size, media, model_element->text->text, data);
+      ElementText text = {
+        .text = model_element->text->text,
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+      };
+
+      visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
     } else if(model_element->image->image_data && model_element->image->image_size > 0) {
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
       ElementMedia media = {
         .type = MEDIA_TYPE_IMAGE,
         .image_data = model_element->image->image_data,
@@ -400,7 +459,12 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .video_size = 0,
         .duration = 0
       };
-      visual_element = (Element*)media_note_create(position, bg_color, size, media, model_element->text->text, data);
+      ElementText text = {
+        .text = model_element->text->text,
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+      };
+      visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
     }
     break;
   case ELEMENT_FREEHAND_DRAWING:

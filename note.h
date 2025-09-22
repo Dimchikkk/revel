@@ -8,6 +8,8 @@ typedef struct _CanvasData CanvasData;
 typedef struct {
   Element base;
   char *text;
+  double text_r, text_g, text_b, text_a;
+  char* font_description;
   GtkWidget *scrolled_window;
   GtkWidget *text_view;
   gboolean editing;
@@ -16,7 +18,7 @@ typedef struct {
 Note* note_create(ElementPosition position,
                   ElementColor bg_color,
                   ElementSize size,
-                  const char *text,
+                  ElementText text,
                   CanvasData *data);
 void note_draw(Element *element, cairo_t *cr, gboolean is_selected);
 void note_get_connection_point(Element *element, int point, int *cx, int *cy);

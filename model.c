@@ -45,6 +45,7 @@ void model_type_free(ModelType *type) {
 void model_text_free(ModelText *text) {
   if (!text) return;
   g_free(text->text);
+  g_free(text->font_description);
   g_free(text);
 }
 
@@ -148,15 +149,7 @@ gchar* model_generate_uuid(void) {
   return buf;
 }
 
-ModelElement* model_create_element(Model *model,
-                                   ElementType element_type,
-                                   ElementColor bg_color,
-                                   ElementPosition pos,
-                                   ElementSize s,
-                                   ElementMedia media,
-                                   const char *from_element_uuid, const char *to_element_uuid, int from_point, int to_point,
-                                   const GArray *drawing_points, int stroke_width,
-                                   const char *text) {
+ModelElement* model_create_element(Model *model, ElementConfig config) {
   if (model == NULL) {
     g_printerr("Error: model is NULL in model_create_element\n");
     return NULL;
@@ -172,93 +165,98 @@ ModelElement* model_create_element(Model *model,
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
   model_type->id = -1;  // Temporary ID until saved to database
-  model_type->type = element_type;
+  model_type->type = config.type;
   model_type->ref_count = 1;
   element->type = model_type;
 
   // Create position reference
   ModelPosition *position = g_new0(ModelPosition, 1);
   position->id = -1;  // Temporary ID until saved to database
-  position->x = pos.x;
-  position->y = pos.y;
-  position->z = pos.z;
+  position->x = config.position.x;
+  position->y = config.position.y;
+  position->z = config.position.z;
   position->ref_count = 1;
   element->position = position;
 
   // Create size reference
   ModelSize *size = g_new0(ModelSize, 1);
   size->id = -1;  // Temporary ID until saved to database
-  size->width = s.width;
-  size->height = s.height;
+  size->width = config.size.width;
+  size->height = config.size.height;
   size->ref_count = 1;
   element->size = size;
 
   // Create text reference if text is provided
-  if (text != NULL) {
+  if (config.text.text != NULL) {
     ModelText *model_text = g_new0(ModelText, 1);
     model_text->id = -1;  // Temporary ID until saved to database
-    model_text->text = g_strdup(text);
+    model_text->text = g_strdup(config.text.text);
+    model_text->font_description = g_strdup(config.text.font_description);
+    model_text->r = config.text.text_color.r;
+    model_text->g = config.text.text_color.g;
+    model_text->b = config.text.text_color.b;
+    model_text->a = config.text.text_color.a;
     model_text->ref_count = 1;
     element->text = model_text;
   }
 
-  if (bg_color.a > 0.0) {
+  if (config.bg_color.a > 0.0) {
     ModelColor *color = g_new0(ModelColor, 1);
     color->id = -1;  // Temporary ID until saved to database
-    color->r = bg_color.r;
-    color->g = bg_color.g;
-    color->b = bg_color.b;
-    color->a = bg_color.a;
+    color->r = config.bg_color.r;
+    color->g = config.bg_color.g;
+    color->b = config.bg_color.b;
+    color->a = config.bg_color.a;
     color->ref_count = 1;
     element->bg_color = color;
   }
 
   // Set connection properties
-  if (from_element_uuid) {
-    element->from_element_uuid = g_strdup(from_element_uuid);
+  if (config.connection.from_element_uuid) {
+    element->from_element_uuid = g_strdup(config.connection.from_element_uuid);
   }
-  if (to_element_uuid) {
-    element->to_element_uuid = g_strdup(to_element_uuid);
+  if (config.connection.to_element_uuid) {
+    element->to_element_uuid = g_strdup(config.connection.to_element_uuid);
   }
-  if (from_point) {
-    element->from_point = from_point;
+  if (config.connection.from_point) {
+    element->from_point = config.connection.from_point;
   }
-  if (to_point) {
-    element->to_point = to_point;
+  if (config.connection.to_point) {
+    element->to_point = config.connection.to_point;
   }
 
-  if (media.type == MEDIA_TYPE_IMAGE && media.image_data && media.image_size > 0) {
+  if (config.media.type == MEDIA_TYPE_IMAGE && config.media.image_data && config.media.image_size > 0) {
     ModelImage *model_image = g_new0(ModelImage, 1);
     model_image->id = -1;
-    model_image->image_data = g_malloc(media.image_size);
-    memcpy(model_image->image_data, media.image_data, media.image_size);
-    model_image->image_size = media.image_size;
+    model_image->image_data = g_malloc(config.media.image_size);
+    memcpy(model_image->image_data, config.media.image_data, config.media.image_size);
+    model_image->image_size = config.media.image_size;
     model_image->ref_count = 1;
     element->image = model_image;
   }
 
-  if (media.type == MEDIA_TYPE_VIDEO && media.video_data && media.video_size > 0) {
+  if (config.media.type == MEDIA_TYPE_VIDEO && config.media.video_data && config.media.video_size > 0) {
     ModelVideo *model_video = g_new0(ModelVideo, 1);
     model_video->id = -1;
-    model_video->thumbnail_data = g_malloc(media.image_size);
-    memcpy(model_video->thumbnail_data, media.image_data, media.image_size);
-    model_video->thumbnail_size = media.image_size;
-    model_video->video_data = g_malloc(media.video_size);
-    memcpy(model_video->video_data, media.video_data, media.video_size);
-    model_video->video_size = media.video_size;
-    model_video->duration = media.duration;
+    model_video->thumbnail_data = g_malloc(config.media.image_size);
+    memcpy(model_video->thumbnail_data, config.media.image_data, config.media.image_size);
+    model_video->thumbnail_size = config.media.image_size;
+    model_video->video_data = g_malloc(config.media.video_size);
+    memcpy(model_video->video_data, config.media.video_data, config.media.video_size);
+    model_video->video_size = config.media.video_size;
+    model_video->duration = config.media.duration;
     model_video->is_loaded = TRUE;
     model_video->ref_count = 1;
     element->video = model_video;
   }
 
-  if (drawing_points != NULL) {
-    element->drawing_points = g_array_copy((GArray*)drawing_points);
+  if (config.drawing.drawing_points != NULL) {
+    element->drawing_points = g_array_copy((GArray*)config.drawing.drawing_points);
   } else {
     element->drawing_points = NULL;
   }
 
-  element->stroke_width = stroke_width;
+  element->stroke_width = config.drawing.stroke_width;
 
   // Add the element to the model's elements hash table
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
@@ -286,6 +284,48 @@ int model_update_text(Model *model, ModelElement *element, const char *text) {
   if (!element->text->text || strcmp(element->text->text, text) != 0) {
     g_free(element->text->text);
     element->text->text = g_strdup(text);
+    if (element->state != MODEL_STATE_NEW) {
+      element->state = MODEL_STATE_UPDATED;
+    }
+    return 1;
+  }
+
+  return 0; // No change needed
+}
+
+int model_update_text_color(Model *model, ModelElement *element, double r, double g, double b, double a) {
+  if (!model || !element) {
+    return 0;
+  }
+
+  // If color values changed, update them
+  if (fabs(element->text->r - r) > 1e-9 ||
+      fabs(element->text->g - g) > 1e-9 ||
+      fabs(element->text->b - b) > 1e-9 ||
+      fabs(element->text->a - a) > 1e-9) {
+    element->text->r = r;
+    element->text->g = g;
+    element->text->b = b;
+    element->text->a = a;
+    if (element->state != MODEL_STATE_NEW) {
+      element->state = MODEL_STATE_UPDATED;
+    }
+    return 1;
+  }
+
+  return 0; // No change needed
+}
+
+int model_update_font(Model *model, ModelElement *element, const char *font_description) {
+  if (!model || !element || !font_description) {
+    return 0;
+  }
+
+  // If font description changed, update it
+  if (!element->text->font_description ||
+      strcmp(element->text->font_description, font_description) != 0) {
+    g_free(element->text->font_description);
+    element->text->font_description = g_strdup(font_description);
     if (element->state != MODEL_STATE_NEW) {
       element->state = MODEL_STATE_UPDATED;
     }
@@ -443,6 +483,12 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .b = element->bg_color->b,
     .a = element->bg_color->a,
   };
+  ElementColor text_color = {
+    .r = element->text->r,
+    .g = element->text->g,
+    .b = element->text->b,
+    .a = element->text->a,
+  };
   ElementSize size = {
     .width = element->size->width,
     .height = element->size->height,
@@ -462,12 +508,33 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .duration = element->video ? element->video->duration : 0,
   };
 
-  return model_create_element(model,
-                              element->type->type,
-                              bg_color, position, size, media,
-                              element->from_element_uuid, element->to_element_uuid, element->from_point, element->to_point,
-                              NULL, 0,
-                              element->text->text);
+  ElementConnection connection = {
+    .from_element_uuid = element->from_element_uuid,
+    .to_element_uuid = element->to_element_uuid,
+    .from_point = element->from_point,
+    .to_point = element->to_point,
+  };
+  ElementDrawing drawing = {
+    .drawing_points = NULL,
+    .stroke_width = 0,
+  };
+  ElementText text = {
+    .text = element->text->text,
+    .text_color = text_color,
+    .font_description = element->text->font_description,
+  };
+  ElementConfig config = {
+    .type = element->type->type,
+    .bg_color = bg_color,
+    .position = position,
+    .size = size,
+    .media = media,
+    .drawing = drawing,
+    .connection = connection,
+    .text = text,
+  };
+
+  return model_create_element(model, config);
 }
 
 ModelElement* model_element_clone_by_text(Model *model, ModelElement *element) {
@@ -812,69 +879,69 @@ int model_search_elements(Model *model, const char *search_term, GList **results
 }
 
 void model_free_search_result(ModelSearchResult *result) {
-    if (result) {
-        g_free(result->element_uuid);
-        g_free(result->text_content);
-        g_free(result->space_uuid);
-        g_free(result->space_name);
-        g_free(result);
-    }
+  if (result) {
+    g_free(result->element_uuid);
+    g_free(result->text_content);
+    g_free(result->space_uuid);
+    g_free(result->space_name);
+    g_free(result);
+  }
 }
 
 GList* find_connected_elements_bfs(Model *model, const char *start_uuid) {
-    GList *result = NULL;
-    GQueue *queue = g_queue_new();
-    GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
+  GList *result = NULL;
+  GQueue *queue = g_queue_new();
+  GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
 
-    g_queue_push_tail(queue, g_strdup(start_uuid));
-    g_hash_table_add(visited, g_strdup(start_uuid));
+  g_queue_push_tail(queue, g_strdup(start_uuid));
+  g_hash_table_add(visited, g_strdup(start_uuid));
 
-    while (!g_queue_is_empty(queue)) {
-        char *current_uuid = g_queue_pop_head(queue);
-        ModelElement *current_element = g_hash_table_lookup(model->elements, current_uuid);
+  while (!g_queue_is_empty(queue)) {
+    char *current_uuid = g_queue_pop_head(queue);
+    ModelElement *current_element = g_hash_table_lookup(model->elements, current_uuid);
 
-        if (current_element) {
-            // Add current element to result
-            result = g_list_append(result, current_element);
+    if (current_element) {
+      // Add current element to result
+      result = g_list_append(result, current_element);
 
-            GHashTableIter iter;
-            gpointer key, value;
-            g_hash_table_iter_init(&iter, model->elements);
+      GHashTableIter iter;
+      gpointer key, value;
+      g_hash_table_iter_init(&iter, model->elements);
 
-            while (g_hash_table_iter_next(&iter, &key, &value)) {
-                ModelElement *element = (ModelElement*)value;
-                char *element_uuid = (char*)key;
+      while (g_hash_table_iter_next(&iter, &key, &value)) {
+        ModelElement *element = (ModelElement*)value;
+        char *element_uuid = (char*)key;
 
-                // Check if this element is connected to the current element
-                int is_connected = 0;
-                if ((element->from_element_uuid && g_strcmp0(element->from_element_uuid, current_uuid) == 0) ||
-                    (element->to_element_uuid && g_strcmp0(element->to_element_uuid, current_uuid) == 0)) {
-                    is_connected = 1;
-                }
-
-                // Also check if current element is connected to this element
-                if (!is_connected && current_element->from_element_uuid &&
-                    g_strcmp0(current_element->from_element_uuid, element_uuid) == 0) {
-                    is_connected = 1;
-                }
-                if (!is_connected && current_element->to_element_uuid &&
-                    g_strcmp0(current_element->to_element_uuid, element_uuid) == 0) {
-                    is_connected = 1;
-                }
-
-                if (is_connected && !g_hash_table_contains(visited, element_uuid)) {
-                    g_queue_push_tail(queue, g_strdup(element_uuid));
-                    g_hash_table_add(visited, g_strdup(element_uuid));
-                }
-            }
+        // Check if this element is connected to the current element
+        int is_connected = 0;
+        if ((element->from_element_uuid && g_strcmp0(element->from_element_uuid, current_uuid) == 0) ||
+            (element->to_element_uuid && g_strcmp0(element->to_element_uuid, current_uuid) == 0)) {
+          is_connected = 1;
         }
 
-        g_free(current_uuid);
+        // Also check if current element is connected to this element
+        if (!is_connected && current_element->from_element_uuid &&
+            g_strcmp0(current_element->from_element_uuid, element_uuid) == 0) {
+          is_connected = 1;
+        }
+        if (!is_connected && current_element->to_element_uuid &&
+            g_strcmp0(current_element->to_element_uuid, element_uuid) == 0) {
+          is_connected = 1;
+        }
+
+        if (is_connected && !g_hash_table_contains(visited, element_uuid)) {
+          g_queue_push_tail(queue, g_strdup(element_uuid));
+          g_hash_table_add(visited, g_strdup(element_uuid));
+        }
+      }
     }
 
-    g_queue_free(queue);
-    g_hash_table_destroy(visited);
-    return result;
+    g_free(current_uuid);
+  }
+
+  g_queue_free(queue);
+  g_hash_table_destroy(visited);
+  return result;
 }
 
 int move_element_to_space(Model *model, ModelElement *element, const char *new_space_uuid) {
@@ -932,12 +999,12 @@ int model_get_all_spaces(Model *model, GList **spaces) {
 }
 
 void model_free_space_info(ModelSpaceInfo *space) {
-    if (space) {
-        g_free(space->uuid);
-        g_free(space->name);
-        g_free(space->created_at);
-        g_free(space);
-    }
+  if (space) {
+    g_free(space->uuid);
+    g_free(space->name);
+    g_free(space->created_at);
+    g_free(space);
+  }
 }
 
 int model_load_video_data(Model *model, ModelVideo *video) {

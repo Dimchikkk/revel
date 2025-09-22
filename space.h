@@ -9,14 +9,16 @@ typedef struct _CanvasData CanvasData;
 // Space element (visual representation of a space)
 typedef struct {
   Element base;
-  gchar *name;              // Name of the space
+  gchar *text;
+  double text_r, text_g, text_b, text_a;
+  char* font_description;
+
 } SpaceElement;
 
-// Function declarations
 SpaceElement *space_element_create(ElementPosition position,
                                    ElementColor bg_color,
                                    ElementSize size,
-                                   const gchar *name,
+                                   ElementText text,
                                    CanvasData *data);
 
 #endif

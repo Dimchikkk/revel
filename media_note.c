@@ -157,7 +157,7 @@ MediaNote* media_note_create(ElementPosition position,
                              ElementColor bg_color,
                              ElementSize size,
                              ElementMedia media,
-                             const char *text,
+                             ElementText text,
                              CanvasData *data) {
   MediaNote *media_note = g_new0(MediaNote, 1);
   media_note->base.type = ELEMENT_MEDIA_FILE;
@@ -175,13 +175,20 @@ MediaNote* media_note_create(ElementPosition position,
   media_note->base.width = size.width;
   media_note->base.height = size.height;
   media_note->base.canvas_data = data;
-  media_note->text = g_strdup(text ? text : "");
+  media_note->text = g_strdup(text.text ? text.text : "");
   media_note->text_view = NULL;
   media_note->editing = FALSE;
   media_note->media_type = media.type;
   media_note->video_playing = FALSE;
   media_note->video_pipeline = NULL;
   media_note->video_widget = NULL;
+
+  media_note->text_r = text.text_color.r;
+  media_note->text_g = text.text_color.g;
+  media_note->text_b = text.text_color.g;
+  media_note->text_a = text.text_color.a;
+  media_note->font_description = g_strdup(text.font_description);
+
 
   media_note->reset_video_data = FALSE;
 
@@ -689,7 +696,7 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       !(media_note->media_type == MEDIA_TYPE_VIDEO && media_note->video_playing)) {
     cairo_save(cr);
     PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *font_desc = pango_font_description_from_string("Sans 10");
+    PangoFontDescription *font_desc = pango_font_description_from_string(media_note->font_description);
     pango_layout_set_font_description(layout, font_desc);
     pango_font_description_free(font_desc);
 
@@ -723,7 +730,7 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_fill(cr);
 
       // Draw white text
-      cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+      cairo_set_source_rgba(cr, media_note->text_r, media_note->text_g, media_note->text_b, media_note->text_a);
       cairo_move_to(cr, text_x, text_y);
       pango_cairo_show_layout(cr, layout);
     }
@@ -901,6 +908,7 @@ void media_note_free(Element *element) {
   MediaNote *media_note = (MediaNote*)element;
   if (media_note->pixbuf) g_object_unref(media_note->pixbuf);
   if (media_note->text) g_free(media_note->text);
+  if (media_note->font_description) g_free(media_note->font_description);
 
   // Free video data
   if (media_note->video_data) {

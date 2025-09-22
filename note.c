@@ -20,7 +20,7 @@ static ElementVTable note_vtable = {
 Note* note_create(ElementPosition position,
                   ElementColor bg_color,
                   ElementSize size,
-                  const char *text,
+                  ElementText text,
                   CanvasData *data) {
   Note *note = g_new0(Note, 1);
   note->base.type = ELEMENT_NOTE;
@@ -36,10 +36,17 @@ Note* note_create(ElementPosition position,
 
   note->base.width = size.width;
   note->base.height = size.height;
-  note->text = g_strdup(text);
+  note->text = g_strdup(text.text);
   note->text_view = NULL;
   note->editing = FALSE;
   note->base.canvas_data = data;
+
+  note->text_r = text.text_color.r;
+  note->text_g = text.text_color.g;
+  note->text_b = text.text_color.g;
+  note->text_a = text.text_color.a;
+  note->font_description = g_strdup(text.font_description);
+
   return note;
 }
 
@@ -131,7 +138,7 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   // Draw text if not editing
   if (!note->editing) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *font_desc = pango_font_description_from_string("Sans 12");
+    PangoFontDescription *font_desc = pango_font_description_from_string(note->font_description);
     pango_layout_set_font_description(layout, font_desc);
     pango_font_description_free(font_desc);
 
@@ -143,8 +150,7 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
-    // Set text color to dark gray/black
-    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+    cairo_set_source_rgba(cr, note->text_r, note->text_g, note->text_b, note->text_a);
 
     if (text_height <= element->height - 20) {
       cairo_move_to(cr, element->x + 10, element->y + 10);
@@ -314,6 +320,7 @@ void note_update_size(Element *element, int width, int height) {
 void note_free(Element *element) {
   Note *note = (Note*)element;
   if (note->text) g_free(note->text);
+  if (note->font_description) g_free(note->font_description);
   if (note->scrolled_window && GTK_IS_WIDGET(note->scrolled_window) &&
       gtk_widget_get_parent(note->scrolled_window)) {
     gtk_widget_unparent(note->scrolled_window);
