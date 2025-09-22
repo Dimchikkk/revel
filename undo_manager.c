@@ -64,6 +64,7 @@ static const char* element_get_type_name(ModelElement *element) {
   case ELEMENT_CONNECTION: return "Connection";
   case ELEMENT_SPACE: return "Space";
   case ELEMENT_MEDIA_FILE: return "Media File";
+  case ELEMENT_FREEHAND_DRAWING: return "Freehand Drawing";
   default: return "Unknown";
   }
 }

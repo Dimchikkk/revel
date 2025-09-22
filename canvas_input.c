@@ -1016,6 +1016,12 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     return TRUE;
   }
 
+  // Add Ctrl+D for toggling drawing mode
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_d) {
+    canvas_toggle_drawing_mode(NULL, data);
+    return TRUE;
+  }
+
   // Add undo/redo keyboard shortcuts
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) on_undo_clicked(NULL, data);
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);
