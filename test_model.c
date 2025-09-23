@@ -57,6 +57,20 @@ static void test_teardown(TestFixture *fixture, gconstpointer user_data) {
   remove(TEST_DB_FILE);
 }
 
+// Helper function to create a basic ElementConfig
+static ElementConfig create_basic_config(ElementType type, const char* text) {
+  ElementConfig config = {0};
+  config.type = type;
+  config.bg_color = (ElementColor){1.0, 1.0, 1.0, 1.0};
+  config.position = (ElementPosition){100, 200, 1};
+  config.size = (ElementSize){50, 30};
+  config.media = (ElementMedia){MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
+  config.text = (ElementText){g_strdup(text), (ElementColor){0.0, 0.0, 0.0, 1.0}, g_strdup("Sans 10")};
+  config.connection = (ElementConnection){NULL, NULL, -1, -1};
+  config.drawing = (ElementDrawing){NULL, 0};
+  return config;
+}
+
 // Test: Model creation and basic functionality
 static void test_model_creation(TestFixture *fixture, gconstpointer user_data) {
   g_assert_nonnull(fixture->model);
@@ -73,43 +87,46 @@ static void test_model_creation(TestFixture *fixture, gconstpointer user_data) {
 // Test: Create different element types
 static void test_create_elements(TestFixture *fixture, gconstpointer user_data) {
   // Create note element
-  ElementPosition pos = {100, 200, 1};
-  ElementColor color = {1.0, 1.0, 1.0, 1.0};
-  ElementSize size = {50, 30};
-  ElementMedia media = {MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
-
-  ModelElement *note = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                            media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Test Note");
+  ElementConfig note_config = create_basic_config(ELEMENT_NOTE, "Test Note");
+  ModelElement *note = model_create_element(fixture->model, note_config);
   g_assert_nonnull(note);
   g_assert_cmpint(note->type->type, ==, ELEMENT_NOTE);
   g_assert_cmpstr(note->text->text, ==, "Test Note");
 
   // Create paper note element
-  ElementColor paper_color = {1.0, 1.0, 0.8, 1.0};
-  ModelElement *paper_note = model_create_element(fixture->model, ELEMENT_PAPER_NOTE, paper_color, pos, size,
-                                                  media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Test Paper Note");
+  ElementConfig paper_config = create_basic_config(ELEMENT_PAPER_NOTE, "Test Paper Note");
+  paper_config.bg_color = (ElementColor){1.0, 1.0, 0.8, 1.0};
+  ModelElement *paper_note = model_create_element(fixture->model, paper_config);
   g_assert_nonnull(paper_note);
   g_assert_cmpint(paper_note->type->type, ==, ELEMENT_PAPER_NOTE);
 
   // Create connection between elements
-  ModelElement *connection = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
-                                                  media, note->uuid, paper_note->uuid, 0, 2, NULL, 0, color, "Sans 10", NULL);
+  ElementConfig conn_config = create_basic_config(ELEMENT_CONNECTION, NULL);
+  conn_config.connection.from_element_uuid = g_strdup(note->uuid);
+  conn_config.connection.to_element_uuid = g_strdup(paper_note->uuid);
+  conn_config.connection.from_point = 0;
+  conn_config.connection.to_point = 2;
+
+  ModelElement *connection = model_create_element(fixture->model, conn_config);
   g_assert_nonnull(connection);
   g_assert_cmpint(connection->type->type, ==, ELEMENT_CONNECTION);
   g_assert_cmpstr(connection->from_element_uuid, ==, note->uuid);
   g_assert_cmpstr(connection->to_element_uuid, ==, paper_note->uuid);
+
+  // Cleanup config strings
+  g_free(note_config.text.text);
+  g_free(note_config.text.font_description);
+  g_free(paper_config.text.text);
+  g_free(paper_config.text.font_description);
+  g_free(conn_config.connection.from_element_uuid);
+  g_free(conn_config.connection.to_element_uuid);
 }
 
 // Test: Update element properties
 static void test_update_elements(TestFixture *fixture, gconstpointer user_data) {
   // Create element
-  ElementPosition pos = {100, 200, 1};
-  ElementColor color = {1.0, 1.0, 1.0, 1.0};
-  ElementSize size = {50, 30};
-  ElementMedia media = {MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
-
-  ModelElement *element = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                               media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Initial Text");
+  ElementConfig config = create_basic_config(ELEMENT_NOTE, "Initial Text");
+  ModelElement *element = model_create_element(fixture->model, config);
   g_assert_nonnull(element);
 
   // Update text
@@ -134,18 +151,17 @@ static void test_update_elements(TestFixture *fixture, gconstpointer user_data) 
   g_assert_cmpint(result, ==, 1);
   g_assert_cmpfloat(element->bg_color->r, ==, 0.5);
   g_assert_cmpfloat(element->bg_color->g, ==, 0.5);
+
+  // Cleanup
+  g_free(config.text.text);
+  g_free(config.text.font_description);
 }
 
 // Test: Save and load elements
 static void test_save_load_elements(TestFixture *fixture, gconstpointer user_data) {
   // Create and save elements
-  ElementPosition pos = {100, 200, 1};
-  ElementColor color = {1.0, 1.0, 1.0, 1.0};
-  ElementSize size = {50, 30};
-  ElementMedia media = {MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
-
-  ModelElement *element = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                               media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Test Note");
+  ElementConfig config = create_basic_config(ELEMENT_NOTE, "Test Note");
+  ModelElement *element = model_create_element(fixture->model, config);
   g_assert_nonnull(element);
 
   // Save to database
@@ -171,18 +187,17 @@ static void test_save_load_elements(TestFixture *fixture, gconstpointer user_dat
   g_assert_nonnull(loaded_element);
   g_assert_cmpint(loaded_element->type->type, ==, ELEMENT_NOTE);
   g_assert_cmpstr(loaded_element->text->text, ==, "Test Note");
+
+  // Cleanup
+  g_free(config.text.text);
+  g_free(config.text.font_description);
 }
 
 // Test: Delete element
 static void test_delete_element(TestFixture *fixture, gconstpointer user_data) {
   // Create element
-  ElementPosition pos = {100, 200, 1};
-  ElementColor color = {1.0, 1.0, 1.0, 1.0};
-  ElementSize size = {50, 30};
-  ElementMedia media = {MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
-
-  ModelElement *element = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                               media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Test Note");
+  ElementConfig config = create_basic_config(ELEMENT_NOTE, "Test Note");
+  ModelElement *element = model_create_element(fixture->model, config);
   char* uuid = g_strdup(element->uuid);
   g_assert_nonnull(element);
 
@@ -200,6 +215,10 @@ static void test_delete_element(TestFixture *fixture, gconstpointer user_data) {
   // Verify element is gone
   g_assert_null(g_hash_table_lookup(fixture->model->elements, uuid));
   g_free(uuid);
+
+  // Cleanup
+  g_free(config.text.text);
+  g_free(config.text.font_description);
 }
 
 static void test_search_multiple_spaces(TestFixture *fixture, gconstpointer user_data) {
@@ -210,22 +229,16 @@ static void test_search_multiple_spaces(TestFixture *fixture, gconstpointer user
   g_assert_nonnull(new_space_uuid);
 
   // Create elements in different spaces
-  ElementPosition pos = {100, 200, 1};
-  ElementColor color = {1.0, 1.0, 1.0, 1.0};
-  ElementSize size = {50, 30};
-  ElementMedia media = {MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
-
-  // Element in current space
-  ModelElement *note1 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                             media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Note in default space");
+  ElementConfig config1 = create_basic_config(ELEMENT_NOTE, "Note in default space");
+  ModelElement *note1 = model_create_element(fixture->model, config1);
   g_assert_nonnull(note1);
 
   // Temporarily switch to new space to create element there
   char *old_space = fixture->model->current_space_uuid;
   fixture->model->current_space_uuid = new_space_uuid;
 
-  ModelElement *note2 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                             media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Note in test space");
+  ElementConfig config2 = create_basic_config(ELEMENT_NOTE, "Note in test space");
+  ModelElement *note2 = model_create_element(fixture->model, config2);
   g_assert_nonnull(note2);
 
   // Switch back to original space
@@ -257,9 +270,13 @@ static void test_search_multiple_spaces(TestFixture *fixture, gconstpointer user
   g_assert_true(found_default_space);
   g_assert_true(found_test_space);
 
-  // Clean up
+  // Cleanup
   g_list_free_full(results, (GDestroyNotify)model_free_search_result);
   g_free(new_space_uuid);
+  g_free(config1.text.text);
+  g_free(config1.text.font_description);
+  g_free(config2.text.text);
+  g_free(config2.text.font_description);
 }
 
 // Test: Cyclic connection space movement
@@ -271,28 +288,37 @@ static void test_cyclic_connection_space_movement(TestFixture *fixture, gconstpo
   g_assert_nonnull(target_space_uuid);
 
   // Create elements
-  ElementPosition pos = {100, 200, 1};
-  ElementColor color = {1.0, 1.0, 1.0, 1.0};
-  ElementSize size = {50, 30};
-  ElementMedia media = {MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
+  ElementConfig note_config = create_basic_config(ELEMENT_NOTE, NULL);
+  ElementConfig conn_config = create_basic_config(ELEMENT_CONNECTION, NULL);
 
   // Create 4 notes: 3 in a cycle, 1 separate
-  ModelElement *note1 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                             media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Note 1");
-  ModelElement *note2 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                             media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Note 2");
-  ModelElement *note3 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                             media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Note 3");
-  ModelElement *note4 = model_create_element(fixture->model, ELEMENT_NOTE, color, pos, size,
-                                             media, NULL, NULL, -1, -1, NULL, 0, color, "Sans 10", "Note 4 (separate)");
+  note_config.text.text = g_strdup("Note 1");
+  ModelElement *note1 = model_create_element(fixture->model, note_config);
+  note_config.text.text = g_strdup("Note 2");
+  ModelElement *note2 = model_create_element(fixture->model, note_config);
+  note_config.text.text = g_strdup("Note 3");
+  ModelElement *note3 = model_create_element(fixture->model, note_config);
+  note_config.text.text = g_strdup("Note 4 (separate)");
+  ModelElement *note4 = model_create_element(fixture->model, note_config);
 
   // Create cyclic connections: note1 -> note2 -> note3 -> note1
-  ModelElement *conn1 = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
-                                             media, note1->uuid, note2->uuid, 0, 1, NULL, 0, color, "Sans 10", NULL);
-  ModelElement *conn2 = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
-                                             media, note2->uuid, note3->uuid, 2, 3, NULL, 0, color, "Sans 10", NULL);
-  ModelElement *conn3 = model_create_element(fixture->model, ELEMENT_CONNECTION, color, pos, size,
-                                             media, note3->uuid, note1->uuid, 0, 2, NULL, 0, color, "Sans 10", NULL);
+  conn_config.connection.from_element_uuid = g_strdup(note1->uuid);
+  conn_config.connection.to_element_uuid = g_strdup(note2->uuid);
+  conn_config.connection.from_point = 0;
+  conn_config.connection.to_point = 1;
+  ModelElement *conn1 = model_create_element(fixture->model, conn_config);
+
+  conn_config.connection.from_element_uuid = g_strdup(note2->uuid);
+  conn_config.connection.to_element_uuid = g_strdup(note3->uuid);
+  conn_config.connection.from_point = 2;
+  conn_config.connection.to_point = 3;
+  ModelElement *conn2 = model_create_element(fixture->model, conn_config);
+
+  conn_config.connection.from_element_uuid = g_strdup(note3->uuid);
+  conn_config.connection.to_element_uuid = g_strdup(note1->uuid);
+  conn_config.connection.from_point = 0;
+  conn_config.connection.to_point = 2;
+  ModelElement *conn3 = model_create_element(fixture->model, conn_config);
 
   // Save everything first
   model_save_elements(fixture->model);
@@ -338,6 +364,10 @@ static void test_cyclic_connection_space_movement(TestFixture *fixture, gconstpo
 
   // Cleanup
   g_free(target_space_uuid);
+  g_free(note_config.text.text);
+  g_free(note_config.text.font_description);
+  g_free(conn_config.connection.from_element_uuid);
+  g_free(conn_config.connection.to_element_uuid);
 }
 
 static void test_model_get_all_spaces(TestFixture *fixture, gconstpointer user_data) {
