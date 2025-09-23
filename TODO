@@ -1,4 +1,5 @@
 - [improvement] update DSL to support text color and font description
+- [improvement] ability to hide/show current space name on shortcut
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [fix] support mp4 files without audio channel
 - [new feature] time-travel on row click in log window

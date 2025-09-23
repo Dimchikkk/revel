@@ -226,7 +226,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);  // Dark gray text
 
     PangoLayout *layout = pango_cairo_create_layout(cr);
-    PangoFontDescription *font_desc = pango_font_description_from_string("Sans Bold 10");
+    PangoFontDescription *font_desc = pango_font_description_from_string("Ubuntu Mono 10");
     pango_layout_set_font_description(layout, font_desc);
     pango_font_description_free(font_desc);
 

@@ -813,6 +813,8 @@ static void on_change_color_action(GSimpleAction *action, GVariant *parameter, g
       GtkWidget *dialog = gtk_color_chooser_dialog_new("Choose Element Color",
                                                        GTK_WINDOW(gtk_widget_get_root(data->drawing_area)));
 
+      gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(dialog), TRUE);
+
       if (model_element->bg_color) {
         GdkRGBA initial_color = {
           .red = model_element->bg_color->r / 255.0,

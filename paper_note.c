@@ -102,10 +102,6 @@ void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   cairo_rectangle(cr, element->x, element->y, element->width, element->height);
   cairo_fill_preserve(cr);
 
-  cairo_set_source_rgb(cr, 0.5, 0.5, 0.3);
-  cairo_set_line_width(cr, 1.5);
-  cairo_stroke(cr);
-
   if (is_selected) {
     for (int i = 0; i < 4; i++) {
       int cx, cy;
