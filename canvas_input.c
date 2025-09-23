@@ -16,6 +16,7 @@
 #include "undo_manager.h"
 #include "dsl_executor.h"
 #include "freehand_drawing.h"
+#include "font_dialog.h"
 
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
@@ -843,6 +844,15 @@ static void on_change_space_action(GSimpleAction *action, GVariant *parameter, g
   }
 }
 
+static void on_change_text_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *canvas_data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  char *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+  Element *element = NULL;
+  ModelElement *model_element = g_hash_table_lookup(canvas_data->model->elements, element_uuid);
+  element = model_element->visual_element;
+  font_dialog_open(canvas_data, element);
+}
+
 void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
@@ -870,6 +880,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         GSimpleAction *clone_text_action = g_simple_action_new("clone-text", NULL);
         GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
         GSimpleAction *change_space_action = g_simple_action_new("change-space", NULL);
+        GSimpleAction *change_text_action = g_simple_action_new("change-text", NULL);
 
         // Store data for existing actions
         g_object_set_data(G_OBJECT(change_space_action), "canvas_data", data);
@@ -880,6 +891,8 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(clone_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_object_set_data(G_OBJECT(clone_size_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(clone_size_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+        g_object_set_data(G_OBJECT(change_text_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(change_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
 
         // Connect existing actions
         g_signal_connect(fork_action, "activate", G_CALLBACK(on_fork_element_action), NULL);
@@ -887,6 +900,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_signal_connect(clone_size_action, "activate", G_CALLBACK(on_clone_by_size_action), NULL);
         g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
         g_signal_connect(change_space_action, "activate", G_CALLBACK(on_change_space_action), NULL);
+        g_signal_connect(change_text_action, "activate", G_CALLBACK(on_change_text_action), NULL);
 
         // Add all actions to the action group
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
@@ -895,11 +909,17 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_text_action));
 
         // Create the menu model with delete option first
         GMenu *menu_model = g_menu_new();
         g_menu_append(menu_model, "Change Space", "menu.change-space");
         g_menu_append(menu_model, "Change Color", "menu.change-color");
+
+        if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE  ||
+            element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE) {
+          g_menu_append(menu_model, "Change Text", "menu.change-text");
+        }
 
         if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE) {
           g_menu_append(menu_model, "Fork Element", "menu.fork");
@@ -927,6 +947,9 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(popover), "fork_action", fork_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "clone_text_action", clone_text_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "clone_size_action", clone_size_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "change_space_action", change_space_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "change_color_action", change_color_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "change_text_action", change_text_action, g_object_unref);
 
         // Connect the closed signal with deferred cleanup
         g_signal_connect(popover, "closed", G_CALLBACK(on_popover_closed), NULL);
