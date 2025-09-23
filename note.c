@@ -119,6 +119,11 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   }
   cairo_fill_preserve(cr);
 
+  // Draw border
+  cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
+  cairo_set_line_width(cr, 1.5);
+  cairo_stroke(cr);
+
   // Draw connection points (only when selected)
   if (is_selected) {
     for (int i = 0; i < 4; i++) {
