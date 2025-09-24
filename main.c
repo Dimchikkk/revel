@@ -37,7 +37,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   GtkWidget *drawing_btn = gtk_toggle_button_new_with_label("Draw");
   GtkWidget *color_btn = gtk_color_button_new();
-  GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 10, 1);
+  GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 1000, 1);
 
   gtk_box_append(GTK_BOX(toolbar), drawing_btn);
   gtk_box_append(GTK_BOX(toolbar), color_btn);
