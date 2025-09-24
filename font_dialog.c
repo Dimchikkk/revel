@@ -13,6 +13,7 @@ typedef struct {
   Element *element;
   char *element_uuid;
   GtkWidget *dialog;
+  GtkWidget *preview_label;
   GtkWidget *font_combo;
   GtkWidget *size_spin;
   GtkWidget *bold_check;
@@ -164,11 +165,48 @@ static void copy_original_font_and_color(FontDialogData *data,
   data->original_a = text_a;
 }
 
+static void update_font_preview(FontDialogData *data) {
+  // Build font description from current selections
+  const char *family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(data->font_combo));
+  int size = gtk_spin_button_get_value(GTK_SPIN_BUTTON(data->size_spin));
+  gboolean bold = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->bold_check));
+  gboolean italic = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->italic_check));
+
+  char *font_desc = g_strdup_printf("%s %s%s %d",
+                                   family ? family : "Sans",
+                                   bold ? "Bold " : "",
+                                   italic ? "Italic " : "",
+                                   size);
+
+  // Apply font to preview label
+  PangoAttrList *attrs = pango_attr_list_new();
+  PangoAttribute *font_attr = pango_attr_font_desc_new(pango_font_description_from_string(font_desc));
+  pango_attr_list_insert(attrs, font_attr);
+
+  // Apply color
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &color);
+  PangoAttribute *color_attr = pango_attr_foreground_new(
+    (guint16)(color.red * 65535),
+    (guint16)(color.green * 65535),
+    (guint16)(color.blue * 65535)
+  );
+  pango_attr_list_insert(attrs, color_attr);
+
+  gtk_label_set_attributes(GTK_LABEL(data->preview_label), attrs);
+  pango_attr_list_unref(attrs);
+  g_free(font_desc);
+}
+
+static void on_font_selection_changed(GtkWidget *widget, FontDialogData *data) {
+  update_font_preview(data);
+}
+
 void font_dialog_open(CanvasData *canvas_data, Element *element) {
   FontDialogData *data = g_new0(FontDialogData, 1);
   data->element = element;
 
-  // Save original values
+  // Save original values (existing code remains the same)
   switch (data->element->type) {
   case ELEMENT_NOTE: {
     Note* el = (Note*)data->element;
@@ -198,36 +236,53 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   GtkRoot *root = gtk_widget_get_root(element->canvas_data->drawing_area);
   GtkWindow *window = GTK_WINDOW(root);
   data->dialog = gtk_dialog_new_with_buttons(
-                                             "Change Text Properties",
-                                             window,
-                                             GTK_DIALOG_MODAL,
-                                             "_Cancel", GTK_RESPONSE_CANCEL,
-                                             "_Apply", GTK_RESPONSE_OK,
-                                             NULL
-                                             );
+    "Change Text Properties",
+    window,
+    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+    "_Cancel", GTK_RESPONSE_CANCEL,
+    "_Apply", GTK_RESPONSE_OK,
+    NULL
+  );
 
-  gtk_window_set_default_size(GTK_WINDOW(data->dialog), 400, 300);
+  gtk_window_set_default_size(GTK_WINDOW(data->dialog), 450, 350);
+  gtk_window_set_resizable(GTK_WINDOW(data->dialog), TRUE);
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(data->dialog));
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
-  gtk_widget_set_margin_top(grid, 12);
-  gtk_widget_set_margin_bottom(grid, 12);
-  gtk_widget_set_margin_start(grid, 12);
-  gtk_widget_set_margin_end(grid, 12);
+  gtk_widget_set_margin_top(content_area, 18);
+  gtk_widget_set_margin_bottom(content_area, 18);
+  gtk_widget_set_margin_start(content_area, 18);
+  gtk_widget_set_margin_end(content_area, 18);
 
-  GtkWidget *font_label = gtk_label_new("Font Family:");
-  gtk_widget_set_halign(font_label, GTK_ALIGN_START);
-  data->font_combo = gtk_combo_box_text_new();
+  // Create main container with better spacing
+  GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
+  gtk_box_append(GTK_BOX(content_area), main_box);
 
-  // Get current font properties
+  // Get current font properties (existing code)
   char *current_family = get_font_family_from_desc(data->original_font_desc);
   int current_size = get_font_size_from_desc(data->original_font_desc);
   gboolean current_bold = is_font_bold(data->original_font_desc);
   gboolean current_italic = is_font_italic(data->original_font_desc);
 
-  // Get ALL available fonts using Pango
+  // Font Selection Frame
+  GtkWidget *font_frame = gtk_frame_new("Font");
+  gtk_widget_set_margin_bottom(font_frame, 10);
+  GtkWidget *font_grid = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(font_grid), 12);
+  gtk_grid_set_row_spacing(GTK_GRID(font_grid), 12);
+  gtk_frame_set_child(GTK_FRAME(font_frame), font_grid);
+  gtk_widget_set_margin_top(font_grid, 12);
+  gtk_widget_set_margin_bottom(font_grid, 12);
+  gtk_widget_set_margin_start(font_grid, 12);
+  gtk_widget_set_margin_end(font_grid, 12);
+
+  // Font family selection
+  GtkWidget *font_label = gtk_label_new("Family:");
+  gtk_widget_set_halign(font_label, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(font_label, FALSE);
+  data->font_combo = gtk_combo_box_text_new();
+  gtk_widget_set_hexpand(data->font_combo, TRUE);
+
+  // Populate font list
   PangoFontMap *font_map = pango_cairo_font_map_get_default();
   PangoFontFamily **families;
   int n_families;
@@ -242,47 +297,94 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
       current_index = i;
     }
   }
-
   gtk_combo_box_set_active(GTK_COMBO_BOX(data->font_combo), current_index);
   g_free(families);
   g_free(current_family);
 
-  GtkWidget *size_label = gtk_label_new("Font Size:");
+  // Font size
+  GtkWidget *size_label = gtk_label_new("Size:");
   gtk_widget_set_halign(size_label, GTK_ALIGN_START);
-  data->size_spin = gtk_spin_button_new_with_range(6, 72, 1);
+  data->size_spin = gtk_spin_button_new_with_range(6, 144, 1); // Extended max size to 144
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(data->size_spin), current_size);
 
+  // Font style checkboxes in a horizontal box
+  GtkWidget *style_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
   data->bold_check = gtk_check_button_new_with_label("Bold");
-  gtk_check_button_set_active(GTK_CHECK_BUTTON(data->bold_check), current_bold);
-
   data->italic_check = gtk_check_button_new_with_label("Italic");
+  gtk_check_button_set_active(GTK_CHECK_BUTTON(data->bold_check), current_bold);
   gtk_check_button_set_active(GTK_CHECK_BUTTON(data->italic_check), current_italic);
+
+  gtk_box_append(GTK_BOX(style_box), data->bold_check);
+  gtk_box_append(GTK_BOX(style_box), data->italic_check);
+
+  // Layout font grid
+  gtk_grid_attach(GTK_GRID(font_grid), font_label, 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(font_grid), data->font_combo, 1, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(font_grid), size_label, 0, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(font_grid), data->size_spin, 1, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(font_grid), gtk_label_new("Style:"), 0, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(font_grid), style_box, 1, 2, 1, 1);
+
+  // Color Selection Frame
+  GtkWidget *color_frame = gtk_frame_new("Color");
+  GtkWidget *color_grid = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(color_grid), 12);
+  gtk_grid_set_row_spacing(GTK_GRID(color_grid), 12);
+  gtk_frame_set_child(GTK_FRAME(color_frame), color_grid);
+  gtk_widget_set_margin_top(color_grid, 12);
+  gtk_widget_set_margin_bottom(color_grid, 12);
+  gtk_widget_set_margin_start(color_grid, 12);
+  gtk_widget_set_margin_end(color_grid, 12);
 
   GtkWidget *color_label = gtk_label_new("Text Color:");
   gtk_widget_set_halign(color_label, GTK_ALIGN_START);
   data->color_button = gtk_color_button_new();
 
   GdkRGBA current_color = {
-    data->original_r,
-    data->original_g,
-    data->original_b,
-    data->original_a,
+    .red = data->original_r,
+    .green = data->original_g,
+    .blue = data->original_b,
+    .alpha = data->original_a,
   };
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->color_button), &current_color);
 
-  gtk_grid_attach(GTK_GRID(grid), font_label, 0, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), data->font_combo, 1, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(color_grid), color_label, 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(color_grid), data->color_button, 1, 0, 1, 1);
 
-  gtk_grid_attach(GTK_GRID(grid), size_label, 0, 1, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), data->size_spin, 1, 1, 1, 1);
+  // Preview area
+  GtkWidget *preview_frame = gtk_frame_new("Preview");
+  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  gtk_frame_set_child(GTK_FRAME(preview_frame), preview_box);
+  gtk_widget_set_margin_top(preview_box, 8);
+  gtk_widget_set_margin_bottom(preview_box, 8);
+  gtk_widget_set_margin_start(preview_box, 12);
+  gtk_widget_set_margin_end(preview_box, 12);
 
-  gtk_grid_attach(GTK_GRID(grid), data->bold_check, 0, 2, 2, 1);
-  gtk_grid_attach(GTK_GRID(grid), data->italic_check, 0, 3, 2, 1);
+  data->preview_label = gtk_label_new("The quick brown fox jumps over the lazy dog");
+  gtk_widget_set_halign(data->preview_label, GTK_ALIGN_CENTER);
+  gtk_label_set_wrap(GTK_LABEL(data->preview_label), TRUE);
 
-  gtk_grid_attach(GTK_GRID(grid), color_label, 0, 4, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), data->color_button, 1, 4, 1, 1);
+  // Apply current font to preview
+  update_font_preview(data);
 
-  gtk_box_append(GTK_BOX(content_area), grid);
+  gtk_box_append(GTK_BOX(preview_box), data->preview_label);
+
+  // Add all sections to main box
+  gtk_box_append(GTK_BOX(main_box), font_frame);
+  gtk_box_append(GTK_BOX(main_box), color_frame);
+  gtk_box_append(GTK_BOX(main_box), preview_frame);
+
+  // Connect signals for real-time preview updates
+  g_signal_connect_data(data->font_combo, "changed",
+                       G_CALLBACK(on_font_selection_changed), data, NULL, 0);
+  g_signal_connect_data(data->size_spin, "value-changed",
+                       G_CALLBACK(on_font_selection_changed), data, NULL, 0);
+  g_signal_connect_data(data->bold_check, "toggled",
+                       G_CALLBACK(on_font_selection_changed), data, NULL, 0);
+  g_signal_connect_data(data->italic_check, "toggled",
+                       G_CALLBACK(on_font_selection_changed), data, NULL, 0);
+  g_signal_connect_data(data->color_button, "color-set",
+                       G_CALLBACK(on_font_selection_changed), data, NULL, 0);
 
   g_signal_connect(data->dialog, "response", G_CALLBACK(on_font_dialog_response), data);
 
