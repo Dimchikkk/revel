@@ -1,5 +1,6 @@
 #include "font_dialog.h"
 #include "canvas.h"
+#include "canvas_core.h"
 #include "model.h"
 #include "note.h"
 #include "paper_note.h"
@@ -154,6 +155,9 @@ static void apply_font_changes(FontDialogData *data) {
   // Update model (persistent storage)
   model_update_text_color(model, model_element, new_color.red, new_color.green, new_color.blue, new_color.alpha);
   model_update_font(model, model_element, new_font_desc);
+
+  canvas_sync_with_model(data->element->canvas_data);
+  gtk_widget_queue_draw(data->element->canvas_data->drawing_area);
 
   g_free(font_family);
   g_free(new_font_desc);
