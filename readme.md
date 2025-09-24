@@ -18,7 +18,7 @@ Note taking brainstorming app
 * undo/redo for the current space
 * execute a simple DSL to programmatically create notes and connections
 * draw on canvas (freehand drawing and straight line mode)
-* change text color, font size, style, name
+* change text properties (font name, color, size, style)
 
 ![Revel Image](photo_2025-09-15_10-51-56.jpg)
 
