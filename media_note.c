@@ -374,11 +374,7 @@ gboolean media_note_on_textview_key_press(GtkEventControllerKey *controller, gui
   MediaNote *media_note = (MediaNote*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
     if (state & GDK_CONTROL_MASK) {
-      // Ctrl+Enter finishes editing
-      media_note_finish_editing((Element*)media_note);
-      return TRUE;
-    } else {
-      // Regular Enter inserts a newline
+      // Enter finishes editing
       GtkTextView *text_view = GTK_TEXT_VIEW(media_note->text_view);
       GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);
 
@@ -387,6 +383,10 @@ gboolean media_note_on_textview_key_press(GtkEventControllerKey *controller, gui
       gtk_text_buffer_insert(buffer, &iter, "\n", 1);
 
       return TRUE; // Handled - prevent default behavior
+    } else {
+      // Ctrl+Enter inserts a newline
+      media_note_finish_editing((Element*)media_note);
+      return TRUE;
     }
   }
   return FALSE;

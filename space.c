@@ -147,31 +147,7 @@ void space_name_dialog_response(GtkDialog *dialog, gint response_id, gpointer us
 }
 
 void space_element_start_editing(Element *element, GtkWidget *overlay) {
-  SpaceElement *space_elem = (SpaceElement*)element;
-  CanvasData *data = space_elem->base.canvas_data;
-
-  GtkRoot *root = gtk_widget_get_root(data->drawing_area);
-  GtkWindow *window = GTK_WINDOW(root);
-
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(
-                                                  "Edit Space Name",
-                                                  window,
-                                                  GTK_DIALOG_MODAL,
-                                                  "OK", GTK_RESPONSE_OK,
-                                                  "Cancel", GTK_RESPONSE_CANCEL,
-                                                  NULL
-                                                  );
-
-  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *entry = gtk_entry_new();
-
-  gtk_editable_set_text(GTK_EDITABLE(entry), space_elem->text);
-
-  gtk_box_append(GTK_BOX(content_area), entry);
-
-  g_signal_connect(dialog, "response", G_CALLBACK(space_name_dialog_response), space_elem);
-
-  gtk_window_present(GTK_WINDOW(dialog));
+  return;
 }
 
 static ElementVTable space_element_vtable = {
