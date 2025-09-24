@@ -8,12 +8,10 @@
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 
-// Font dialog data structure
 typedef struct {
   Element *element;
   char *element_uuid;
   GtkWidget *dialog;
-  GtkWidget *preview_label;
   GtkWidget *font_combo;
   GtkWidget *size_spin;
   GtkWidget *bold_check;
@@ -89,7 +87,7 @@ static void update_font_and_color(char **font_description,
   *a = color->alpha;
 }
 
-static void apply_font_changes(FontDialogData *data) {
+static void update_visual_element(FontDialogData *data) {
   gchar *font_family = gtk_combo_box_text_get_active_text(
                                                           GTK_COMBO_BOX_TEXT(data->font_combo));
 
@@ -102,13 +100,8 @@ static void apply_font_changes(FontDialogData *data) {
 
   GdkRGBA new_color;
   gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &new_color);
-  Model* model = data->element->canvas_data->model;
-  ModelElement* model_element = model_get_by_visual(model, data->element);
-  // Update model
-  model_update_text_color(model, model_element, new_color.red, new_color.green, new_color.blue, new_color.alpha);
-  model_update_font(model, model_element, new_font_desc);
 
-  // Update visual
+  // Update visual element immediately
   switch (data->element->type) {
   case ELEMENT_NOTE: {
     Note* el = (Note*)data->element;
@@ -140,11 +133,81 @@ static void apply_font_changes(FontDialogData *data) {
   gtk_widget_queue_draw(data->element->canvas_data->drawing_area);
 }
 
+static void apply_font_changes(FontDialogData *data) {
+  // Update model with final changes
+  gchar *font_family = gtk_combo_box_text_get_active_text(
+                                                          GTK_COMBO_BOX_TEXT(data->font_combo));
+
+  gdouble font_size = gtk_spin_button_get_value(GTK_SPIN_BUTTON(data->size_spin));
+
+  gboolean bold = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->bold_check));
+  gboolean italic = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->italic_check));
+
+  char *new_font_desc = create_font_description_string(font_family, font_size, bold, italic);
+
+  GdkRGBA new_color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &new_color);
+
+  Model* model = data->element->canvas_data->model;
+  ModelElement* model_element = model_get_by_visual(model, data->element);
+
+  // Update model (persistent storage)
+  model_update_text_color(model, model_element, new_color.red, new_color.green, new_color.blue, new_color.alpha);
+  model_update_font(model, model_element, new_font_desc);
+
+  g_free(font_family);
+  g_free(new_font_desc);
+}
+
+static void revert_visual_changes(FontDialogData *data) {
+  // Revert visual element to original state
+  GdkRGBA original_color = {
+    .red = data->original_r,
+    .green = data->original_g,
+    .blue = data->original_b,
+    .alpha = data->original_a,
+  };
+
+  switch (data->element->type) {
+  case ELEMENT_NOTE: {
+    Note* el = (Note*)data->element;
+    update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
+                         &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    break;
+  }
+  case ELEMENT_PAPER_NOTE: {
+    PaperNote* el = (PaperNote*)data->element;
+    update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
+                         &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    break;
+  }
+  case ELEMENT_SPACE: {
+    SpaceElement* el = (SpaceElement*)data->element;
+    update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
+                         &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    break;
+  }
+  case ELEMENT_MEDIA_FILE: {
+    MediaNote* el = (MediaNote*)data->element;
+    update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
+                         &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    break;
+  }
+  case ELEMENT_CONNECTION:
+  case ELEMENT_FREEHAND_DRAWING:
+    break;
+  }
+
+  gtk_widget_queue_draw(data->element->canvas_data->drawing_area);
+}
+
 static void on_font_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
   FontDialogData *data = (FontDialogData *)user_data;
 
   if (response_id == GTK_RESPONSE_OK) {
-    apply_font_changes(data);
+    apply_font_changes(data); // Save changes to model
+  } else {
+    revert_visual_changes(data); // Revert visual to original state
   }
 
   gtk_window_destroy(GTK_WINDOW(dialog));
@@ -165,48 +228,15 @@ static void copy_original_font_and_color(FontDialogData *data,
   data->original_a = text_a;
 }
 
-static void update_font_preview(FontDialogData *data) {
-  // Build font description from current selections
-  const char *family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(data->font_combo));
-  int size = gtk_spin_button_get_value(GTK_SPIN_BUTTON(data->size_spin));
-  gboolean bold = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->bold_check));
-  gboolean italic = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->italic_check));
-
-  char *font_desc = g_strdup_printf("%s %s%s %d",
-                                   family ? family : "Sans",
-                                   bold ? "Bold " : "",
-                                   italic ? "Italic " : "",
-                                   size);
-
-  // Apply font to preview label
-  PangoAttrList *attrs = pango_attr_list_new();
-  PangoAttribute *font_attr = pango_attr_font_desc_new(pango_font_description_from_string(font_desc));
-  pango_attr_list_insert(attrs, font_attr);
-
-  // Apply color
-  GdkRGBA color;
-  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &color);
-  PangoAttribute *color_attr = pango_attr_foreground_new(
-    (guint16)(color.red * 65535),
-    (guint16)(color.green * 65535),
-    (guint16)(color.blue * 65535)
-  );
-  pango_attr_list_insert(attrs, color_attr);
-
-  gtk_label_set_attributes(GTK_LABEL(data->preview_label), attrs);
-  pango_attr_list_unref(attrs);
-  g_free(font_desc);
-}
-
 static void on_font_selection_changed(GtkWidget *widget, FontDialogData *data) {
-  update_font_preview(data);
+  update_visual_element(data); // Update visual element immediately on change
 }
 
 void font_dialog_open(CanvasData *canvas_data, Element *element) {
   FontDialogData *data = g_new0(FontDialogData, 1);
   data->element = element;
 
-  // Save original values (existing code remains the same)
+  // Save original values
   switch (data->element->type) {
   case ELEMENT_NOTE: {
     Note* el = (Note*)data->element;
@@ -244,7 +274,7 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
     NULL
   );
 
-  gtk_window_set_default_size(GTK_WINDOW(data->dialog), 450, 350);
+  gtk_window_set_default_size(GTK_WINDOW(data->dialog), 450, 300);
   gtk_window_set_resizable(GTK_WINDOW(data->dialog), TRUE);
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(data->dialog));
@@ -257,7 +287,7 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
   gtk_box_append(GTK_BOX(content_area), main_box);
 
-  // Get current font properties (existing code)
+  // Get current font properties
   char *current_family = get_font_family_from_desc(data->original_font_desc);
   int current_size = get_font_size_from_desc(data->original_font_desc);
   gboolean current_bold = is_font_bold(data->original_font_desc);
@@ -304,7 +334,7 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   // Font size
   GtkWidget *size_label = gtk_label_new("Size:");
   gtk_widget_set_halign(size_label, GTK_ALIGN_START);
-  data->size_spin = gtk_spin_button_new_with_range(6, 144, 1); // Extended max size to 144
+  data->size_spin = gtk_spin_button_new_with_range(6, 144, 1);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(data->size_spin), current_size);
 
   // Font style checkboxes in a horizontal box
@@ -351,30 +381,9 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   gtk_grid_attach(GTK_GRID(color_grid), color_label, 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(color_grid), data->color_button, 1, 0, 1, 1);
 
-  // Preview area
-  GtkWidget *preview_frame = gtk_frame_new("Preview");
-  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-  gtk_frame_set_child(GTK_FRAME(preview_frame), preview_box);
-  gtk_widget_set_margin_top(preview_box, 8);
-  gtk_widget_set_margin_bottom(preview_box, 8);
-  gtk_widget_set_margin_start(preview_box, 12);
-  gtk_widget_set_margin_end(preview_box, 12);
-
-  data->preview_label = gtk_label_new("The quick brown fox jumps over the lazy dog");
-  gtk_widget_set_halign(data->preview_label, GTK_ALIGN_CENTER);
-  gtk_label_set_wrap(GTK_LABEL(data->preview_label), TRUE);
-
-  // Apply current font to preview
-  update_font_preview(data);
-
-  gtk_box_append(GTK_BOX(preview_box), data->preview_label);
-
-  // Add all sections to main box
   gtk_box_append(GTK_BOX(main_box), font_frame);
   gtk_box_append(GTK_BOX(main_box), color_frame);
-  gtk_box_append(GTK_BOX(main_box), preview_frame);
 
-  // Connect signals for real-time preview updates
   g_signal_connect_data(data->font_combo, "changed",
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);
   g_signal_connect_data(data->size_spin, "value-changed",
