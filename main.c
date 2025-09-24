@@ -96,6 +96,26 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);
+
+  GtkCssProvider *provider = gtk_css_provider_new();
+
+  const char *css =
+    "textview {"
+    "   font-size: 20px;"
+    "   font-family: Ubuntu Mono;"
+    "   font-weight: normal;"
+    "}";
+
+  gtk_css_provider_load_from_data(provider, css, -1);
+
+  gtk_style_context_add_provider_for_display(
+                                             gdk_display_get_default(),
+                                             GTK_STYLE_PROVIDER(provider),
+                                             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
+                                             );
+
+  g_object_unref(provider);
+
   gtk_window_present(GTK_WINDOW(window));
 }
 

@@ -85,7 +85,7 @@ int database_create_tables(sqlite3 *db) {
     "    text_g REAL NOT NULL DEFAULT 0.1,"
     "    text_b REAL NOT NULL DEFAULT 0.1,"
     "    text_a REAL NOT NULL DEFAULT 1.0,"
-    "    font_description TEXT DEFAULT 'Sans Bold 12',"
+    "    font_description TEXT DEFAULT 'Ubuntu Mono Bold 18',"
     "    ref_count INTEGER DEFAULT 1,"
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"
@@ -333,7 +333,7 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
     if (font_desc) {
       model_text->font_description = g_strdup(font_desc);
     } else {
-      model_text->font_description = g_strdup("Sans Bold 12"); // Default
+      model_text->font_description = g_strdup("Ubuntu Mono Bold 12"); // Default
     }
 
     model_text->ref_count = sqlite3_column_int(stmt, 6);

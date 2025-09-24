@@ -25,7 +25,7 @@ typedef struct {
 char* get_font_family_from_desc(const char *font_desc) {
   PangoFontDescription *desc = pango_font_description_from_string(font_desc);
   const char *family = pango_font_description_get_family(desc);
-  char *result = family ? g_strdup(family) : g_strdup("Sans");
+  char *result = family ? g_strdup(family) : g_strdup("Ubuntu Mono");
   pango_font_description_free(desc);
   return result;
 }
