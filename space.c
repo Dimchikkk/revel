@@ -206,7 +206,7 @@ SpaceElement* space_element_create(ElementPosition position,
   space_elem->text = g_strdup(text.text);
   space_elem->text_r = text.text_color.r;
   space_elem->text_g = text.text_color.g;
-  space_elem->text_b = text.text_color.g;
+  space_elem->text_b = text.text_color.b;
   space_elem->text_a = text.text_color.a;
   space_elem->font_description = g_strdup(text.font_description);
 

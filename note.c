@@ -43,7 +43,7 @@ Note* note_create(ElementPosition position,
 
   note->text_r = text.text_color.r;
   note->text_g = text.text_color.g;
-  note->text_b = text.text_color.g;
+  note->text_b = text.text_color.b;
   note->text_a = text.text_color.a;
   note->font_description = g_strdup(text.font_description);
 

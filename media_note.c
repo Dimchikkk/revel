@@ -185,7 +185,7 @@ MediaNote* media_note_create(ElementPosition position,
 
   media_note->text_r = text.text_color.r;
   media_note->text_g = text.text_color.g;
-  media_note->text_b = text.text_color.g;
+  media_note->text_b = text.text_color.b;
   media_note->text_a = text.text_color.a;
   media_note->font_description = g_strdup(text.font_description);
 
