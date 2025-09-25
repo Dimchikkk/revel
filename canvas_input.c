@@ -1032,7 +1032,7 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
     ElementText text = {
       .text = "",
       .text_color = text_color,
-      .font_description = g_strdup("Ubuntu Mono 16"),
+      .font_description = g_strdup("Ubuntu Mono 12"),
     };
     ElementConfig config = {
       .type = ELEMENT_MEDIA_FILE,

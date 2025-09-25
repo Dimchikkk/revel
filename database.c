@@ -85,7 +85,7 @@ int database_create_tables(sqlite3 *db) {
     "    text_g REAL NOT NULL DEFAULT 0.1,"
     "    text_b REAL NOT NULL DEFAULT 0.1,"
     "    text_a REAL NOT NULL DEFAULT 1.0,"
-    "    font_description TEXT DEFAULT 'Ubuntu Mono Bold 18',"
+    "    font_description TEXT DEFAULT 'Ubuntu Mono Bold 16',"
     "    ref_count INTEGER DEFAULT 1,"
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"

@@ -294,7 +294,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         ElementText text = {
           .text = clean_text,
           .text_color = text_color,
-          .font_description = "Ubuntu Mono 18",
+          .font_description = "Ubuntu Mono 16",
         };
 
         ElementConfig config = {

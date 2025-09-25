@@ -76,7 +76,7 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
         ElementText text = {
           .text = g_strdup(space_name),
           .text_color = text_color,
-          .font_description = g_strdup("Ubuntu Mono Bold 18"),
+          .font_description = g_strdup("Ubuntu Mono Bold 16"),
         };
         ElementConfig config = {
           .type = ELEMENT_SPACE,

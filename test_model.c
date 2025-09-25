@@ -65,7 +65,7 @@ static ElementConfig create_basic_config(ElementType type, const char* text) {
   config.position = (ElementPosition){100, 200, 1};
   config.size = (ElementSize){50, 30};
   config.media = (ElementMedia){MEDIA_TYPE_NONE, NULL, 0, NULL, 0, 0};
-  config.text = (ElementText){g_strdup(text), (ElementColor){0.0, 0.0, 0.0, 1.0}, g_strdup("Ubuntu Mono 16")};
+  config.text = (ElementText){g_strdup(text), (ElementColor){0.0, 0.0, 0.0, 1.0}, g_strdup("Ubuntu Mono 12")};
   config.connection = (ElementConnection){NULL, NULL, -1, -1};
   config.drawing = (ElementDrawing){NULL, 0};
   return config;
