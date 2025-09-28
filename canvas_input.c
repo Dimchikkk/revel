@@ -292,6 +292,10 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
+  // Store last mouse position for zoom-at-cursor functionality
+  data->last_mouse_x = x;
+  data->last_mouse_y = y;
+
   GdkEvent *event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(controller));
   if (event) {
     data->modifier_state = gdk_event_get_modifier_state(event);
@@ -1312,4 +1316,43 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);
 
   return FALSE;
+}
+
+gboolean canvas_on_scroll(GtkEventControllerScroll *controller, double dx, double dy, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  // Calculate zoom factor (positive dy = zoom out, negative dy = zoom in)
+  const double zoom_speed = 0.1;
+  double zoom_factor = 1.0;
+
+  if (dy > 0) {
+    // Zoom out
+    zoom_factor = 1.0 - zoom_speed;
+  } else if (dy < 0) {
+    // Zoom in
+    zoom_factor = 1.0 + zoom_speed;
+  }
+
+  // Limit zoom range (0.1x to 10x)
+  double new_zoom = data->zoom_scale * zoom_factor;
+  if (new_zoom < 0.1) new_zoom = 0.1;
+  if (new_zoom > 10.0) new_zoom = 10.0;
+
+  if (new_zoom != data->zoom_scale) {
+    double cursor_x = data->last_mouse_x;
+    double cursor_y = data->last_mouse_y;
+
+    int canvas_point_x, canvas_point_y;
+    canvas_screen_to_canvas(data, (int)cursor_x, (int)cursor_y, &canvas_point_x, &canvas_point_y);
+
+    data->zoom_scale = new_zoom;
+
+    data->offset_x = (cursor_x / new_zoom) - canvas_point_x;
+    data->offset_y = (cursor_y / new_zoom) - canvas_point_y;
+
+    canvas_update_zoom_entry(data);
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+
+  return TRUE; // Event handled
 }

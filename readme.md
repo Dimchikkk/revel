@@ -12,7 +12,7 @@ Note taking brainstorming app
 * paste images and annotate them
 * fork = independent copy. clone = by text or size, with properties kept in sync between elements
 * resize, move, delete, change background color of elements
-* infinite canvas space
+* infinite canvas space with zoom
 * organize elements into nested spaces (infinite space depth)
 * move elements between spaces
 * undo/redo for the current space

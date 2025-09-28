@@ -37,8 +37,12 @@ struct _CanvasData {
   gboolean panning;
   int pan_start_x;
   int pan_start_y;
-  int offset_x;
-  int offset_y;
+  double offset_x;
+  double offset_y;
+  double zoom_scale;
+
+  double last_mouse_x;
+  double last_mouse_y;
 
   UndoManager *undo_manager;
   GHashTable *drag_start_positions;
@@ -60,6 +64,8 @@ struct _CanvasData {
 
   Element *connection_start;
   int connection_start_point;
+
+  GtkWidget *zoom_entry;
 
   Model *model;
 };

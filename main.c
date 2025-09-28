@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "canvas_core.h"
 #include "canvas_input.h"
 #include "canvas_actions.h"
@@ -7,6 +8,44 @@
 #include "freehand_drawing.h"
 #include "undo_manager.h"
 #include "shape_dialog.h"
+
+// Callback for zoom entry changes
+static void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data) {
+  CanvasData *data = (CanvasData *)user_data;
+  const char *text = gtk_editable_get_text(GTK_EDITABLE(entry));
+
+  // Parse the zoom percentage
+  char *endptr;
+  double zoom_percent = strtod(text, &endptr);
+
+  // Check if we have a valid number
+  if (endptr != text && zoom_percent > 0) {
+    // Remove % sign if present
+    if (*endptr == '%') {
+      zoom_percent /= 100.0;
+    } else if (zoom_percent > 1.0) {
+      // Assume it's a percentage if > 1
+      zoom_percent /= 100.0;
+    }
+
+    // Clamp to valid zoom range
+    if (zoom_percent < 0.1) zoom_percent = 0.1;
+    if (zoom_percent > 10.0) zoom_percent = 10.0;
+
+    data->zoom_scale = zoom_percent;
+    gtk_widget_queue_draw(data->drawing_area);
+
+    // Update the entry to show the normalized value
+    char zoom_text[16];
+    snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", zoom_percent * 100);
+    gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
+  } else {
+    // Invalid input, reset to current zoom
+    char zoom_text[16];
+    snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", data->zoom_scale * 100);
+    gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
+  }
+}
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
@@ -19,23 +58,38 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
   gtk_box_append(GTK_BOX(vbox), toolbar);
 
+  // === CONTENT CREATION GROUP ===
   GtkWidget *add_paper_btn = gtk_button_new_with_label("New Paper Note");
   GtkWidget *add_note_btn = gtk_button_new_with_label("New Note");
+  GtkWidget *add_space_btn = gtk_button_new_with_label("New Space");
+
   gtk_box_append(GTK_BOX(toolbar), add_paper_btn);
   gtk_box_append(GTK_BOX(toolbar), add_note_btn);
-
-  GtkWidget *add_space_btn = gtk_button_new_with_label("New Space");
   gtk_box_append(GTK_BOX(toolbar), add_space_btn);
 
-  GtkWidget *back_btn = gtk_button_new_with_label("Back to Parent");
+  // Separator after content creation
+  GtkWidget *sep1 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_box_append(GTK_BOX(toolbar), sep1);
+
+  // === NAVIGATION GROUP ===
+  GtkWidget *back_btn = gtk_button_new();
+  GtkWidget *back_icon = gtk_image_new_from_icon_name("go-previous");
+  gtk_button_set_child(GTK_BUTTON(back_btn), back_icon);
+  gtk_widget_set_tooltip_text(back_btn, "Back to Parent");
+
+  GtkWidget *search_btn = gtk_button_new();
+  GtkWidget *search_icon = gtk_image_new_from_icon_name("edit-find");
+  gtk_button_set_child(GTK_BUTTON(search_btn), search_icon);
+  gtk_widget_set_tooltip_text(search_btn, "Search");
+
   gtk_box_append(GTK_BOX(toolbar), back_btn);
-
-  GtkWidget *log_btn = gtk_button_new_with_label("Log");
-  gtk_box_append(GTK_BOX(toolbar), log_btn);
-
-  GtkWidget *search_btn = gtk_button_new_with_label("Search");
   gtk_box_append(GTK_BOX(toolbar), search_btn);
 
+  // Separator after navigation
+  GtkWidget *sep2 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_box_append(GTK_BOX(toolbar), sep2);
+
+  // === DRAWING TOOLS GROUP ===
   GtkWidget *drawing_btn = gtk_toggle_button_new_with_label("Draw");
   GtkWidget *color_btn = gtk_color_button_new();
   GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 1000, 1);
@@ -45,6 +99,29 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_box_append(GTK_BOX(toolbar), color_btn);
   gtk_box_append(GTK_BOX(toolbar), width_spin);
   gtk_box_append(GTK_BOX(toolbar), shapes_btn);
+
+  // Separator after drawing tools
+  GtkWidget *sep3 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_box_append(GTK_BOX(toolbar), sep3);
+
+  // === VIEW CONTROLS GROUP ===
+  GtkWidget *zoom_label = gtk_label_new("Zoom:");
+  GtkWidget *zoom_entry = gtk_entry_new();
+  gtk_editable_set_text(GTK_EDITABLE(zoom_entry), "100%");
+  gtk_editable_set_width_chars(GTK_EDITABLE(zoom_entry), 5);
+  gtk_widget_set_hexpand(zoom_entry, FALSE);
+  gtk_editable_set_max_width_chars(GTK_EDITABLE(zoom_entry), 5);
+
+  gtk_box_append(GTK_BOX(toolbar), zoom_label);
+  gtk_box_append(GTK_BOX(toolbar), zoom_entry);
+
+  // Separator after view controls
+  GtkWidget *sep4 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_box_append(GTK_BOX(toolbar), sep4);
+
+  // === UTILITIES GROUP ===
+  GtkWidget *log_btn = gtk_button_new_with_label("Log");
+  gtk_box_append(GTK_BOX(toolbar), log_btn);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), 3);
   GdkRGBA initial_color = INITIAL_DRAWING_COLOR;
@@ -61,6 +138,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_overlay_set_child(GTK_OVERLAY(overlay), drawing_area);
 
   CanvasData *data = canvas_data_new(drawing_area, overlay);
+  data->zoom_entry = zoom_entry;
   canvas_setup_drop_target(data);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), canvas_on_draw, data, NULL);
@@ -88,6 +166,11 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(motion_controller, "leave", G_CALLBACK(canvas_on_leave), data);
   gtk_widget_add_controller(drawing_area, motion_controller);
 
+  // Scroll controller for zoom
+  GtkEventController *scroll_controller = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
+  g_signal_connect(scroll_controller, "scroll", G_CALLBACK(canvas_on_scroll), data);
+  gtk_widget_add_controller(drawing_area, scroll_controller);
+
   g_signal_connect(add_paper_btn, "clicked", G_CALLBACK(canvas_on_add_paper_note), data);
   g_signal_connect(add_note_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
   g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data);
@@ -98,6 +181,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(color_btn, "color-set", G_CALLBACK(on_drawing_color_changed), data);
   g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
   g_signal_connect(shapes_btn, "clicked", G_CALLBACK(canvas_show_shape_selection_dialog), data);
+  g_signal_connect(zoom_entry, "activate", G_CALLBACK(on_zoom_entry_activate), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);
 

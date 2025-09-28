@@ -43,7 +43,9 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->pan_start_y = 0;
   data->offset_x = 0;
   data->offset_y = 0;
-
+  data->zoom_scale = 1.0;
+  data->last_mouse_x = 0;
+  data->last_mouse_y = 0;
 
   data->model = model_new();
   data->undo_manager = undo_manager_new(data->model);
@@ -230,7 +232,8 @@ void canvas_data_free(CanvasData *data) {
 
 void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
-  // Apply panning transformation
+  // Apply zoom and panning transformations
+  cairo_scale(cr, data->zoom_scale, data->zoom_scale);
   cairo_translate(cr, data->offset_x, data->offset_y);
 
   // Canvas color
@@ -591,11 +594,19 @@ void canvas_sync_with_model(CanvasData *canvas_data) {
 }
 
 void canvas_screen_to_canvas(CanvasData *data, int screen_x, int screen_y, int *canvas_x, int *canvas_y) {
-  *canvas_x = screen_x - data->offset_x;
-  *canvas_y = screen_y - data->offset_y;
+  *canvas_x = (int)((screen_x / data->zoom_scale) - data->offset_x);
+  *canvas_y = (int)((screen_y / data->zoom_scale) - data->offset_y);
 }
 
 void canvas_canvas_to_screen(CanvasData *data, int canvas_x, int canvas_y, int *screen_x, int *screen_y) {
-  *screen_x = canvas_x + data->offset_x;
-  *screen_y = canvas_y + data->offset_y;
+  *screen_x = (int)((canvas_x + data->offset_x) * data->zoom_scale);
+  *screen_y = (int)((canvas_y + data->offset_y) * data->zoom_scale);
+}
+
+void canvas_update_zoom_entry(CanvasData *data) {
+  if (data->zoom_entry) {
+    char zoom_text[16];
+    snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", data->zoom_scale * 100);
+    gtk_editable_set_text(GTK_EDITABLE(data->zoom_entry), zoom_text);
+  }
 }
