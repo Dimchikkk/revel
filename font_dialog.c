@@ -1,11 +1,13 @@
 #include "font_dialog.h"
 #include "canvas.h"
 #include "canvas_core.h"
+#include "element.h"
 #include "model.h"
 #include "note.h"
 #include "paper_note.h"
 #include "media_note.h"
 #include "space.h"
+#include "shape.h"
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 
@@ -124,6 +126,11 @@ static void update_visual_element(FontDialogData *data) {
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
     break;
   }
+  case ELEMENT_SHAPE: {
+    Shape* el = (Shape*)data->element;
+    update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    break;
+  }
   case ELEMENT_CONNECTION:
   case ELEMENT_FREEHAND_DRAWING:
     g_free(new_font_desc);
@@ -197,6 +204,12 @@ static void revert_visual_changes(FontDialogData *data) {
                          &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
     break;
   }
+  case ELEMENT_SHAPE: {
+    Shape* el = (Shape*)data->element;
+    update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
+                         &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    break;
+  }
   case ELEMENT_CONNECTION:
   case ELEMENT_FREEHAND_DRAWING:
     break;
@@ -259,6 +272,11 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   }
   case ELEMENT_MEDIA_FILE: {
     MediaNote* el = (MediaNote*)data->element;
+    copy_original_font_and_color(data, el->font_description, el->text_r, el->text_g, el->text_b, el->text_a);
+    break;
+  }
+  case ELEMENT_SHAPE: {
+    Shape* el = (Shape*)data->element;
     copy_original_font_and_color(data, el->font_description, el->text_r, el->text_g, el->text_b, el->text_a);
     break;
   }

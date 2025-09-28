@@ -7,6 +7,7 @@
 #include "model.h"
 #include "connection.h"
 #include "freehand_drawing.h"
+#include "shape.h"
 
 typedef struct _CanvasData CanvasData;
 typedef struct _UndoManager UndoManager;
@@ -49,6 +50,16 @@ struct _CanvasData {
   int drawing_stroke_width;
   GdkCursor *draw_cursor;
   GdkCursor *line_cursor;
+
+  gboolean shape_mode;
+  int selected_shape_type;
+  gboolean shape_filled;
+  Shape *current_shape;
+  int shape_start_x;
+  int shape_start_y;
+
+  Element *connection_start;
+  int connection_start_point;
 
   Model *model;
 };

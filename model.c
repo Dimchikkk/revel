@@ -256,12 +256,46 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
     element->drawing_points = NULL;
   }
 
-  element->stroke_width = config.drawing.stroke_width;
+  element->stroke_width = config.drawing.stroke_width != 0 ? config.drawing.stroke_width : config.shape.stroke_width;
+  element->shape_type = config.shape.shape_type;
+  element->filled = config.shape.filled;
 
-  // Add the element to the model's elements hash table
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
 
   return element;
+}
+
+ModelElement* model_create_element_from_visual(Model *model, Element *element) {
+  if (!model || !element) {
+    return NULL;
+  }
+
+  ElementConfig config = {0};
+  config.type = element->type;
+  config.position.x = element->x;
+  config.position.y = element->y;
+  config.position.z = element->z;
+  config.size.width = element->width;
+  config.size.height = element->height;
+  config.bg_color.r = element->bg_r;
+  config.bg_color.g = element->bg_g;
+  config.bg_color.b = element->bg_b;
+  config.bg_color.a = element->bg_a;
+
+  if (element->type == ELEMENT_SHAPE) {
+    Shape *shape = (Shape*)element;
+    config.text.text = shape->text;
+    config.text.text_color.r = shape->text_r;
+    config.text.text_color.g = shape->text_g;
+    config.text.text_color.b = shape->text_b;
+    config.text.text_color.a = shape->text_a;
+    config.text.font_description = shape->font_description;
+    config.shape.shape_type = shape->shape_type;
+    config.shape.stroke_width = shape->stroke_width;
+    config.shape.filled = shape->filled;
+  }
+
+  return model_create_element(model, config);
 }
 
 int model_update_text(Model *model, ModelElement *element, const char *text) {
@@ -523,6 +557,11 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .text_color = text_color,
     .font_description = element->text->font_description,
   };
+  ElementShape shape = {
+    .shape_type = element->shape_type,
+    .stroke_width = element->stroke_width,
+    .filled = element->filled,
+  };
   ElementConfig config = {
     .type = element->type->type,
     .bg_color = bg_color,
@@ -532,6 +571,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .drawing = drawing,
     .connection = connection,
     .text = text,
+    .shape = shape,
   };
 
   return model_create_element(model, config);

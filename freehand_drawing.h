@@ -3,7 +3,7 @@
 
 #include "element.h"
 
-#define INITIAL_DRAWING_COLOR {0.0, 0.8, 0.0, 1.0};
+#define INITIAL_DRAWING_COLOR {0.9, 0.9, 0.9, 1.0};
 
 typedef struct {
   Element base;

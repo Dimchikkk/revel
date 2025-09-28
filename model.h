@@ -102,6 +102,9 @@ struct _ModelElement {
   gint stroke_width;
   GArray* drawing_points; // Array of DrawingPoint
 
+  // For shape elements
+  gint shape_type;
+  gboolean filled;
   // For space elements
   gchar *target_space_uuid;
 };

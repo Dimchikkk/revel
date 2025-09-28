@@ -16,22 +16,54 @@
 #include "undo_manager.h"
 #include "dsl_executor.h"
 #include "freehand_drawing.h"
+#include "shape.h"
 #include "font_dialog.h"
+#include "shape.h"
 
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
-  static Element *connection_start = NULL;
-  static int connection_start_point = -1;
 
   GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
   if (event) {
     data->modifier_state = gdk_event_get_modifier_state(event);
   }
 
-  if (data->drawing_mode) {
+  // Handle shape mode separately from drawing mode to avoid conflicts
+  if (data->shape_mode) {
     int cx, cy;
     canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
 
+    // Handle shape creation
+    if (!data->current_shape) {
+      ElementPosition position = { cx, cy, data->next_z_index++ };
+      ElementSize size = { 0, 0 };  // Initial size
+      ElementText text = {
+        .text = "",
+        .text_color = { .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 },
+        .font_description = "Ubuntu Mono 12"
+      };
+      ElementShape shape_config = {
+        .shape_type = data->selected_shape_type,
+        .stroke_width = data->drawing_stroke_width,
+        .filled = data->shape_filled
+      };
+      data->current_shape = shape_create(position, size, data->drawing_color,
+                                         data->drawing_stroke_width,
+                                         data->selected_shape_type,
+                                         data->shape_filled, text, shape_config, data);
+      data->shape_start_x = cx;
+      data->shape_start_y = cy;
+    }
+
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
+  }
+
+  if (data->drawing_mode && !data->shape_mode) {
+    int cx, cy;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
+    // Handle freehand/line drawing
     if (!data->current_drawing) {
       ElementPosition position = { cx, cy, data->next_z_index++ };
 
@@ -129,13 +161,13 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 
     int cp = element_pick_connection_point(element, (int)x, (int)y);
     if (cp >= 0) {
-      if (!connection_start) {
-        connection_start = element;
-        connection_start_point = cp;
+      if (!data->connection_start) {
+        data->connection_start = element;
+        data->connection_start_point = cp;
       } else {
-        if (element != connection_start) {
+        if (element != data->connection_start) {
           // Use helper function to get model elements
-          ModelElement *from_model = model_get_by_visual(data->model, connection_start);
+          ModelElement *from_model = model_get_by_visual(data->model, data->connection_start);
           ModelElement *to_model = model_get_by_visual(data->model, element);
 
           if (from_model && to_model) {
@@ -164,7 +196,7 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
             ElementConnection connection = {
               .from_element_uuid = from_model->uuid,
               .to_element_uuid = to_model->uuid,
-              .from_point = connection_start_point,
+              .from_point = data->connection_start_point,
               .to_point = cp,
             };
             ElementDrawing drawing = {
@@ -195,8 +227,8 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
             undo_manager_push_create_action(data->undo_manager, model_conn);
           }
         }
-        connection_start = NULL;
-        connection_start_point = -1;
+        data->connection_start = NULL;
+        data->connection_start_point = -1;
       }
       gtk_widget_queue_draw(data->drawing_area);
       return;
@@ -212,7 +244,8 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 
     if (!((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
           (element->type == ELEMENT_MEDIA_FILE && ((MediaNote*)element)->editing) ||
-          (element->type == ELEMENT_NOTE && ((Note*)element)->editing))) {
+          (element->type == ELEMENT_NOTE && ((Note*)element)->editing) ||
+          (element->type == ELEMENT_SHAPE && ((Shape*)element)->editing))) {
       if (!(data->modifier_state & GDK_SHIFT_MASK)) {
         canvas_clear_selection(data);
       }
@@ -235,8 +268,8 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       element->drag_offset_y = (int)y - element->y;
     }
   } else {
-    connection_start = NULL;
-    connection_start_point = -1;
+    data->connection_start = NULL;
+    data->connection_start_point = -1;
 
     if (!(data->modifier_state & GDK_SHIFT_MASK)) {
       canvas_clear_selection(data);
@@ -260,15 +293,35 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     data->modifier_state = gdk_event_get_modifier_state(event);
   }
 
-  if (data->drawing_mode) {
+  if (data->shape_mode) {
+    canvas_set_cursor(data, data->draw_cursor);
+  } else if (data->drawing_mode) {
     if (data->modifier_state & GDK_SHIFT_MASK) {
       canvas_set_cursor(data, data->line_cursor);
     } else {
       canvas_set_cursor(data, data->draw_cursor);
     }
+  } else {
+    // Update cursor for normal mode (hover detection)
+    canvas_update_cursor(data, (int)x, (int)y);
+  }
+  if (data->shape_mode && data->current_shape) {
+    int cx, cy;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
+    int x1 = data->shape_start_x;
+    int y1 = data->shape_start_y;
+
+    data->current_shape->base.x = MIN(x1, cx);
+    data->current_shape->base.y = MIN(y1, cy);
+    data->current_shape->base.width = MAX(ABS(cx - x1), 10);
+    data->current_shape->base.height = MAX(ABS(cy - y1), 10);
+
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
   }
 
-  if (data->drawing_mode && data->current_drawing) {
+  if (data->drawing_mode && !data->shape_mode && data->current_drawing) {
     int cx, cy;
     canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
 
@@ -322,8 +375,6 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     gtk_widget_queue_draw(data->drawing_area);
     return;
   }
-
-  canvas_update_cursor(data, (int)x, (int)y);
 
   if (data->panning) {
     int dx = (int)x - data->pan_start_x;
@@ -426,7 +477,46 @@ void canvas_on_right_click_release(GtkGestureClick *gesture, int n_press, double
 void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
-  if (data->drawing_mode && data->current_drawing) {
+  if (data->shape_mode && data->current_shape) {
+    ElementConfig config = {0};
+    Element* element = (Element*) data->current_shape;
+    config.type = element->type;
+    config.position.x = element->x;
+    config.position.y = element->y;
+    config.position.z = element->z;
+    config.size.width = element->width;
+    config.size.height = element->height;
+    config.bg_color.r = element->bg_r;
+    config.bg_color.g = element->bg_g;
+    config.bg_color.b = element->bg_b;
+    config.bg_color.a = element->bg_a;
+    Shape *shape = (Shape*)element;
+    config.text.text = shape->text;
+    config.text.text_color.r = shape->text_r;
+    config.text.text_color.g = shape->text_g;
+    config.text.text_color.b = shape->text_b;
+    config.text.text_color.a = shape->text_a;
+    config.text.font_description = shape->font_description;
+    config.shape.shape_type = shape->shape_type;
+    config.shape.stroke_width = shape->stroke_width;
+    config.shape.filled = shape->filled;
+
+    ModelElement *model_element = model_create_element(data->model, config);
+
+    if (model_element) {
+      model_element->visual_element = create_visual_element(model_element, data);
+      undo_manager_push_create_action(data->undo_manager, model_element);
+    }
+
+    // Clear current shape and exit shape mode
+    shape_free((Element*)data->current_shape);
+    data->current_shape = NULL;
+    data->shape_mode = FALSE;
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
+  }
+
+  if (data->drawing_mode && !data->shape_mode && data->current_drawing) {
     int cx, cy;
     canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
 
@@ -646,10 +736,10 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
     int rh = element_pick_resize_handle(element, x, y);
     if (rh >= 0) {
       switch (rh) {
-      case 0: case 2:
+      case 0: case 2: // Top-left, Bottom-right
         canvas_set_cursor(data, gdk_cursor_new_from_name("nwse-resize", NULL));
         break;
-      case 1: case 3:
+      case 1: case 3: // Top-right, Bottom-left
         canvas_set_cursor(data, gdk_cursor_new_from_name("nesw-resize", NULL));
         break;
       }
@@ -658,7 +748,12 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
 
     int cp = element_pick_connection_point(element, x, y);
     if (cp >= 0) {
-      canvas_set_cursor(data, gdk_cursor_new_from_name("crosshair", NULL));
+      // If we have an active connection and this is a different element, show completion cursor
+      if (data->connection_start && element != data->connection_start) {
+        canvas_set_cursor(data, gdk_cursor_new_from_name("alias", NULL)); // Different cursor for connection completion
+      } else {
+        canvas_set_cursor(data, gdk_cursor_new_from_name("crosshair", NULL));
+      }
       return;
     }
 
@@ -917,16 +1012,13 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_menu_append(menu_model, "Change Color", "menu.change-color");
 
         if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE  ||
-            element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE) {
+            element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE ||
+            element->type == ELEMENT_SHAPE) {
           g_menu_append(menu_model, "Change Text", "menu.change-text");
-        }
-
-        if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE) {
-          g_menu_append(menu_model, "Fork Element", "menu.fork");
           g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
-          g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
         }
-
+        g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
+        g_menu_append(menu_model, "Fork Element", "menu.fork");
         g_menu_append(menu_model, "Delete", "menu.delete");
 
         // Create the popover menu
@@ -1093,7 +1185,8 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     Element *element = (Element*)l->data;
     if ((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
         (element->type == ELEMENT_MEDIA_FILE && ((MediaNote*)element)->editing) ||
-        (element->type == ELEMENT_NOTE && ((Note*)element)->editing)) {
+        (element->type == ELEMENT_NOTE && ((Note*)element)->editing) ||
+        (element->type == ELEMENT_SHAPE && ((Shape*)element)->editing)) {
       is_editing = TRUE;
       break;
     }

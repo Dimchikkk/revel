@@ -6,6 +6,7 @@
 #include "canvas_drop.h"
 #include "freehand_drawing.h"
 #include "undo_manager.h"
+#include "shape_dialog.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
@@ -38,10 +39,12 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *drawing_btn = gtk_toggle_button_new_with_label("Draw");
   GtkWidget *color_btn = gtk_color_button_new();
   GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 1000, 1);
+  GtkWidget *shapes_btn = gtk_button_new_with_label("Shapes");
 
   gtk_box_append(GTK_BOX(toolbar), drawing_btn);
   gtk_box_append(GTK_BOX(toolbar), color_btn);
   gtk_box_append(GTK_BOX(toolbar), width_spin);
+  gtk_box_append(GTK_BOX(toolbar), shapes_btn);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), 3);
   GdkRGBA initial_color = INITIAL_DRAWING_COLOR;
@@ -94,6 +97,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(drawing_btn, "clicked", G_CALLBACK(canvas_toggle_drawing_mode), data);
   g_signal_connect(color_btn, "color-set", G_CALLBACK(on_drawing_color_changed), data);
   g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
+  g_signal_connect(shapes_btn, "clicked", G_CALLBACK(canvas_show_shape_selection_dialog), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);
 

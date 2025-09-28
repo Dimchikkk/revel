@@ -19,6 +19,7 @@ Note taking brainstorming app
 * execute a simple DSL to programmatically create notes and connections
 * draw on canvas (freehand drawing and straight line mode)
 * change text properties (font name, color, size, style)
+* draw different geometrical shapes
 
 ![Revel Image](photo_2025-09-15_10-51-56.jpg)
 

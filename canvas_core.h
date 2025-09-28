@@ -23,5 +23,6 @@ void canvas_sync_with_model(CanvasData *canvas_data);
 void canvas_screen_to_canvas(CanvasData *data, int screen_x, int screen_y,
                              int *canvas_x, int *canvas_y);
 void canvas_canvas_to_screen(CanvasData *data, int canvas_x, int canvas_y, int *screen_x, int *screen_y);
+void canvas_set_cursor(CanvasData *data, GdkCursor *cursor);
 
 #endif

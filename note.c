@@ -145,20 +145,32 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_layout_set_text(layout, note->text, -1);
     pango_layout_set_width(layout, (element->width - 20) * PANGO_SCALE);
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
+    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
 
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
     cairo_set_source_rgba(cr, note->text_r, note->text_g, note->text_b, note->text_a);
 
-    if (text_height <= element->height - 20) {
-      cairo_move_to(cr, element->x + 10, element->y + 10);
+    // Center text both horizontally and vertically with proper padding
+    int padding = 10;
+    int available_height = element->height - (2 * padding);
+
+    int text_x = element->x + padding;
+    int text_y = element->y + padding + (available_height - text_height) / 2;
+
+    // Ensure text doesn't go outside bounds
+    if (text_y < element->y + padding) {
+      text_y = element->y + padding;
+    }
+
+    if (text_height <= available_height) {
+      cairo_move_to(cr, text_x, text_y);
       pango_cairo_show_layout(cr, layout);
     } else {
       pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
-      pango_layout_set_height(layout, (element->height - 20) * PANGO_SCALE);
-      cairo_move_to(cr, element->x + 10, element->y + 10);
+      pango_layout_set_height(layout, available_height * PANGO_SCALE);
+      cairo_move_to(cr, text_x, element->y + padding);
       pango_cairo_show_layout(cr, layout);
     }
 

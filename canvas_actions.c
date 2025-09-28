@@ -45,7 +45,7 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   ElementText text = {
     .text = "",
     .text_color = text_color,
-    .font_description = g_strdup("Ubuntu 16"),
+    .font_description = g_strdup("Ubuntu Mono 16"),
   };
   ElementConfig config = {
     .type = ELEMENT_PAPER_NOTE,
@@ -108,7 +108,7 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
   ElementText text = {
     .text = "",
     .text_color = text_color,
-    .font_description = g_strdup("Ubuntu Mono 16"),
+    .font_description = g_strdup("Ubuntu 16"),
   };
   ElementConfig config = {
     .type = ELEMENT_NOTE,
@@ -187,6 +187,12 @@ void canvas_on_go_back(GtkButton *button, gpointer user_data) {
 
 void canvas_toggle_drawing_mode(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  // Don't toggle drawing mode if we're currently in shape mode
+  if (data->shape_mode) {
+    return;
+  }
+
   data->drawing_mode = !data->drawing_mode;
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), data->drawing_mode);
@@ -195,9 +201,11 @@ void canvas_toggle_drawing_mode(GtkButton *button, gpointer user_data) {
     canvas_set_cursor(data, data->draw_cursor);
   } else {
     canvas_set_cursor(data, data->default_cursor);
-    // Cancel any current drawing
     if (data->current_drawing) {
       data->current_drawing = NULL;
+    }
+    if (data->current_shape) {
+      data->current_shape = NULL;
     }
   }
 

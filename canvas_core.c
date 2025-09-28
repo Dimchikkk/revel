@@ -11,6 +11,7 @@
 #include "model.h"
 #include "space.h"
 #include "undo_manager.h"
+#include "shape.h"
 
 static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
   const Element *element_a = (const Element*)a;
@@ -55,6 +56,13 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->drawing_stroke_width = 3;
   data->draw_cursor = gdk_cursor_new_from_name("pencil", NULL);
   data->line_cursor = gdk_cursor_new_from_name("crosshair", NULL);
+
+  data->shape_mode = FALSE;
+  data->selected_shape_type = SHAPE_CIRCLE;
+  data->shape_filled = FALSE;
+  data->current_shape = NULL;
+  data->shape_start_x = 0;
+  data->shape_start_y = 0;
 
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
@@ -175,6 +183,14 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
         case ELEMENT_FREEHAND_DRAWING:
           // Freehand drawings don't have text
           break;
+        case ELEMENT_SHAPE: {
+          Shape *shape = (Shape *)visual_element;
+          update_text_base(&shape->text, &shape->font_description,
+                           &shape->text_r, &shape->text_g,
+                           &shape->text_b, &shape->text_a,
+                           model_element->text);
+          break;
+        }
         }
       }
 
@@ -269,6 +285,11 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
   // Draw current drawing in progress
   if (data->current_drawing) {
     element_draw((Element*)data->current_drawing, cr, FALSE);
+  }
+
+  // Draw current shape in progress
+  if (data->current_shape) {
+    element_draw((Element*)data->current_shape, cr, FALSE);
   }
 
   if (data->selecting) {
@@ -489,6 +510,35 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     }
     break;
 
+  case ELEMENT_SHAPE:
+    {
+      ElementColor shape_color = {
+        .r = model_element->bg_color->r,
+        .g = model_element->bg_color->g,
+        .b = model_element->bg_color->b,
+        .a = model_element->bg_color->a,
+      };
+      ElementText text = {
+        .text = model_element->text ? model_element->text->text : "",
+        .text_color = {
+          .r = model_element->text ? model_element->text->r : 1.0,
+          .g = model_element->text ? model_element->text->g : 1.0,
+          .b = model_element->text ? model_element->text->b : 1.0,
+          .a = model_element->text ? model_element->text->a : 1.0,
+        },
+        .font_description = model_element->text ? model_element->text->font_description : "Ubuntu Mono 12"
+      };
+      int stroke_width = model_element->stroke_width > 0 ? model_element->stroke_width : 3;
+      ShapeType shape_type = model_element->shape_type >= 0 ? model_element->shape_type : SHAPE_CIRCLE;
+      gboolean filled = model_element->filled;
+      ElementShape shape_config = {
+        .shape_type = shape_type,
+        .stroke_width = stroke_width,
+        .filled = filled
+      };
+      visual_element = (Element*)shape_create(position, size, shape_color, stroke_width, shape_type, filled, text, shape_config, data);
+    }
+    break;
   default:
     break;
   }

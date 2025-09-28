@@ -13,6 +13,7 @@ typedef enum {
   ELEMENT_SPACE,
   ELEMENT_MEDIA_FILE,
   ELEMENT_FREEHAND_DRAWING,
+  ELEMENT_SHAPE,
 } ElementType;
 
 typedef enum {
@@ -72,6 +73,12 @@ typedef struct {
 } ElementDrawing;
 
 typedef struct {
+  int shape_type;
+  int stroke_width;
+  gboolean filled;
+} ElementShape;
+
+typedef struct {
   ElementType type;
   ElementColor bg_color;
   ElementPosition position;
@@ -80,6 +87,7 @@ typedef struct {
   ElementDrawing drawing;
   ElementConnection connection;
   ElementText text;
+  ElementShape shape;
 } ElementConfig;
 
 struct Element {

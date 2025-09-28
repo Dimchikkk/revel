@@ -125,7 +125,9 @@ int database_create_tables(sqlite3 *db) {
     "    image_id INTEGER,"          // Image note related
     "    video_id INTEGER,"          // Video note related
     "    drawing_points BLOB,"       // For freehand drawings: array of points
-    "    stroke_width INTEGER,"      // For freehand drawings: stroke width
+    "    stroke_width INTEGER,"      // For freehand drawings and shapes: stroke width
+    "    shape_type INTEGER,"        // For shapes: type (circle, rectangle, triangle)
+    "    filled INTEGER,"            // For shapes: whether shape is filled (boolean)
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -713,8 +715,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -788,6 +790,10 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
+  // Bind shape_type (for shapes)
+  sqlite3_bind_int(stmt, param_index++, element->shape_type);
+  // Bind filled (for shapes)
+  sqlite3_bind_int(stmt, param_index++, element->filled ? 1 : 0);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create element: %s\n", sqlite3_errmsg(db));
@@ -980,7 +986,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "text_id = ?, bg_color_id = ?, image_id = ?, video_id = ?, "
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ?, "
-    "space_uuid = ?, drawing_points = ?, stroke_width = ? "
+    "space_uuid = ?, drawing_points = ?, stroke_width = ?, "
+    "shape_type = ?, filled = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -1066,6 +1073,10 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
+  // Bind shape_type (for shapes)
+  sqlite3_bind_int(stmt, param_index++, element->shape_type);
+  // Bind filled (for shapes)
+  sqlite3_bind_int(stmt, param_index++, element->filled ? 1 : 0);
 
   // Where clause
   sqlite3_bind_text(stmt, param_index++, element_uuid, -1, SQLITE_STATIC);
@@ -1172,7 +1183,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
     "e.image_id, e.video_id, "
-    "e.drawing_points, e.stroke_width "
+    "e.drawing_points, e.stroke_width, e.shape_type, e.filled "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -1202,6 +1213,8 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_VIDEO_ID,
     COL_DRAWING_POINTS,
     COL_STROKE_WIDTH,
+    COL_SHAPE_TYPE,
+    COL_FILLED,
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1367,7 +1380,8 @@ int database_load_space(sqlite3 *db, Model *model) {
       g_array_append_vals(element->drawing_points, drawing_blob, point_count);
     }
     element->stroke_width = sqlite3_column_int(stmt, COL_STROKE_WIDTH);
-
+    element->shape_type = sqlite3_column_int(stmt, COL_SHAPE_TYPE);
+    element->filled = sqlite3_column_int(stmt, COL_FILLED) ? TRUE : FALSE;
 
     element->visual_element = NULL;
 
