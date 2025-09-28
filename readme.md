@@ -1,6 +1,6 @@
 # Revel
 
-Note-taking and brainstorming app
+Note-taking and brainstorming application with infinite canvas and powerful organization features.
 
 ## Table of Contents
 
@@ -9,38 +9,71 @@ Note-taking and brainstorming app
 * [To run on x86_64 GNU/Linux](#to-run-on-x86_64-gnulinux)
 * [How to add app launcher](#how-to-add-app-launcher)
 
-
-
 ## Features:
 
-### General
-* All data is stored in a single portable SQLite3 database file.
-* Full-text search with BM25 ranking.
-* Infinite canvas with zoom and pan.
-* Organize elements into nested spaces (infinite space depth).
-* Move elements between spaces.
-* Undo/redo for most actions.
-* Customizable canvas background color and grid.
+### Core Architecture
+* **Single-file database:** All data stored in portable SQLite3 database file
+* **Full-text search:** Advanced BM25 ranking algorithm for content discovery
+* **Infinite canvas:** Zoom, pan, and organize content in unlimited 2D space
+* **Nested spaces:** Organize elements into hierarchical spaces with infinite depth
+* **Cross-space operations:** Move and search elements across different spaces
 
-### Elements
-* Create different types of notes:
-    * **Paper Notes:** Simple text notes.
-    * **Notes:** Text notes with more formatting options.
-    * **Media Notes:** Notes that can contain images and videos.
-* **Images:** Paste images from clipboard and annotate them.
-* **Videos:** Store and play short MP4 clips.
-* **Shapes:** Draw various geometrical shapes like circles, rectangles, triangles, and more.
-* **Freehand Drawing:** Draw on the canvas with a pen tool.
-* Connect elements with arrows.
-* Resize, move, delete, and change the background color of elements.
-* Forking an element creates an independent copy.
-* Cloning an element creates a copy with properties that stay in sync.
+### Content Types
+* **Paper Notes:** Simple, lightweight text notes for quick thoughts
+* **Rich Notes:** Advanced text notes with full formatting capabilities
+* **Media Notes:** Container notes that can embed images and videos
+* **Shapes:** Geometric elements (circles, rectangles, triangles, diamonds, cylinders)
+    * Configurable stroke width and fill options
+    * Text labels with custom fonts
+* **Freehand Drawing:** Free-form pen tool with adjustable stroke width
+* **Images:** Direct clipboard paste and drag-and-drop support
+* **Videos:** MP4 video playback with thumbnail previews
 
-### Text and Fonts
-* Change text properties like font, color, size, and style.
+### Connections & Relationships
+* **Smart Arrows:** Connect any elements with visual relationships
+    * **Parallel arrows:** Curved connections with automatic routing
+    * **Straight arrows:** Direct point-to-point connections
+    * **Arrowhead types:** None, single, or double arrowheads
+* **Connection points:** 4-point connection system for precise linking
 
-### Scripting
-* Execute a simple DSL to programmatically create notes and connections.
+### Element Management
+* **Flexible editing:** Resize, move and style all element types
+* **Element descriptions:** Private comments/metadata with creation timestamps
+* **Background colors:** Customize appearance of any element
+* **Z-order control:** Layer elements with bring-to-front functionality
+* **Element cloning:**
+    * **Fork:** Create independent copies
+    * **Clone by text:** Share text content across elements
+    * **Clone by size:** Share dimensions across elements
+
+### Advanced Features
+* **Comprehensive undo/redo:** Track all actions with detailed history log
+* **Drag & drop:** Import images and videos directly from file manager
+* **Keyboard shortcuts:** Full productivity shortcuts for all major actions
+* **Font management:** Complete typography control with family, size, and style
+* **Color management:** Advanced color picker for all visual elements
+* **Action logging:** Timestamped history of all user actions
+
+### User Interface
+* **Context menus:** Right-click access to all element operations
+* **Shape designer:** Visual shape selection and configuration dialog
+* **Search interface:** Global content search across all spaces
+* **Space navigation:** Easy switching between hierarchical workspaces
+* **Drawing toolbar:** Tools for freehand drawing and shape creation
+
+### Automation & Scripting
+* **DSL (Domain Specific Language):** Programmatically create complex layouts
+    * Batch element creation
+    * Automated connections
+    * Scripted arrangements
+
+### Keyboard Shortcuts
+* **Ctrl+S:** Search elements
+* **Ctrl+N:** Create new note
+* **Ctrl+D:** Toggle drawing mode
+* **Ctrl+E:** Open DSL Executor window
+* **Ctrl+Z:** Undo action
+* **Ctrl+Y:** Redo action
 
 ## Dependencies
 

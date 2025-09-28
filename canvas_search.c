@@ -157,7 +157,7 @@ void canvas_show_search_dialog(GtkButton *button, gpointer user_data) {
     }
 
     GtkWidget *dialog = gtk_dialog_new();
-    gtk_window_set_title(GTK_WINDOW(dialog), "Search Notes");
+    gtk_window_set_title(GTK_WINDOW(dialog), "Search Elements");
     gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 400);
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
     gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(window));
@@ -173,7 +173,7 @@ void canvas_show_search_dialog(GtkButton *button, gpointer user_data) {
 
     // Search entry
     GtkWidget *search_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(search_entry), "Type to search notes...");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(search_entry), "Type to search elements...");
     gtk_entry_set_icon_from_icon_name(GTK_ENTRY(search_entry), GTK_ENTRY_ICON_PRIMARY, "edit-find-symbolic");
     gtk_box_append(GTK_BOX(vbox), search_entry);
 
