@@ -68,12 +68,17 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
     * Scripted arrangements
 
 ### Keyboard Shortcuts
+* **Ctrl+A:** Select all elements (when not editing)
 * **Ctrl+S:** Search elements
 * **Ctrl+N:** Create new note
 * **Ctrl+D:** Toggle drawing mode
 * **Ctrl+E:** Open DSL Executor window
+* **Ctrl+V:** Paste from clipboard
 * **Ctrl+Z:** Undo action
 * **Ctrl+Y:** Redo action
+* **Enter:** Finish text editing
+* **Delete:** Delete selected elements
+* **Backspace:** Go to parent space
 
 ## Dependencies
 

@@ -1472,6 +1472,72 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) on_undo_clicked(NULL, data);
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);
 
+  // Add Ctrl+A for select all elements (when not editing)
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_a) {
+    // Clear existing selection first
+    canvas_clear_selection(data);
+
+    // Get all visual elements in current space
+    GList *visual_elements = canvas_get_visual_elements(data);
+
+    // Add all elements to selection
+    for (GList *l = visual_elements; l != NULL; l = l->next) {
+      Element *element = (Element*)l->data;
+      // Skip hidden elements from selection
+      ModelElement *model_element = model_get_by_visual(data->model, element);
+      if (model_element && !canvas_is_element_hidden(data, model_element->uuid)) {
+        data->selected_elements = g_list_append(data->selected_elements, element);
+      }
+    }
+
+    // Free the list (elements are still valid, we just copied the pointers)
+    g_list_free(visual_elements);
+
+    // Redraw to show selection
+    gtk_widget_queue_draw(data->drawing_area);
+    return TRUE;
+  }
+
+  // Add Delete key for deleting selected elements (when not editing)
+  if (keyval == GDK_KEY_Delete) {
+    if (data->selected_elements) {
+      // Create a copy of the list since we'll be modifying the original during deletion
+      GList *elements_to_delete = g_list_copy(data->selected_elements);
+
+      for (GList *l = elements_to_delete; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        ModelElement *model_element = model_get_by_visual(data->model, element);
+
+        if (model_element) {
+          // Check if it's a space with elements (same logic as single delete)
+          if (model_element->type->type == ELEMENT_SPACE) {
+            if (model_element->state != MODEL_STATE_NEW) {
+              int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
+              if (element_count > 0) {
+                // Skip deletion of non-empty spaces, but continue with other elements
+                continue;
+              }
+            }
+          }
+
+          // Push undo action BEFORE deletion
+          undo_manager_push_delete_action(data->undo_manager, model_element);
+
+          // Delete the element
+          model_delete_element(data->model, model_element);
+        }
+      }
+
+      g_list_free(elements_to_delete);
+
+      // Clear selection and sync with model
+      canvas_clear_selection(data);
+      canvas_sync_with_model(data);
+      gtk_widget_queue_draw(data->drawing_area);
+    }
+    return TRUE;
+  }
+
   // Add backspace navigation to parent space (when not editing)
   if (keyval == GDK_KEY_BackSpace) {
     go_back_to_parent_space(data);
