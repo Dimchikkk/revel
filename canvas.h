@@ -71,6 +71,9 @@ struct _CanvasData {
   gboolean show_grid;
   GdkRGBA grid_color;
 
+  // Hidden elements tracking
+  GHashTable *hidden_elements; // uuid string -> gboolean
+
   Model *model;
 };
 

@@ -74,6 +74,8 @@ void model_element_free(ModelElement *element) {
   g_free(element->from_element_uuid);
   g_free(element->to_element_uuid);
   g_free(element->target_space_uuid);
+  g_free(element->description);
+  g_free(element->created_at);
 
   if (element->drawing_points != NULL) {
     g_array_free(element->drawing_points, TRUE);
@@ -1010,6 +1012,59 @@ GList* find_connected_elements_bfs(Model *model, const char *start_uuid) {
         if (is_connected && !g_hash_table_contains(visited, element_uuid)) {
           g_queue_push_tail(queue, g_strdup(element_uuid));
           g_hash_table_add(visited, g_strdup(element_uuid));
+        }
+      }
+    }
+
+    g_free(current_uuid);
+  }
+
+  g_queue_free(queue);
+  g_hash_table_destroy(visited);
+  return result;
+}
+
+GList* find_children_bfs(Model *model, const char *parent_uuid) {
+  GList *result = NULL;
+  GQueue *queue = g_queue_new();
+  GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
+
+  g_queue_push_tail(queue, g_strdup(parent_uuid));
+  g_hash_table_add(visited, g_strdup(parent_uuid));
+
+  while (!g_queue_is_empty(queue)) {
+    char *current_uuid = g_queue_pop_head(queue);
+    ModelElement *current_element = g_hash_table_lookup(model->elements, current_uuid);
+
+    if (current_element) {
+      // Add current element to result, but exclude the starting parent
+      if (g_strcmp0(current_uuid, parent_uuid) != 0) {
+        result = g_list_append(result, current_element);
+      }
+
+      // Find all connections that originate FROM the current element
+      GHashTableIter iter;
+      gpointer key, value;
+      g_hash_table_iter_init(&iter, model->elements);
+
+      while (g_hash_table_iter_next(&iter, &key, &value)) {
+        ModelElement *element = (ModelElement*)value;
+
+        // Only follow outgoing connections (arrows going FROM current element TO other elements)
+        if (element->type->type == ELEMENT_CONNECTION &&
+            element->from_element_uuid && g_strcmp0(element->from_element_uuid, current_uuid) == 0) {
+
+          // This connection goes FROM current_uuid TO element->to_element_uuid
+          if (element->to_element_uuid && !g_hash_table_contains(visited, element->to_element_uuid)) {
+            g_queue_push_tail(queue, g_strdup(element->to_element_uuid));
+            g_hash_table_add(visited, g_strdup(element->to_element_uuid));
+          }
+
+          // Also include the connection itself in the result (but not in the starting case)
+          if (g_strcmp0(current_uuid, parent_uuid) != 0 ||
+              g_strcmp0(element->from_element_uuid, parent_uuid) == 0) {
+            result = g_list_append(result, element);
+          }
         }
       }
     }

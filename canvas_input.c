@@ -713,6 +713,12 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
 
+    // Skip hidden elements from picking
+    ModelElement *model_element = model_get_by_visual(data->model, element);
+    if (model_element && canvas_is_element_hidden(data, model_element->uuid)) {
+      continue;
+    }
+
     if (cx >= element->x && cx <= element->x + element->width &&
         cy >= element->y && cy <= element->y + element->height) {
       if (element->z > highest_z_index) {
@@ -844,6 +850,93 @@ static gboolean destroy_popover_callback(gpointer user_data) {
 
 static void on_popover_closed(GtkPopover *popover, gpointer user_data) {
   g_idle_add(destroy_popover_callback, popover);
+}
+
+static void on_description_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
+  if (response_id == GTK_RESPONSE_OK) {
+    ModelElement *model_element = g_object_get_data(G_OBJECT(dialog), "model_element");
+    GtkTextBuffer *buffer = g_object_get_data(G_OBJECT(dialog), "text_buffer");
+    CanvasData *data = g_object_get_data(G_OBJECT(dialog), "canvas_data");
+
+    if (model_element && buffer && data) {
+      GtkTextIter start, end;
+      gtk_text_buffer_get_bounds(buffer, &start, &end);
+      gchar *new_description = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+
+      // Update the description
+      g_free(model_element->description);
+      model_element->description = g_strdup(new_description);
+
+      // Mark element as updated (but keep NEW elements as NEW)
+      if (model_element->state != MODEL_STATE_NEW) {
+        model_element->state = MODEL_STATE_UPDATED;
+      }
+
+      g_free(new_description);
+    }
+  }
+
+  gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void on_description_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (data && data->model && element_uuid) {
+    ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+    if (model_element) {
+      // Create description dialog
+      GtkWidget *dialog = gtk_dialog_new_with_buttons("Element Description",
+                                                      GTK_WINDOW(gtk_widget_get_root(data->drawing_area)),
+                                                      GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                      "Cancel", GTK_RESPONSE_CANCEL,
+                                                      "Save", GTK_RESPONSE_OK,
+                                                      NULL);
+
+      GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+      gtk_widget_set_size_request(dialog, 400, 300);
+
+      // Add creation date label
+      gchar *created_text;
+      if (model_element->created_at) {
+        created_text = g_strdup_printf("Created: %s", model_element->created_at);
+      } else if (model_element->state == MODEL_STATE_NEW) {
+        created_text = g_strdup("Created: Just now (not saved yet)");
+      } else {
+        created_text = g_strdup("Created: Unknown");
+      }
+      GtkWidget *created_label = gtk_label_new(created_text);
+      gtk_label_set_xalign(GTK_LABEL(created_label), 0.0);
+      gtk_box_append(GTK_BOX(content_area), created_label);
+      g_free(created_text);
+
+      // Add description text view
+      GtkWidget *scrolled = gtk_scrolled_window_new();
+      gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+      gtk_widget_set_vexpand(scrolled, TRUE);
+
+      GtkWidget *text_view = gtk_text_view_new();
+      gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD);
+      gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), text_view);
+
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+      if (model_element->description) {
+        gtk_text_buffer_set_text(buffer, model_element->description, -1);
+      }
+
+      gtk_box_append(GTK_BOX(content_area), scrolled);
+
+      // Store references for the response handler
+      g_object_set_data(G_OBJECT(dialog), "model_element", model_element);
+      g_object_set_data(G_OBJECT(dialog), "text_buffer", buffer);
+      g_object_set_data(G_OBJECT(dialog), "canvas_data", data);
+
+      g_signal_connect(dialog, "response", G_CALLBACK(on_description_dialog_response), NULL);
+
+      gtk_widget_show(dialog);
+    }
+  }
 }
 
 static void on_delete_element_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
@@ -1006,6 +1099,26 @@ static void on_change_text_action(GSimpleAction *action, GVariant *parameter, gp
   font_dialog_open(canvas_data, element);
 }
 
+static void on_hide_children_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (data && data->model && element_uuid) {
+    canvas_hide_children(data, element_uuid);
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+}
+
+static void on_show_children_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (data && data->model && element_uuid) {
+    canvas_show_children(data, element_uuid);
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+}
+
 void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
@@ -1025,6 +1138,12 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(delete_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_signal_connect(delete_action, "activate", G_CALLBACK(on_delete_element_action), NULL);
 
+        // Create description action
+        GSimpleAction *description_action = g_simple_action_new("description", NULL);
+        g_object_set_data(G_OBJECT(description_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(description_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+        g_signal_connect(description_action, "activate", G_CALLBACK(on_description_action), NULL);
+
         GSimpleAction *change_color_action = g_simple_action_new("change-color", NULL);
         g_object_set_data(G_OBJECT(change_color_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(change_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
@@ -1034,6 +1153,10 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
         GSimpleAction *change_space_action = g_simple_action_new("change-space", NULL);
         GSimpleAction *change_text_action = g_simple_action_new("change-text", NULL);
+
+        // Hide/show children actions
+        GSimpleAction *hide_children_action = g_simple_action_new("hide-children", NULL);
+        GSimpleAction *show_children_action = g_simple_action_new("show-children", NULL);
 
         // Store data for existing actions
         g_object_set_data(G_OBJECT(change_space_action), "canvas_data", data);
@@ -1046,6 +1169,10 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(clone_size_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_object_set_data(G_OBJECT(change_text_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(change_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+        g_object_set_data(G_OBJECT(hide_children_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(hide_children_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+        g_object_set_data(G_OBJECT(show_children_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(show_children_action), "element_uuid", g_strdup(model_element->uuid), g_free);
 
         // Connect existing actions
         g_signal_connect(fork_action, "activate", G_CALLBACK(on_fork_element_action), NULL);
@@ -1054,15 +1181,20 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
         g_signal_connect(change_space_action, "activate", G_CALLBACK(on_change_space_action), NULL);
         g_signal_connect(change_text_action, "activate", G_CALLBACK(on_change_text_action), NULL);
+        g_signal_connect(hide_children_action, "activate", G_CALLBACK(on_hide_children_action), NULL);
+        g_signal_connect(show_children_action, "activate", G_CALLBACK(on_show_children_action), NULL);
 
         // Add all actions to the action group
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(description_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(fork_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_text_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_text_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(hide_children_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(show_children_action));
 
         // Connection-specific actions
         GSimpleAction *change_arrow_type_action = NULL;
@@ -1096,8 +1228,22 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
           g_menu_append(menu_model, "Change Arrow Type", "menu.change-arrow-type");
           g_menu_append(menu_model, "Change Arrowhead", "menu.change-arrowhead-type");
         }
+        // Add hide/show children options if element has children (outgoing arrows)
+        GList *children = find_children_bfs(data->model, model_element->uuid);
+        if (children) { // Has children via outgoing arrows
+          gboolean has_hidden_children = canvas_has_hidden_children(data, model_element->uuid);
+
+          if (has_hidden_children) {
+            g_menu_append(menu_model, "Show Children", "menu.show-children");
+          } else {
+            g_menu_append(menu_model, "Hide Children", "menu.hide-children");
+          }
+          g_list_free(children);
+        }
+
         g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
         g_menu_append(menu_model, "Fork Element", "menu.fork");
+        g_menu_append(menu_model, "Description", "menu.description");
         g_menu_append(menu_model, "Delete", "menu.delete");
 
         // Create the popover menu
@@ -1121,6 +1267,8 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(popover), "change_space_action", change_space_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_color_action", change_color_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_text_action", change_text_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "hide_children_action", hide_children_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "show_children_action", show_children_action, g_object_unref);
         if (change_arrow_type_action) {
           g_object_set_data_full(G_OBJECT(popover), "change_arrow_type_action", change_arrow_type_action, g_object_unref);
         }

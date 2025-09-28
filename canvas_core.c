@@ -87,6 +87,9 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->show_grid = FALSE;
   data->grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0}; // Default light gray
 
+  // Initialize hidden elements tracking
+  data->hidden_elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
   return data;
@@ -246,6 +249,9 @@ void canvas_data_free(CanvasData *data) {
   if (data->line_cursor) g_object_unref(data->line_cursor);
   if (data->current_drawing) element_free((Element*)data->current_drawing);
 
+  // Clean up hidden elements tracking
+  if (data->hidden_elements) g_hash_table_destroy(data->hidden_elements);
+
   // Don't free the model here - it's freed in canvas_on_app_shutdown
 
   g_free(data);
@@ -373,7 +379,31 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
 
   for (GList *l = sorted_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
+
+    // Skip drawing hidden elements
+    ModelElement *model_element = model_get_by_visual(data->model, element);
+    if (model_element && canvas_is_element_hidden(data, model_element->uuid)) {
+      continue;
+    }
+
     element_draw(element, cr, canvas_is_element_selected(data, element));
+
+    // Draw indicator if element has hidden children
+    if (model_element && canvas_has_hidden_children(data, model_element->uuid)) {
+      // Draw a small triangle indicator in the bottom-right corner
+      double indicator_size = 8.0;
+      double x = (element->x + element->width - indicator_size - 3) * data->zoom_scale + data->offset_x * data->zoom_scale;
+      double y = (element->y + element->height - indicator_size - 3) * data->zoom_scale + data->offset_y * data->zoom_scale;
+
+      cairo_save(cr);
+      cairo_set_source_rgba(cr, 1.0, 0.5, 0.0, 0.8); // Orange color
+      cairo_move_to(cr, x, y + indicator_size);
+      cairo_line_to(cr, x + indicator_size, y + indicator_size);
+      cairo_line_to(cr, x + indicator_size / 2, y);
+      cairo_close_path(cr);
+      cairo_fill(cr);
+      cairo_restore(cr);
+    }
   }
 
   g_list_free(sorted_elements);
@@ -703,4 +733,53 @@ void canvas_update_zoom_entry(CanvasData *data) {
     snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", data->zoom_scale * 100);
     gtk_editable_set_text(GTK_EDITABLE(data->zoom_entry), zoom_text);
   }
+}
+
+// Hide/show children functionality
+void canvas_hide_children(CanvasData *data, const char *parent_uuid) {
+  if (!data || !parent_uuid || !data->hidden_elements || !data->model) return;
+
+  GList *children = find_children_bfs(data->model, parent_uuid);
+  for (GList *iter = children; iter != NULL; iter = iter->next) {
+    ModelElement *element = (ModelElement*)iter->data;
+    if (element && element->uuid) {
+      // Hide all children elements (parent is already excluded by find_children_bfs)
+      g_hash_table_insert(data->hidden_elements, g_strdup(element->uuid), GINT_TO_POINTER(TRUE));
+    }
+  }
+  g_list_free(children);
+}
+
+void canvas_show_children(CanvasData *data, const char *parent_uuid) {
+  if (!data || !parent_uuid || !data->hidden_elements || !data->model) return;
+
+  GList *children = find_children_bfs(data->model, parent_uuid);
+  for (GList *iter = children; iter != NULL; iter = iter->next) {
+    ModelElement *element = (ModelElement*)iter->data;
+    if (element && element->uuid) {
+      // Show all children elements (parent is already excluded by find_children_bfs)
+      g_hash_table_remove(data->hidden_elements, element->uuid);
+    }
+  }
+  g_list_free(children);
+}
+
+gboolean canvas_is_element_hidden(CanvasData *data, const char *element_uuid) {
+  if (!data || !element_uuid || !data->hidden_elements) return FALSE;
+  return g_hash_table_contains(data->hidden_elements, element_uuid);
+}
+
+gboolean canvas_has_hidden_children(CanvasData *data, const char *parent_uuid) {
+  if (!data || !parent_uuid || !data->hidden_elements || !data->model) return FALSE;
+
+  GList *children = find_children_bfs(data->model, parent_uuid);
+  for (GList *iter = children; iter != NULL; iter = iter->next) {
+    ModelElement *element = (ModelElement*)iter->data;
+    if (element && element->uuid && g_hash_table_contains(data->hidden_elements, element->uuid)) {
+      g_list_free(children);
+      return TRUE;
+    }
+  }
+  g_list_free(children);
+  return FALSE;
 }

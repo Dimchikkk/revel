@@ -26,4 +26,10 @@ void canvas_canvas_to_screen(CanvasData *data, int canvas_x, int canvas_y, int *
 void canvas_set_cursor(CanvasData *data, GdkCursor *cursor);
 void canvas_update_zoom_entry(CanvasData *data);
 
+// Hide/show children functionality
+void canvas_hide_children(CanvasData *data, const char *parent_uuid);
+void canvas_show_children(CanvasData *data, const char *parent_uuid);
+gboolean canvas_is_element_hidden(CanvasData *data, const char *element_uuid);
+gboolean canvas_has_hidden_children(CanvasData *data, const char *parent_uuid);
+
 #endif

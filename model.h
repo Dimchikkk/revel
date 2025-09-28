@@ -112,6 +112,10 @@ struct _ModelElement {
 
   // For space elements
   gchar *target_space_uuid;
+
+  // Element description
+  gchar *description;
+  gchar *created_at;
 };
 
 // Model manages all elements
@@ -183,6 +187,7 @@ void model_free_search_result(ModelSearchResult *result);
 
 int move_element_to_space(Model *model, ModelElement *element, const char *new_space_uuid);
 GList* find_connected_elements_bfs(Model *model, const char *start_uuid);
+GList* find_children_bfs(Model *model, const char *parent_uuid);
 
 typedef struct {
     char *uuid;

@@ -133,6 +133,7 @@ int database_create_tables(sqlite3 *db) {
     "    filled INTEGER,"            // For shapes: whether shape is filled (boolean)
     "    connection_type INTEGER,"   // For connections: parallel, straight, curved
     "    arrowhead_type INTEGER,"    // For connections: none, single, double
+    "    description TEXT,"          // Element description/comment
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -720,8 +721,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, connection_type, arrowhead_type) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, connection_type, arrowhead_type, description) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -803,6 +804,12 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   sqlite3_bind_int(stmt, param_index++, element->connection_type);
   // Bind arrowhead_type (for connections)
   sqlite3_bind_int(stmt, param_index++, element->arrowhead_type);
+  // Bind description
+  if (element->description) {
+    sqlite3_bind_text(stmt, param_index++, element->description, -1, SQLITE_STATIC);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
+  }
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create element: %s\n", sqlite3_errmsg(db));
@@ -818,7 +825,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, bg_color_id, "
     "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id, video_id, "
-    "drawing_points, stroke_width "
+    "drawing_points, stroke_width, shape_type, filled, connection_type, arrowhead_type, description, created_at "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
 
@@ -934,6 +941,22 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
     }
 
     elem->stroke_width = sqlite3_column_int(stmt, col++);
+    elem->shape_type = sqlite3_column_int(stmt, col++);
+    elem->filled = sqlite3_column_int(stmt, col++) ? TRUE : FALSE;
+    elem->connection_type = sqlite3_column_int(stmt, col++);
+    elem->arrowhead_type = sqlite3_column_int(stmt, col++);
+
+    // Read description
+    const char *description = (const char*)sqlite3_column_text(stmt, col++);
+    if (description) {
+      elem->description = g_strdup(description);
+    }
+
+    // Read created_at
+    const char *created_at = (const char*)sqlite3_column_text(stmt, col++);
+    if (created_at) {
+      elem->created_at = g_strdup(created_at);
+    }
 
     *element = elem;
     sqlite3_finalize(stmt);
@@ -996,7 +1019,7 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ?, "
     "space_uuid = ?, drawing_points = ?, stroke_width = ?, "
-    "shape_type = ?, filled = ?, connection_type = ?, arrowhead_type = ? "
+    "shape_type = ?, filled = ?, connection_type = ?, arrowhead_type = ?, description = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -1090,6 +1113,12 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   sqlite3_bind_int(stmt, param_index++, element->connection_type);
   // Bind arrowhead_type (for connections)
   sqlite3_bind_int(stmt, param_index++, element->arrowhead_type);
+  // Bind description
+  if (element->description) {
+    sqlite3_bind_text(stmt, param_index++, element->description, -1, SQLITE_STATIC);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
+  }
 
   // Where clause
   sqlite3_bind_text(stmt, param_index++, element_uuid, -1, SQLITE_STATIC);
@@ -1196,7 +1225,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
     "e.image_id, e.video_id, "
-    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.connection_type, e.arrowhead_type "
+    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.connection_type, e.arrowhead_type, e.description, e.created_at "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -1230,6 +1259,8 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_FILLED,
     COL_CONNECTION_TYPE,
     COL_ARROWHEAD_TYPE,
+    COL_DESCRIPTION,
+    COL_CREATED_AT,
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1399,6 +1430,18 @@ int database_load_space(sqlite3 *db, Model *model) {
     element->filled = sqlite3_column_int(stmt, COL_FILLED) ? TRUE : FALSE;
     element->connection_type = sqlite3_column_int(stmt, COL_CONNECTION_TYPE);
     element->arrowhead_type = sqlite3_column_int(stmt, COL_ARROWHEAD_TYPE);
+
+    // Read description
+    const char *description = (const char*)sqlite3_column_text(stmt, COL_DESCRIPTION);
+    if (description) {
+      element->description = g_strdup(description);
+    }
+
+    // Read created_at
+    const char *created_at = (const char*)sqlite3_column_text(stmt, COL_CREATED_AT);
+    if (created_at) {
+      element->created_at = g_strdup(created_at);
+    }
 
     element->visual_element = NULL;
 
