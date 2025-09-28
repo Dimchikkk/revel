@@ -139,10 +139,10 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   // Draw connection points when selected
   if (is_selected && !text->editing) {
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 4; i++) {
       int cx, cy;
       inline_text_get_connection_point(element, i, &cx, &cy);
-      cairo_arc(cr, cx, cy, 3, 0, 2 * G_PI);
+      cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
       cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.6);
       cairo_fill(cr);
     }
@@ -150,16 +150,11 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 }
 
 void inline_text_get_connection_point(Element *element, int point, int *cx, int *cy) {
-  // 8-point connection system
   switch(point) {
-  case 0: *cx = element->x + element->width/2; *cy = element->y; break; // Top
-  case 1: *cx = element->x + element->width; *cy = element->y; break;   // Top-right
-  case 2: *cx = element->x + element->width; *cy = element->y + element->height/2; break; // Right
-  case 3: *cx = element->x + element->width; *cy = element->y + element->height; break;   // Bottom-right
-  case 4: *cx = element->x + element->width/2; *cy = element->y + element->height; break; // Bottom
-  case 5: *cx = element->x; *cy = element->y + element->height; break;   // Bottom-left
-  case 6: *cx = element->x; *cy = element->y + element->height/2; break; // Left
-  case 7: *cx = element->x; *cy = element->y; break;   // Top-left
+  case 0: *cx = element->x + element->width/2; *cy = element->y; break;
+  case 1: *cx = element->x + element->width; *cy = element->y + element->height/2; break;
+  case 2: *cx = element->x + element->width/2; *cy = element->y + element->height; break;
+  case 3: *cx = element->x; *cy = element->y + element->height/2; break;
   }
 }
 
