@@ -8,6 +8,11 @@
 #include "space.h"
 #include "undo_manager.h"
 
+static void on_space_entry_activate(GtkEntry *entry, gpointer user_data) {
+  GtkDialog *dialog = GTK_DIALOG(user_data);
+  gtk_dialog_response(dialog, GTK_RESPONSE_OK);
+}
+
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
   ElementPosition position = {
@@ -174,6 +179,9 @@ void canvas_on_add_space(GtkButton *button, gpointer user_data) {
 
   // Set focus on the entry field
   gtk_widget_grab_focus(entry);
+
+  // Connect Enter key to trigger Create button
+  g_signal_connect(entry, "activate", G_CALLBACK(on_space_entry_activate), dialog);
 
   g_signal_connect(dialog, "response", G_CALLBACK(space_creation_dialog_response), data);
 

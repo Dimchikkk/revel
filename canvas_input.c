@@ -951,7 +951,16 @@ static void on_delete_element_action(GSimpleAction *action, GVariant *parameter,
         if (model_element->state != MODEL_STATE_NEW) {
           int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
           if (element_count > 0) {
-            g_print("Only empty space is allowed for deletion for now\n");
+            GtkWidget *dialog = gtk_message_dialog_new(
+              GTK_WINDOW(gtk_widget_get_ancestor(data->drawing_area, GTK_TYPE_WINDOW)),
+              GTK_DIALOG_MODAL,
+              GTK_MESSAGE_WARNING,
+              GTK_BUTTONS_OK,
+              "Space contains %d elements. Please remove them first before deleting the space.",
+              element_count
+            );
+            gtk_window_present(GTK_WINDOW(dialog));
+            g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
             return;
           }
         }
