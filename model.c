@@ -2,6 +2,7 @@
 #include "database.h"
 #include "element.h"
 #include "note.h"
+#include "connection.h"
 #include <string.h>
 #include <stdio.h>
 #include "canvas_core.h"
@@ -259,6 +260,12 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
   element->stroke_width = config.drawing.stroke_width != 0 ? config.drawing.stroke_width : config.shape.stroke_width;
   element->shape_type = config.shape.shape_type;
   element->filled = config.shape.filled;
+
+  // Set default arrowhead type for connections
+  if (config.type == ELEMENT_CONNECTION) {
+    element->arrowhead_type = ARROWHEAD_SINGLE;
+    element->connection_type = CONNECTION_TYPE_PARALLEL;
+  }
 
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
 

@@ -1,4 +1,4 @@
-- [improvement] different type of connections
+- [improvement] add curve arrows with control points
 - [improvement] ability to hide/show current space name on shortcut
 - [new feature] ability to change canvas color (or load image pattern as canvas background)
 - [fix] support mp4 files without audio channel

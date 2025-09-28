@@ -194,10 +194,14 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
             };
             ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
             ElementConnection connection = {
+              .from_element = data->connection_start,
+              .to_element = element,
               .from_element_uuid = from_model->uuid,
               .to_element_uuid = to_model->uuid,
               .from_point = data->connection_start_point,
               .to_point = cp,
+              .connection_type = CONNECTION_TYPE_PARALLEL,
+              .arrowhead_type = ARROWHEAD_SINGLE,
             };
             ElementDrawing drawing = {
               .drawing_points = NULL,
@@ -939,6 +943,56 @@ static void on_change_space_action(GSimpleAction *action, GVariant *parameter, g
   }
 }
 
+static void on_change_arrow_type_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+  if (data && data->model && element_uuid) {
+    ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+    if (model_element && model_element->visual_element && model_element->visual_element->type == ELEMENT_CONNECTION) {
+      Connection *conn = (Connection*)model_element->visual_element;
+
+      // Cycle through arrow types
+      conn->connection_type = (conn->connection_type + 1) % 2;
+
+      // Update the model element too
+      model_element->connection_type = conn->connection_type;
+
+      // Redraw the canvas
+      gtk_widget_queue_draw(data->drawing_area);
+
+      // Mark as modified for saving
+      if (model_element->state != MODEL_STATE_NEW) {
+        model_element->state = MODEL_STATE_UPDATED;
+      }
+    }
+  }
+}
+
+static void on_change_arrowhead_type_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+  if (data && data->model && element_uuid) {
+    ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+    if (model_element && model_element->visual_element && model_element->visual_element->type == ELEMENT_CONNECTION) {
+      Connection *conn = (Connection*)model_element->visual_element;
+
+      // Cycle through arrowhead types
+      conn->arrowhead_type = (conn->arrowhead_type + 1) % 3;
+
+      // Update the model element too
+      model_element->arrowhead_type = conn->arrowhead_type;
+
+      // Redraw the canvas
+      gtk_widget_queue_draw(data->drawing_area);
+
+      // Mark as modified for saving
+      if (model_element->state != MODEL_STATE_NEW) {
+        model_element->state = MODEL_STATE_UPDATED;
+      }
+    }
+  }
+}
+
 static void on_change_text_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
   CanvasData *canvas_data = g_object_get_data(G_OBJECT(action), "canvas_data");
   char *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
@@ -1006,6 +1060,23 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_text_action));
 
+        // Connection-specific actions
+        GSimpleAction *change_arrow_type_action = NULL;
+        GSimpleAction *change_arrowhead_type_action = NULL;
+        if (element->type == ELEMENT_CONNECTION) {
+          change_arrow_type_action = g_simple_action_new("change-arrow-type", NULL);
+          g_object_set_data(G_OBJECT(change_arrow_type_action), "canvas_data", data);
+          g_object_set_data_full(G_OBJECT(change_arrow_type_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+          g_signal_connect(change_arrow_type_action, "activate", G_CALLBACK(on_change_arrow_type_action), NULL);
+          g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_arrow_type_action));
+
+          change_arrowhead_type_action = g_simple_action_new("change-arrowhead-type", NULL);
+          g_object_set_data(G_OBJECT(change_arrowhead_type_action), "canvas_data", data);
+          g_object_set_data_full(G_OBJECT(change_arrowhead_type_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+          g_signal_connect(change_arrowhead_type_action, "activate", G_CALLBACK(on_change_arrowhead_type_action), NULL);
+          g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_arrowhead_type_action));
+        }
+
         // Create the menu model with delete option first
         GMenu *menu_model = g_menu_new();
         g_menu_append(menu_model, "Change Space", "menu.change-space");
@@ -1016,6 +1087,10 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
             element->type == ELEMENT_SHAPE) {
           g_menu_append(menu_model, "Change Text", "menu.change-text");
           g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
+        }
+        if (element->type == ELEMENT_CONNECTION) {
+          g_menu_append(menu_model, "Change Arrow Type", "menu.change-arrow-type");
+          g_menu_append(menu_model, "Change Arrowhead", "menu.change-arrowhead-type");
         }
         g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
         g_menu_append(menu_model, "Fork Element", "menu.fork");
@@ -1042,6 +1117,12 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(popover), "change_space_action", change_space_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_color_action", change_color_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_text_action", change_text_action, g_object_unref);
+        if (change_arrow_type_action) {
+          g_object_set_data_full(G_OBJECT(popover), "change_arrow_type_action", change_arrow_type_action, g_object_unref);
+        }
+        if (change_arrowhead_type_action) {
+          g_object_set_data_full(G_OBJECT(popover), "change_arrowhead_type_action", change_arrowhead_type_action, g_object_unref);
+        }
 
         // Connect the closed signal with deferred cleanup
         g_signal_connect(popover, "closed", G_CALLBACK(on_popover_closed), NULL);

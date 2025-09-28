@@ -61,10 +61,14 @@ typedef struct {
 } ElementText;
 
 typedef struct {
+  Element* from_element;
+  Element* to_element;
   char* from_element_uuid;
   char* to_element_uuid;
   int from_point;
   int to_point;
+  int connection_type;
+  int arrowhead_type;
 } ElementConnection;
 
 typedef struct {

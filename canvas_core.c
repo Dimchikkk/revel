@@ -438,9 +438,18 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       }
 
       if (from_element && to_element) {
-        visual_element = (Element*)connection_create(from_element, model_element->from_point,
-                                                     to_element, model_element->to_point,
-                                                     bg_color, position.z, data);
+        ElementConnection connection_config = {
+          .from_element = from_element,
+          .to_element = to_element,
+          .from_element_uuid = model_element->from_element_uuid,
+          .to_element_uuid = model_element->to_element_uuid,
+          .from_point = model_element->from_point,
+          .to_point = model_element->to_point,
+          .connection_type = model_element->connection_type,
+          .arrowhead_type = model_element->arrowhead_type
+        };
+
+        visual_element = (Element*)connection_create(connection_config, bg_color, position.z, data);
 
         if (visual_element && model_element->position &&
             model_element->position->z >= data->next_z_index) {

@@ -4,6 +4,7 @@
 #include <math.h>
 #include "canvas_core.h"
 #include "element.h"
+#include "connection.h"
 #include "undo_manager.h"
 #include "dsl_executor.h"
 
@@ -357,10 +358,14 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0,
                              .video_data = NULL, .video_size = 0, .duration = 0 };
       ElementConnection connection = {
+        .from_element = from_model->visual_element,
+        .to_element = to_model->visual_element,
         .from_element_uuid = from_model->uuid,
         .to_element_uuid = to_model->uuid,
         .from_point = from_point,
         .to_point = to_point,
+        .connection_type = CONNECTION_TYPE_PARALLEL,
+        .arrowhead_type = ARROWHEAD_SINGLE,
       };
       ElementDrawing drawing = {
         .drawing_points = NULL,

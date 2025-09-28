@@ -105,6 +105,11 @@ struct _ModelElement {
   // For shape elements
   gint shape_type;
   gboolean filled;
+
+  // For connection elements
+  gint connection_type;
+  gint arrowhead_type;
+
   // For space elements
   gchar *target_space_uuid;
 };

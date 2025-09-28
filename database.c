@@ -128,6 +128,8 @@ int database_create_tables(sqlite3 *db) {
     "    stroke_width INTEGER,"      // For freehand drawings and shapes: stroke width
     "    shape_type INTEGER,"        // For shapes: type (circle, rectangle, triangle)
     "    filled INTEGER,"            // For shapes: whether shape is filled (boolean)
+    "    connection_type INTEGER,"   // For connections: parallel, straight, curved
+    "    arrowhead_type INTEGER,"    // For connections: none, single, double
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -715,8 +717,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, connection_type, arrowhead_type) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -794,6 +796,10 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   sqlite3_bind_int(stmt, param_index++, element->shape_type);
   // Bind filled (for shapes)
   sqlite3_bind_int(stmt, param_index++, element->filled ? 1 : 0);
+  // Bind connection_type (for connections)
+  sqlite3_bind_int(stmt, param_index++, element->connection_type);
+  // Bind arrowhead_type (for connections)
+  sqlite3_bind_int(stmt, param_index++, element->arrowhead_type);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create element: %s\n", sqlite3_errmsg(db));
@@ -987,7 +993,7 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ?, "
     "space_uuid = ?, drawing_points = ?, stroke_width = ?, "
-    "shape_type = ?, filled = ? "
+    "shape_type = ?, filled = ?, connection_type = ?, arrowhead_type = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -1077,6 +1083,10 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   sqlite3_bind_int(stmt, param_index++, element->shape_type);
   // Bind filled (for shapes)
   sqlite3_bind_int(stmt, param_index++, element->filled ? 1 : 0);
+  // Bind connection_type (for connections)
+  sqlite3_bind_int(stmt, param_index++, element->connection_type);
+  // Bind arrowhead_type (for connections)
+  sqlite3_bind_int(stmt, param_index++, element->arrowhead_type);
 
   // Where clause
   sqlite3_bind_text(stmt, param_index++, element_uuid, -1, SQLITE_STATIC);
@@ -1183,7 +1193,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
     "e.image_id, e.video_id, "
-    "e.drawing_points, e.stroke_width, e.shape_type, e.filled "
+    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.connection_type, e.arrowhead_type "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -1215,6 +1225,8 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_STROKE_WIDTH,
     COL_SHAPE_TYPE,
     COL_FILLED,
+    COL_CONNECTION_TYPE,
+    COL_ARROWHEAD_TYPE,
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1382,6 +1394,8 @@ int database_load_space(sqlite3 *db, Model *model) {
     element->stroke_width = sqlite3_column_int(stmt, COL_STROKE_WIDTH);
     element->shape_type = sqlite3_column_int(stmt, COL_SHAPE_TYPE);
     element->filled = sqlite3_column_int(stmt, COL_FILLED) ? TRUE : FALSE;
+    element->connection_type = sqlite3_column_int(stmt, COL_CONNECTION_TYPE);
+    element->arrowhead_type = sqlite3_column_int(stmt, COL_ARROWHEAD_TYPE);
 
     element->visual_element = NULL;
 
