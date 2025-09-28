@@ -151,27 +151,26 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
 
 void canvas_on_add_text(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
-
   ElementPosition position = {
     .x = 100,
     .y = 100,
     .z = data->next_z_index++,
   };
   ElementColor bg_color = {
-    .r = 1.0,
-    .g = 1.0,
-    .b = 1.0,
+    .r = 0.0,
+    .g = 0.0,
+    .b = 0.0,
     .a = 0.0,
   };
   ElementColor text_color = {
-    .r = 0.85,
-    .g = 0.85,
-    .b = 0.85,
+    .r = 0.6,
+    .g = 0.6,
+    .b = 0.6,
     .a = 1.0,
   };
   ElementSize size = {
-    .width = 150,
-    .height = 50,
+    .width = 100,
+    .height = 20,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
@@ -187,15 +186,10 @@ void canvas_on_add_text(GtkButton *button, gpointer user_data) {
   ElementText text = {
     .text = "",
     .text_color = text_color,
-    .font_description = g_strdup("Ubuntu 16"),
-  };
-  ElementShape shape_config = {
-    .shape_type = SHAPE_RECTANGLE,
-    .stroke_width = 0,
-    .filled = FALSE,
+    .font_description = g_strdup("Ubuntu Mono 14"),
   };
   ElementConfig config = {
-    .type = ELEMENT_SHAPE,
+    .type = ELEMENT_INLINE_TEXT,
     .bg_color = bg_color,
     .position = position,
     .size = size,
@@ -203,22 +197,18 @@ void canvas_on_add_text(GtkButton *button, gpointer user_data) {
     .drawing = drawing,
     .connection = connection,
     .text = text,
-    .shape = shape_config,
   };
 
-
   ModelElement *model_element = model_create_element(data->model, config);
-
   if (!model_element) {
-    g_printerr("Failed to create text shape model element\n");
+    g_printerr("Failed to create inline text model element\n");
     return;
   }
-
   // Link model and visual elements
   model_element->visual_element = create_visual_element(model_element, data);
   undo_manager_push_create_action(data->undo_manager, model_element);
 
-  // Start text editing immediately for new text shape
+  // Start text editing immediately for new inline text
   element_start_editing(model_element->visual_element, data->overlay);
 
   gtk_widget_queue_draw(data->drawing_area);
@@ -430,4 +420,69 @@ void canvas_show_background_dialog(GtkButton *button, gpointer user_data) {
   g_signal_connect(dialog, "response", G_CALLBACK(background_dialog_response), data);
 
   gtk_widget_set_visible(dialog, TRUE);
+}
+
+void canvas_on_add_inline_text(GtkButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  ElementPosition position = {
+    .x = 100,
+    .y = 100,
+    .z = data->next_z_index++,
+  };
+  ElementColor bg_color = {
+    .r = 0.0,
+    .g = 0.0,
+    .b = 0.0,
+    .a = 0.0,
+  };
+  ElementColor text_color = {
+    .r = 0.6,
+    .g = 0.6,
+    .b = 0.6,
+    .a = 1.0,
+  };
+  ElementSize size = {
+    .width = 100,
+    .height = 20,
+  };
+  ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
+  ElementConnection connection = {
+    .from_element_uuid = NULL,
+    .to_element_uuid = NULL,
+    .from_point = -1,
+    .to_point = -1,
+  };
+  ElementDrawing drawing = {
+    .drawing_points = NULL,
+    .stroke_width = 0,
+  };
+  ElementText text = {
+    .text = "",
+    .text_color = text_color,
+    .font_description = g_strdup("Ubuntu Mono 14"),
+  };
+  ElementConfig config = {
+    .type = ELEMENT_INLINE_TEXT,
+    .bg_color = bg_color,
+    .position = position,
+    .size = size,
+    .media = media,
+    .drawing = drawing,
+    .connection = connection,
+    .text = text,
+  };
+
+  ModelElement *model_element = model_create_element(data->model, config);
+  if (!model_element) {
+    g_printerr("Failed to create inline text model element\n");
+    return;
+  }
+  // Link model and visual elements
+  model_element->visual_element = create_visual_element(model_element, data);
+  undo_manager_push_create_action(data->undo_manager, model_element);
+
+  // Start text editing immediately for new inline text
+  element_start_editing(model_element->visual_element, data->overlay);
+
+  gtk_widget_queue_draw(data->drawing_area);
 }

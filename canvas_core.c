@@ -7,6 +7,7 @@
 #include "paper_note.h"
 #include "media_note.h"
 #include "note.h"
+#include "inline_text.h"
 #include <pango/pangocairo.h>
 #include "model.h"
 #include "space.h"
@@ -222,6 +223,18 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
                            &shape->text_r, &shape->text_g,
                            &shape->text_b, &shape->text_a,
                            model_element->text);
+          break;
+        }
+        case ELEMENT_INLINE_TEXT: {
+          InlineText *text = (InlineText *)visual_element;
+          update_text_base(&text->text, &text->font_description,
+                           &text->text_r, &text->text_g,
+                           &text->text_b, &text->text_a,
+                           model_element->text);
+          // Update edit_text as well
+          g_free(text->edit_text);
+          text->edit_text = g_strdup(text->text);
+          text->cursor_pos = g_utf8_strlen(text->edit_text, -1);
           break;
         }
         }
@@ -696,6 +709,20 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       visual_element = (Element*)shape_create(position, size, shape_color, stroke_width, shape_type, filled, text, shape_config, data);
     }
     break;
+
+  case ELEMENT_INLINE_TEXT:
+    if (model_element->text) {
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
+      ElementText text = {
+        .text = model_element->text->text,
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+      };
+
+      visual_element = (Element*)inline_text_create(position, bg_color, size, text, data);
+    }
+    break;
+
   default:
     break;
   }

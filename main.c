@@ -237,6 +237,8 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *drawing_area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(drawing_area, TRUE);
   gtk_widget_set_vexpand(drawing_area, TRUE);
+  gtk_widget_set_can_focus(drawing_area, TRUE);
+  gtk_widget_set_focusable(drawing_area, TRUE);
   gtk_overlay_set_child(GTK_OVERLAY(overlay), drawing_area);
 
   CanvasData *data = canvas_data_new(drawing_area, overlay);
@@ -250,9 +252,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), canvas_on_draw, data, NULL);
 
-  GtkEventController *paste_controller = gtk_event_controller_key_new();
-  g_signal_connect(paste_controller, "key-pressed", G_CALLBACK(canvas_on_key_pressed), data);
-  gtk_widget_add_controller(window, paste_controller);
+  GtkEventController *key_controller = gtk_event_controller_key_new();
+  g_signal_connect(key_controller, "key-pressed", G_CALLBACK(canvas_on_key_pressed), data);
+  gtk_widget_add_controller(drawing_area, key_controller);
 
   // Right-click controller
   GtkGesture *right_click_controller = gtk_gesture_click_new();
@@ -335,6 +337,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_object_unref(provider);
 
   gtk_window_present(GTK_WINDOW(window));
+
+  // Give initial focus to the drawing area
+  gtk_widget_grab_focus(drawing_area);
 }
 
 int main(int argc, char **argv) {

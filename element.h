@@ -14,6 +14,7 @@ typedef enum {
   ELEMENT_MEDIA_FILE,
   ELEMENT_FREEHAND_DRAWING,
   ELEMENT_SHAPE,
+  ELEMENT_INLINE_TEXT,
 } ElementType;
 
 typedef enum {

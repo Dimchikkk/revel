@@ -66,6 +66,7 @@ static const char* element_get_type_name(ModelElement *element) {
   case ELEMENT_MEDIA_FILE: return "Media File";
   case ELEMENT_FREEHAND_DRAWING: return "Freehand Drawing";
   case ELEMENT_SHAPE: return "Shape";
+  case ELEMENT_INLINE_TEXT: return "Inline Text";
   default: return "Unknown";
   }
 }
