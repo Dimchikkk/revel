@@ -1,5 +1,5 @@
 - [improvement] add curve arrows with control points
-- [improvement] ability to hide/show current space name on shortcut
+- [improvement] ability to hide/show current space name
 - [new feature] time-travel on row click in log window
 - [new feature] allow choosing DB file
 - [improvement] disable back to parent button if at root space
