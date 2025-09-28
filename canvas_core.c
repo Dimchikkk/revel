@@ -12,11 +12,28 @@
 #include "space.h"
 #include "undo_manager.h"
 #include "shape.h"
+#include "database.h"
 
 static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
   const Element *element_a = (const Element*)a;
   const Element *element_b = (const Element*)b;
   return element_a->z - element_b->z;
+}
+
+static gboolean parse_hex_color(const char *hex_color, double *r, double *g, double *b) {
+  if (!hex_color || hex_color[0] != '#' || strlen(hex_color) != 7) {
+    return FALSE;
+  }
+
+  unsigned int color_int;
+  if (sscanf(hex_color + 1, "%x", &color_int) != 1) {
+    return FALSE;
+  }
+
+  *r = ((color_int >> 16) & 0xFF) / 255.0;
+  *g = ((color_int >> 8) & 0xFF) / 255.0;
+  *b = (color_int & 0xFF) / 255.0;
+  return TRUE;
 }
 
 CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
@@ -65,6 +82,10 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->current_shape = NULL;
   data->shape_start_x = 0;
   data->shape_start_y = 0;
+
+  // Initialize grid settings
+  data->show_grid = FALSE;
+  data->grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0}; // Default light gray
 
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
@@ -236,12 +257,87 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
   cairo_scale(cr, data->zoom_scale, data->zoom_scale);
   cairo_translate(cr, data->offset_x, data->offset_y);
 
-  // Canvas color
-  cairo_set_source_rgb(cr, 0.094, 0.094, 0.094);
+  // Canvas background
+  if (data->model && data->model->current_space_background_color) {
+    double r, g, b;
+    if (parse_hex_color(data->model->current_space_background_color, &r, &g, &b)) {
+      cairo_set_source_rgb(cr, r, g, b);
+    } else {
+      cairo_set_source_rgb(cr, 0.094, 0.094, 0.094); // fallback
+    }
+  } else {
+    // Fallback to default color
+    cairo_set_source_rgb(cr, 0.094, 0.094, 0.094);
+  }
   cairo_paint(cr);
 
+  // Draw grid if enabled
+  if (data->model && data->model->current_space_show_grid) {
+    cairo_save(cr);
+
+    // Grid parameters
+    const int major_grid_size = 80;  // Large cell size (4x4 subcells)
+    const int minor_grid_size = 20;  // Small subcell size
+
+    // Calculate visible area in canvas coordinates
+    int start_x = (int)(-data->offset_x - 100);
+    int start_y = (int)(-data->offset_y - 100);
+    int end_x = (int)(-data->offset_x + width / data->zoom_scale + 100);
+    int end_y = (int)(-data->offset_y + height / data->zoom_scale + 100);
+
+    // Snap to grid
+    start_x = (start_x / minor_grid_size) * minor_grid_size;
+    start_y = (start_y / minor_grid_size) * minor_grid_size;
+
+    // Draw minor grid lines (4x4 subcells) - lighter
+    cairo_set_source_rgba(cr, data->model->current_space_grid_color.red, data->model->current_space_grid_color.green,
+                         data->model->current_space_grid_color.blue, data->model->current_space_grid_color.alpha * 0.3);
+    cairo_set_line_width(cr, 0.5 / data->zoom_scale);
+
+    // Draw minor vertical lines
+    for (int x = start_x; x <= end_x; x += minor_grid_size) {
+      if (x % major_grid_size != 0) {  // Skip major grid lines
+        cairo_move_to(cr, x, start_y);
+        cairo_line_to(cr, x, end_y);
+      }
+    }
+
+    // Draw minor horizontal lines
+    for (int y = start_y; y <= end_y; y += minor_grid_size) {
+      if (y % major_grid_size != 0) {  // Skip major grid lines
+        cairo_move_to(cr, start_x, y);
+        cairo_line_to(cr, end_x, y);
+      }
+    }
+    cairo_stroke(cr);
+
+    // Draw major grid lines (main cells) - darker
+    cairo_set_source_rgba(cr, data->model->current_space_grid_color.red, data->model->current_space_grid_color.green,
+                         data->model->current_space_grid_color.blue, data->model->current_space_grid_color.alpha);
+    cairo_set_line_width(cr, 1.0 / data->zoom_scale);
+
+    // Snap major grid to major grid size
+    int major_start_x = (start_x / major_grid_size) * major_grid_size;
+    int major_start_y = (start_y / major_grid_size) * major_grid_size;
+
+    // Draw major vertical lines
+    for (int x = major_start_x; x <= end_x; x += major_grid_size) {
+      cairo_move_to(cr, x, start_y);
+      cairo_line_to(cr, x, end_y);
+    }
+
+    // Draw major horizontal lines
+    for (int y = major_start_y; y <= end_y; y += major_grid_size) {
+      cairo_move_to(cr, start_x, y);
+      cairo_line_to(cr, end_x, y);
+    }
+    cairo_stroke(cr);
+
+    cairo_restore(cr);
+  }
+
   // Draw current space name in the top-left corner
-  if (data->model && data->model->current_space_uuid) {
+  if (data->model && data->model->current_space_name) {
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);  // Dark gray text
 
     PangoLayout *layout = pango_cairo_create_layout(cr);
@@ -250,9 +346,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     pango_font_description_free(font_desc);
 
     char space_info[100];
-    gchar *space_name = NULL;
-    model_get_space_name(data->model, data->model->current_space_uuid, &space_name);
-    snprintf(space_info, sizeof(space_info), "Space: %s", space_name);
+    snprintf(space_info, sizeof(space_info), "Space: %s", data->model->current_space_name);
 
     pango_layout_set_text(layout, space_info, -1);
 

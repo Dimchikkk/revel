@@ -1,31 +1,52 @@
 # Revel
 
-Note taking brainstorming app
+Note-taking and brainstorming app
 
-# Features:
+## Table of Contents
 
-* stora all data in a single portable SQLite3 database file
-* full-text search using BM25 ranking
-* store & play short MP4 clips
-* create notes, paper notes
-* connect elements with arrows
-* paste images and annotate them
-* fork = independent copy. clone = by text or size, with properties kept in sync between elements
-* resize, move, delete, change background color of elements
-* infinite canvas space with zoom
-* organize elements into nested spaces (infinite space depth)
-* move elements between spaces
-* undo/redo for the current space
-* execute a simple DSL to programmatically create notes and connections
-* draw on canvas (freehand drawing and straight line mode)
-* change text properties (font name, color, size, style)
-* draw different geometrical shapes
+* [Features](#features)
+* [Dependencies](#dependencies)
+* [To run on x86_64 GNU/Linux](#to-run-on-x86_64-gnulinux)
+* [How to add app launcher](#how-to-add-app-launcher)
 
-![Revel Image](photo_2025-09-15_10-51-56.jpg)
+
+
+## Features:
+
+### General
+* All data is stored in a single portable SQLite3 database file.
+* Full-text search with BM25 ranking.
+* Infinite canvas with zoom and pan.
+* Organize elements into nested spaces (infinite space depth).
+* Move elements between spaces.
+* Undo/redo for most actions.
+* Customizable canvas background color and grid.
+
+### Elements
+* Create different types of notes:
+    * **Paper Notes:** Simple text notes.
+    * **Notes:** Text notes with more formatting options.
+    * **Media Notes:** Notes that can contain images and videos.
+* **Images:** Paste images from clipboard and annotate them.
+* **Videos:** Store and play short MP4 clips.
+* **Shapes:** Draw various geometrical shapes like circles, rectangles, triangles, and more.
+* **Freehand Drawing:** Draw on the canvas with a pen tool.
+* Connect elements with arrows.
+* Resize, move, delete, and change the background color of elements.
+* Forking an element creates an independent copy.
+* Cloning an element creates a copy with properties that stay in sync.
+
+### Text and Fonts
+* Change text properties like font, color, size, and style.
+
+### Scripting
+* Execute a simple DSL to programmatically create notes and connections.
 
 ## Dependencies
 
-GTK4, SQLite3, GStreamer
+* GTK4
+* SQLite3
+* GStreamer
 
 ```
 # UI
@@ -43,6 +64,5 @@ sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1
 ## How to add app launcher:
 
 1. Copy `revel.desktop` to `~/.local/share/applications/`  
-2. Update Exec and Icon path  
-3. `update-desktop-database ~/.local/share/applications/`  
-
+2. Update Exec and Icon path in the `.desktop` file.
+3. `update-desktop-database ~/.local/share/applications/`

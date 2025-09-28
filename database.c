@@ -38,6 +38,9 @@ int database_create_tables(sqlite3 *db) {
     "    name TEXT NOT NULL,"
     "    parent_uuid TEXT,"       // UUID of parent space
     "    is_current BOOLEAN DEFAULT 0,"
+    "    background_color TEXT DEFAULT '#181818',"  // Background color in hex format
+    "    grid_enabled BOOLEAN DEFAULT 0,"           // Whether grid is enabled
+    "    grid_color TEXT DEFAULT '#CCCCCC',"        // Grid color in hex format
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (parent_uuid) REFERENCES spaces(uuid)"
     ");"
@@ -2086,6 +2089,118 @@ int database_update_video_ref(sqlite3 *db, ModelVideo *video) {
     return 0;
   }
 
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+int database_get_space_background(sqlite3 *db, const char *space_uuid, char **background_color) {
+  if (!space_uuid || !database_is_valid_uuid(space_uuid)) {
+    fprintf(stderr, "Error: Invalid space UUID in database_get_space_background\n");
+    return 0;
+  }
+
+  const char *sql = "SELECT background_color FROM spaces WHERE uuid = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_text(stmt, 1, space_uuid, -1, SQLITE_STATIC);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    // Get background color
+    const char *color = (const char*)sqlite3_column_text(stmt, 0);
+    if (color && background_color) {
+      *background_color = g_strdup(color);
+    }
+
+
+    sqlite3_finalize(stmt);
+    return 1;
+  }
+
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int database_set_space_background_color(sqlite3 *db, const char *space_uuid, const char *background_color) {
+  if (!space_uuid || !database_is_valid_uuid(space_uuid)) {
+    fprintf(stderr, "Error: Invalid space UUID in database_set_space_background_color\n");
+    return 0;
+  }
+
+  const char *sql = "UPDATE spaces SET background_color = ? WHERE uuid = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_text(stmt, 1, background_color, -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, space_uuid, -1, SQLITE_STATIC);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    fprintf(stderr, "Failed to update space background color: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    return 0;
+  }
+
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+
+int database_get_space_grid_settings(sqlite3 *db, const char *space_uuid, int *grid_enabled, char **grid_color) {
+  if (!space_uuid || !database_is_valid_uuid(space_uuid)) {
+    fprintf(stderr, "Error: Invalid space UUID in database_get_space_grid_settings\n");
+    return 0;
+  }
+  const char *sql = "SELECT grid_enabled, grid_color FROM spaces WHERE uuid = ?";
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+  sqlite3_bind_text(stmt, 1, space_uuid, -1, SQLITE_STATIC);
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    // Get grid enabled flag
+    if (grid_enabled) {
+      *grid_enabled = sqlite3_column_int(stmt, 0);
+    }
+    // Get grid color
+    const char *color = (const char*)sqlite3_column_text(stmt, 1);
+    if (color && grid_color) {
+      *grid_color = g_strdup(color);
+    }
+    sqlite3_finalize(stmt);
+    return 1;
+  }
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int database_set_space_grid_settings(sqlite3 *db, const char *space_uuid, int grid_enabled, const char *grid_color) {
+  if (!space_uuid || !database_is_valid_uuid(space_uuid)) {
+    fprintf(stderr, "Error: Invalid space UUID in database_set_space_grid_settings\n");
+    return 0;
+  }
+  const char *sql = "UPDATE spaces SET grid_enabled = ?, grid_color = ? WHERE uuid = ?";
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+  sqlite3_bind_int(stmt, 1, grid_enabled);
+  sqlite3_bind_text(stmt, 2, grid_color, -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, space_uuid, -1, SQLITE_STATIC);
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    fprintf(stderr, "Failed to update space grid settings: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    return 0;
+  }
   sqlite3_finalize(stmt);
   return 1;
 }

@@ -67,6 +67,10 @@ struct _CanvasData {
 
   GtkWidget *zoom_entry;
 
+  // Grid settings
+  gboolean show_grid;
+  GdkRGBA grid_color;
+
   Model *model;
 };
 

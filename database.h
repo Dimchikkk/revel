@@ -102,4 +102,10 @@ void database_free_space_info(SpaceInfo *space);
 
 int database_load_video_data(sqlite3 *db, int video_id, unsigned char **video_data, int *video_size);
 
+// Space background and grid operations
+int database_get_space_background(sqlite3 *db, const char *space_uuid, char **background_color);
+int database_set_space_background_color(sqlite3 *db, const char *space_uuid, const char *background_color);
+int database_get_space_grid_settings(sqlite3 *db, const char *space_uuid, int *grid_enabled, char **grid_color);
+int database_set_space_grid_settings(sqlite3 *db, const char *space_uuid, int grid_enabled, const char *grid_color);
+
 #endif

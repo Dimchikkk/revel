@@ -126,6 +126,12 @@ struct _Model {
   GHashTable *images;         // image_id -> ModelImage (shared image)
   GHashTable *videos;         // video_id -> ModelVideo (shared video)
   sqlite3 *db;
+
+  // Cached space settings
+  char *current_space_background_color;
+  char *current_space_name;
+  gboolean current_space_show_grid;
+  GdkRGBA current_space_grid_color;
 };
 
 // Model management
@@ -188,5 +194,10 @@ int model_get_all_spaces(Model *model, GList **spaces);
 void model_free_space_info(ModelSpaceInfo *space);
 
 int model_load_video_data(Model *model, ModelVideo *video);
+
+// Space background and grid operations
+void model_load_space_settings(Model *model, const char *space_uuid);
+int model_set_space_background_color(Model *model, const char *space_uuid, const char *background_color);
+int model_set_space_grid_settings(Model *model, const char *space_uuid, int grid_enabled, const char *grid_color);
 
 #endif

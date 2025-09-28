@@ -20,6 +20,8 @@ void model_free(Model *model) {
   g_hash_table_destroy(model->images);
   g_hash_table_destroy(model->videos);
   g_free(model->current_space_uuid);
+  g_free(model->current_space_background_color);
+  g_free(model->current_space_name);
   g_free(model);
 }
 
@@ -97,6 +99,11 @@ Model* model_new() {
   model->videos = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->db = NULL;
 
+  model->current_space_background_color = NULL;
+  model->current_space_name = NULL;
+  model->current_space_show_grid = FALSE;
+  model->current_space_grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0};
+
   if (!database_init(&model->db, "revel.db")) {
     g_free(model);
     return NULL;
@@ -109,6 +116,7 @@ Model* model_new() {
 
   // Load the space
   model_load_space(model);
+  model_load_space_settings(model, model->current_space_uuid);
 
   return model;
 }
@@ -126,6 +134,29 @@ void model_load_space(Model *model) {
 
   // Use database_load_space to populate the model
   database_load_space(model->db, model);
+}
+
+void model_load_space_settings(Model *model, const char *space_uuid) {
+  if (!model || !space_uuid) return;
+
+  // Load space name
+  g_free(model->current_space_name);
+  database_get_space_name(model->db, space_uuid, &model->current_space_name);
+
+  // Load background color
+  g_free(model->current_space_background_color);
+  database_get_space_background(model->db, space_uuid, &model->current_space_background_color);
+
+  // Load grid settings
+  int grid_enabled = 0;
+  char *grid_color_str = NULL;
+  if (database_get_space_grid_settings(model->db, space_uuid, &grid_enabled, &grid_color_str)) {
+    model->current_space_show_grid = grid_enabled;
+    if (grid_color_str) {
+      gdk_rgba_parse(&model->current_space_grid_color, grid_color_str);
+      g_free(grid_color_str);
+    }
+  }
 }
 
 int model_get_space_name(Model *model, const char *space_uuid, char **space_name) {
@@ -1061,6 +1092,37 @@ int model_load_video_data(Model *model, ModelVideo *video) {
 
   if (database_load_video_data(model->db, video->id, &video->video_data, &video->video_size)) {
     video->is_loaded = TRUE;
+    return 1;
+  }
+
+  return 0;
+}
+
+// Space background and grid operations
+int model_set_space_background_color(Model *model, const char *space_uuid, const char *background_color) {
+  if (!model || !model->db) {
+    return 0;
+  }
+
+  if (database_set_space_background_color(model->db, space_uuid, background_color)) {
+    g_free(model->current_space_background_color);
+    model->current_space_background_color = g_strdup(background_color);
+    return 1;
+  }
+
+  return 0;
+}
+
+int model_set_space_grid_settings(Model *model, const char *space_uuid, int grid_enabled, const char *grid_color) {
+  if (!model || !model->db) {
+    return 0;
+  }
+
+  if (database_set_space_grid_settings(model->db, space_uuid, grid_enabled, grid_color)) {
+    model->current_space_show_grid = grid_enabled;
+    if (grid_color) {
+      gdk_rgba_parse(&model->current_space_grid_color, grid_color);
+    }
     return 1;
   }
 

@@ -17,6 +17,7 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   }
   data->model->current_space_uuid = g_strdup(space_uuid);;
 
+  model_load_space_settings(data->model, space_uuid);
   model_load_space(data->model);
   canvas_sync_with_model(data);
 
