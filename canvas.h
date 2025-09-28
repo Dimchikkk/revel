@@ -74,6 +74,13 @@ struct _CanvasData {
   // Hidden elements tracking
   GHashTable *hidden_elements; // uuid string -> gboolean
 
+  // Toolbar management
+  GtkWidget *toolbar;
+  GtkWidget *toolbar_revealer;
+  gboolean toolbar_visible;
+  gboolean toolbar_auto_hide;
+  guint toolbar_hide_timer_id;
+
   Model *model;
 };
 

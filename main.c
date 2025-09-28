@@ -10,6 +10,82 @@
 #include "shape_dialog.h"
 #include "database.h"
 
+// Toolbar auto-hide functions
+static gboolean hide_toolbar_timeout(gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if (data->toolbar_auto_hide && data->toolbar_visible) {
+    gtk_revealer_set_reveal_child(GTK_REVEALER(data->toolbar_revealer), FALSE);
+    data->toolbar_visible = FALSE;
+  }
+
+  data->toolbar_hide_timer_id = 0;
+  return G_SOURCE_REMOVE;
+}
+
+static void show_toolbar(CanvasData *data) {
+  if (!data->toolbar_visible) {
+    gtk_revealer_set_reveal_child(GTK_REVEALER(data->toolbar_revealer), TRUE);
+    data->toolbar_visible = TRUE;
+  }
+
+  // Reset hide timer
+  if (data->toolbar_hide_timer_id > 0) {
+    g_source_remove(data->toolbar_hide_timer_id);
+  }
+
+  if (data->toolbar_auto_hide) {
+    data->toolbar_hide_timer_id = g_timeout_add(3000, hide_toolbar_timeout, data);
+  }
+}
+
+void toggle_toolbar_visibility(CanvasData *data) {
+  if (data->toolbar_visible) {
+    gtk_revealer_set_reveal_child(GTK_REVEALER(data->toolbar_revealer), FALSE);
+    data->toolbar_visible = FALSE;
+    if (data->toolbar_hide_timer_id > 0) {
+      g_source_remove(data->toolbar_hide_timer_id);
+      data->toolbar_hide_timer_id = 0;
+    }
+  } else {
+    show_toolbar(data);
+  }
+}
+
+void toggle_toolbar_auto_hide(CanvasData *data) {
+  data->toolbar_auto_hide = !data->toolbar_auto_hide;
+
+  if (data->toolbar_auto_hide) {
+    // Start auto-hide timer
+    if (data->toolbar_visible) {
+      show_toolbar(data); // This will set the timer
+    }
+  } else {
+    // Cancel auto-hide timer and ensure toolbar is visible
+    if (data->toolbar_hide_timer_id > 0) {
+      g_source_remove(data->toolbar_hide_timer_id);
+      data->toolbar_hide_timer_id = 0;
+    }
+    show_toolbar(data);
+  }
+}
+
+static gboolean on_window_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  // Get window height to detect bottom edge
+  GtkRoot *root = gtk_widget_get_root(data->drawing_area);
+  GtkWidget *window = GTK_WIDGET(root);
+  int window_height = gtk_widget_get_height(window);
+
+  // Show toolbar when mouse is near the bottom edge (within 5 pixels)
+  if (data->toolbar_auto_hide && y >= (window_height - 5)) {
+    show_toolbar(data);
+  }
+
+  return FALSE;
+}
+
 // Callback for zoom entry changes
 static void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data) {
   CanvasData *data = (CanvasData *)user_data;
@@ -169,77 +245,190 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
   gtk_window_set_child(GTK_WINDOW(window), vbox);
 
-  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-  gtk_box_append(GTK_BOX(vbox), toolbar);
+  // Create toolbar revealer first
+  GtkWidget *toolbar_revealer = gtk_revealer_new();
+  gtk_revealer_set_transition_type(GTK_REVEALER(toolbar_revealer), GTK_REVEALER_TRANSITION_TYPE_SLIDE_UP);
+  gtk_revealer_set_transition_duration(GTK_REVEALER(toolbar_revealer), 300);
+  gtk_revealer_set_reveal_child(GTK_REVEALER(toolbar_revealer), TRUE);
+
+  // Create main toolbar with improved styling
+  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_widget_set_margin_start(toolbar, 8);
+  gtk_widget_set_margin_end(toolbar, 8);
+  gtk_widget_set_margin_top(toolbar, 4);
+  gtk_widget_set_margin_bottom(toolbar, 4);
+  gtk_revealer_set_child(GTK_REVEALER(toolbar_revealer), toolbar);
 
   // === CONTENT CREATION GROUP ===
-  GtkWidget *add_paper_btn = gtk_button_new_with_label("New Paper Note");
-  GtkWidget *add_note_btn = gtk_button_new_with_label("New Note");
-  GtkWidget *add_space_btn = gtk_button_new_with_label("New Space");
+  GtkWidget *create_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_widget_add_css_class(create_group, "toolbar-group");
 
-  gtk_box_append(GTK_BOX(toolbar), add_paper_btn);
-  gtk_box_append(GTK_BOX(toolbar), add_note_btn);
-  gtk_box_append(GTK_BOX(toolbar), add_space_btn);
+  // Paper Note button with icon
+  GtkWidget *add_paper_btn = gtk_button_new();
+  GtkWidget *paper_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *paper_icon = gtk_image_new_from_icon_name("text-x-generic");
+  GtkWidget *paper_label = gtk_label_new("Paper");
+  gtk_box_append(GTK_BOX(paper_box), paper_icon);
+  gtk_box_append(GTK_BOX(paper_box), paper_label);
+  gtk_button_set_child(GTK_BUTTON(add_paper_btn), paper_box);
+  gtk_widget_set_tooltip_text(add_paper_btn, "Create New Paper Note (Ctrl+Shift+P)");
 
-  // Separator after content creation
+  // Rich Note button with icon
+  GtkWidget *add_note_btn = gtk_button_new();
+  GtkWidget *note_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *note_icon = gtk_image_new_from_icon_name("accessories-text-editor");
+  GtkWidget *note_label = gtk_label_new("Note");
+  gtk_box_append(GTK_BOX(note_box), note_icon);
+  gtk_box_append(GTK_BOX(note_box), note_label);
+  gtk_button_set_child(GTK_BUTTON(add_note_btn), note_box);
+  gtk_widget_set_tooltip_text(add_note_btn, "Create New Rich Note (Ctrl+N)");
+
+  // Space button with icon
+  GtkWidget *add_space_btn = gtk_button_new();
+  GtkWidget *space_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *space_icon = gtk_image_new_from_icon_name("folder-new");
+  GtkWidget *space_label = gtk_label_new("Space");
+  gtk_box_append(GTK_BOX(space_box), space_icon);
+  gtk_box_append(GTK_BOX(space_box), space_label);
+  gtk_button_set_child(GTK_BUTTON(add_space_btn), space_box);
+  gtk_widget_set_tooltip_text(add_space_btn, "Create New Space (Ctrl+Shift+S)");
+
+  gtk_box_append(GTK_BOX(create_group), add_paper_btn);
+  gtk_box_append(GTK_BOX(create_group), add_note_btn);
+  gtk_box_append(GTK_BOX(create_group), add_space_btn);
+  gtk_box_append(GTK_BOX(toolbar), create_group);
+
+  // Group separator
   GtkWidget *sep1 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_widget_set_margin_start(sep1, 4);
+  gtk_widget_set_margin_end(sep1, 4);
   gtk_box_append(GTK_BOX(toolbar), sep1);
 
   // === NAVIGATION GROUP ===
+  GtkWidget *nav_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_widget_add_css_class(nav_group, "toolbar-group");
+
   GtkWidget *back_btn = gtk_button_new();
   GtkWidget *back_icon = gtk_image_new_from_icon_name("go-previous");
   gtk_button_set_child(GTK_BUTTON(back_btn), back_icon);
-  gtk_widget_set_tooltip_text(back_btn, "Back to Parent");
+  gtk_widget_set_tooltip_text(back_btn, "Back to Parent Space (Backspace)");
 
   GtkWidget *search_btn = gtk_button_new();
   GtkWidget *search_icon = gtk_image_new_from_icon_name("edit-find");
   gtk_button_set_child(GTK_BUTTON(search_btn), search_icon);
-  gtk_widget_set_tooltip_text(search_btn, "Search");
+  gtk_widget_set_tooltip_text(search_btn, "Search Elements (Ctrl+S)");
 
-  gtk_box_append(GTK_BOX(toolbar), back_btn);
-  gtk_box_append(GTK_BOX(toolbar), search_btn);
+  gtk_box_append(GTK_BOX(nav_group), back_btn);
+  gtk_box_append(GTK_BOX(nav_group), search_btn);
+  gtk_box_append(GTK_BOX(toolbar), nav_group);
 
-  // Separator after navigation
+  // Group separator
   GtkWidget *sep2 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_widget_set_margin_start(sep2, 4);
+  gtk_widget_set_margin_end(sep2, 4);
   gtk_box_append(GTK_BOX(toolbar), sep2);
 
   // === DRAWING TOOLS GROUP ===
-  GtkWidget *drawing_btn = gtk_toggle_button_new_with_label("Draw");
+  GtkWidget *draw_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_widget_add_css_class(draw_group, "toolbar-group");
+
+  // Drawing toggle button with icon
+  GtkWidget *drawing_btn = gtk_toggle_button_new();
+  GtkWidget *draw_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *draw_icon = gtk_image_new_from_icon_name("applications-graphics");
+  GtkWidget *draw_label = gtk_label_new("Draw");
+  gtk_box_append(GTK_BOX(draw_box), draw_icon);
+  gtk_box_append(GTK_BOX(draw_box), draw_label);
+  gtk_button_set_child(GTK_BUTTON(drawing_btn), draw_box);
+  gtk_widget_set_tooltip_text(drawing_btn, "Toggle Drawing Mode (Ctrl+D)");
+
+  // Color picker
   GtkWidget *color_btn = gtk_color_button_new();
-  GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 1000, 1);
-  GtkWidget *shapes_btn = gtk_button_new_with_label("Shapes");
+  gtk_widget_set_tooltip_text(color_btn, "Drawing Color");
 
-  gtk_box_append(GTK_BOX(toolbar), drawing_btn);
-  gtk_box_append(GTK_BOX(toolbar), color_btn);
-  gtk_box_append(GTK_BOX(toolbar), width_spin);
-  gtk_box_append(GTK_BOX(toolbar), shapes_btn);
+  // Stroke width with label
+  GtkWidget *width_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  GtkWidget *width_label = gtk_label_new("Width:");
+  gtk_label_set_attributes(GTK_LABEL(width_label), NULL);
+  GtkWidget *width_spin = gtk_spin_button_new_with_range(1, 100, 1);
+  gtk_editable_set_width_chars(GTK_EDITABLE(width_spin), 3);
+  gtk_widget_set_tooltip_text(width_spin, "Stroke Width");
+  gtk_box_append(GTK_BOX(width_box), width_label);
+  gtk_box_append(GTK_BOX(width_box), width_spin);
 
-  // Separator after drawing tools
+  // Shapes button with icon
+  GtkWidget *shapes_btn = gtk_button_new();
+  GtkWidget *shapes_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *shapes_icon = gtk_image_new_from_icon_name("insert-object");
+  GtkWidget *shapes_label = gtk_label_new("Shapes");
+  gtk_box_append(GTK_BOX(shapes_box), shapes_icon);
+  gtk_box_append(GTK_BOX(shapes_box), shapes_label);
+  gtk_button_set_child(GTK_BUTTON(shapes_btn), shapes_box);
+  gtk_widget_set_tooltip_text(shapes_btn, "Insert Shapes");
+
+  gtk_box_append(GTK_BOX(draw_group), drawing_btn);
+  gtk_box_append(GTK_BOX(draw_group), color_btn);
+  gtk_box_append(GTK_BOX(draw_group), width_box);
+  gtk_box_append(GTK_BOX(draw_group), shapes_btn);
+  gtk_box_append(GTK_BOX(toolbar), draw_group);
+
+  // Group separator
   GtkWidget *sep3 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_widget_set_margin_start(sep3, 4);
+  gtk_widget_set_margin_end(sep3, 4);
   gtk_box_append(GTK_BOX(toolbar), sep3);
 
   // === VIEW CONTROLS GROUP ===
-  GtkWidget *zoom_label = gtk_label_new("Zoom:");
+  GtkWidget *view_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_widget_add_css_class(view_group, "toolbar-group");
+
+  // Zoom controls
+  GtkWidget *zoom_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  GtkWidget *zoom_icon = gtk_image_new_from_icon_name("zoom-in");
   GtkWidget *zoom_entry = gtk_entry_new();
   gtk_editable_set_text(GTK_EDITABLE(zoom_entry), "100%");
   gtk_editable_set_width_chars(GTK_EDITABLE(zoom_entry), 5);
   gtk_widget_set_hexpand(zoom_entry, FALSE);
   gtk_editable_set_max_width_chars(GTK_EDITABLE(zoom_entry), 5);
+  gtk_widget_set_tooltip_text(zoom_entry, "Zoom Level");
+  gtk_box_append(GTK_BOX(zoom_box), zoom_icon);
+  gtk_box_append(GTK_BOX(zoom_box), zoom_entry);
 
-  GtkWidget *background_btn = gtk_button_new_with_label("Background");
-  gtk_widget_set_tooltip_text(background_btn, "Change Canvas Background");
+  // Background button with icon
+  GtkWidget *background_btn = gtk_button_new();
+  GtkWidget *bg_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *bg_icon = gtk_image_new_from_icon_name("preferences-desktop-wallpaper");
+  GtkWidget *bg_label = gtk_label_new("Background");
+  gtk_box_append(GTK_BOX(bg_box), bg_icon);
+  gtk_box_append(GTK_BOX(bg_box), bg_label);
+  gtk_button_set_child(GTK_BUTTON(background_btn), bg_box);
+  gtk_widget_set_tooltip_text(background_btn, "Change Canvas Background & Grid");
 
-  gtk_box_append(GTK_BOX(toolbar), zoom_label);
-  gtk_box_append(GTK_BOX(toolbar), zoom_entry);
-  gtk_box_append(GTK_BOX(toolbar), background_btn);
+  gtk_box_append(GTK_BOX(view_group), zoom_box);
+  gtk_box_append(GTK_BOX(view_group), background_btn);
+  gtk_box_append(GTK_BOX(toolbar), view_group);
 
-  // Separator after view controls
+  // Group separator
   GtkWidget *sep4 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_widget_set_margin_start(sep4, 4);
+  gtk_widget_set_margin_end(sep4, 4);
   gtk_box_append(GTK_BOX(toolbar), sep4);
 
   // === UTILITIES GROUP ===
-  GtkWidget *log_btn = gtk_button_new_with_label("Log");
-  gtk_box_append(GTK_BOX(toolbar), log_btn);
+  GtkWidget *utils_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_widget_add_css_class(utils_group, "toolbar-group");
+
+  GtkWidget *log_btn = gtk_button_new();
+  GtkWidget *log_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *log_icon = gtk_image_new_from_icon_name("utilities-terminal");
+  GtkWidget *log_label = gtk_label_new("Log");
+  gtk_box_append(GTK_BOX(log_box), log_icon);
+  gtk_box_append(GTK_BOX(log_box), log_label);
+  gtk_button_set_child(GTK_BUTTON(log_btn), log_box);
+  gtk_widget_set_tooltip_text(log_btn, "View Action Log");
+
+  gtk_box_append(GTK_BOX(utils_group), log_btn);
+  gtk_box_append(GTK_BOX(toolbar), utils_group);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), 3);
   GdkRGBA initial_color = INITIAL_DRAWING_COLOR;
@@ -250,6 +439,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_widget_set_vexpand(overlay, TRUE);
   gtk_box_append(GTK_BOX(vbox), overlay);
 
+  // Add toolbar revealer at the bottom
+  gtk_box_append(GTK_BOX(vbox), toolbar_revealer);
+
   GtkWidget *drawing_area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(drawing_area, TRUE);
   gtk_widget_set_vexpand(drawing_area, TRUE);
@@ -257,6 +449,11 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   CanvasData *data = canvas_data_new(drawing_area, overlay);
   data->zoom_entry = zoom_entry;
+  data->toolbar = toolbar;
+  data->toolbar_revealer = toolbar_revealer;
+  data->toolbar_visible = TRUE;
+  data->toolbar_auto_hide = FALSE;
+  data->toolbar_hide_timer_id = 0;
   canvas_setup_drop_target(data);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), canvas_on_draw, data, NULL);
@@ -289,6 +486,11 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(scroll_controller, "scroll", G_CALLBACK(canvas_on_scroll), data);
   gtk_widget_add_controller(drawing_area, scroll_controller);
 
+  // Window motion controller for toolbar auto-show
+  GtkEventController *window_motion_controller = gtk_event_controller_motion_new();
+  g_signal_connect(window_motion_controller, "motion", G_CALLBACK(on_window_motion), data);
+  gtk_widget_add_controller(window, window_motion_controller);
+
   g_signal_connect(add_paper_btn, "clicked", G_CALLBACK(canvas_on_add_paper_note), data);
   g_signal_connect(add_note_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
   g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data);
@@ -311,6 +513,21 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     "   font-size: 20px;"
     "   font-family: Ubuntu Mono;"
     "   font-weight: normal;"
+    "}"
+    ".toolbar-group {"
+    "   background-color: rgba(255, 255, 255, 0.05);"
+    "   border-radius: 8px;"
+    "   padding: 4px;"
+    "   margin: 2px;"
+    "   border: 1px solid rgba(255, 255, 255, 0.1);"
+    "}"
+    ".toolbar-group button {"
+    "   border-radius: 6px;"
+    "   margin: 1px;"
+    "   padding: 6px 8px;"
+    "}"
+    ".toolbar-group button:hover {"
+    "   background-color: rgba(255, 255, 255, 0.1);"
     "}";
 
   gtk_css_provider_load_from_data(provider, css, -1);

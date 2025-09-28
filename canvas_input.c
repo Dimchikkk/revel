@@ -1468,6 +1468,32 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     return TRUE;
   }
 
+  // Add Ctrl+Shift+P for new paper note
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_P) {
+    canvas_on_add_paper_note(NULL, data);
+    return TRUE;
+  }
+
+  // Add Ctrl+Shift+S for new space
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_S) {
+    canvas_on_add_space(NULL, data);
+    return TRUE;
+  }
+
+  // Add Ctrl+T for toolbar toggle
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_t) {
+    extern void toggle_toolbar_visibility(CanvasData *data);
+    toggle_toolbar_visibility(data);
+    return TRUE;
+  }
+
+  // Add Ctrl+Shift+T for toolbar auto-hide toggle
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_T) {
+    extern void toggle_toolbar_auto_hide(CanvasData *data);
+    toggle_toolbar_auto_hide(data);
+    return TRUE;
+  }
+
   // Add undo/redo keyboard shortcuts
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) on_undo_clicked(NULL, data);
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);
