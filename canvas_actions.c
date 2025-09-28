@@ -7,6 +7,7 @@
 #include "note.h"
 #include "space.h"
 #include "undo_manager.h"
+#include "model.h"
 
 static void on_space_entry_activate(GtkEntry *entry, gpointer user_data) {
   GtkDialog *dialog = GTK_DIALOG(user_data);
@@ -234,4 +235,116 @@ void on_drawing_color_changed(GtkColorButton *button, gpointer user_data) {
 void on_drawing_width_changed(GtkSpinButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
   data->drawing_stroke_width = gtk_spin_button_get_value_as_int(button);
+}
+
+// Callback for background dialog response
+static void background_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if (response_id == GTK_RESPONSE_OK) {
+    GtkWidget *color_button = g_object_get_data(G_OBJECT(dialog), "color_button");
+    GtkWidget *grid_checkbox = g_object_get_data(G_OBJECT(dialog), "grid_checkbox");
+    GtkWidget *grid_color_button = g_object_get_data(G_OBJECT(dialog), "grid_color_button");
+
+    if (data->model && data->model->current_space_uuid && data->model->db) {
+      // Set background color
+      GdkRGBA color;
+      gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_button), &color);
+
+      // Convert to hex string
+      char hex_color[8];
+      snprintf(hex_color, sizeof(hex_color), "#%02x%02x%02x",
+              (int)(color.red * 255), (int)(color.green * 255), (int)(color.blue * 255));
+
+      model_set_space_background_color(data->model, data->model->current_space_uuid, hex_color);
+
+      // Save grid settings to database
+      gboolean grid_enabled = gtk_check_button_get_active(GTK_CHECK_BUTTON(grid_checkbox));
+      GdkRGBA grid_color;
+      gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(grid_color_button), &grid_color);
+
+      char grid_color_hex[8];
+      snprintf(grid_color_hex, sizeof(grid_color_hex), "#%02x%02x%02x",
+              (int)(grid_color.red * 255), (int)(grid_color.green * 255), (int)(grid_color.blue * 255));
+
+      model_set_space_grid_settings(data->model, data->model->current_space_uuid,
+                                      grid_enabled, grid_color_hex);
+      gtk_widget_queue_draw(data->drawing_area);
+    }
+  }
+
+  gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+// Callback for background button click
+void canvas_show_background_dialog(GtkButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+    "Canvas Background",
+    NULL,
+    GTK_DIALOG_MODAL,
+    "_Cancel", GTK_RESPONSE_CANCEL,
+    "_OK", GTK_RESPONSE_OK,
+    NULL
+  );
+
+  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_box_append(GTK_BOX(content_area), vbox);
+  gtk_widget_set_margin_start(vbox, 12);
+  gtk_widget_set_margin_end(vbox, 12);
+  gtk_widget_set_margin_top(vbox, 12);
+  gtk_widget_set_margin_bottom(vbox, 12);
+
+  // Color option
+  GtkWidget *color_label = gtk_label_new("Background Color:");
+  gtk_widget_set_halign(color_label, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(vbox), color_label);
+
+  GtkWidget *color_button = gtk_color_button_new();
+  gtk_widget_set_margin_start(color_button, 20);
+  gtk_box_append(GTK_BOX(vbox), color_button);
+
+  // Grid option
+  GtkWidget *grid_checkbox = gtk_check_button_new_with_label("Show Grid");
+  gtk_box_append(GTK_BOX(vbox), grid_checkbox);
+
+  // Grid color option
+  GtkWidget *grid_color_label = gtk_label_new("Grid Color:");
+  gtk_widget_set_halign(grid_color_label, GTK_ALIGN_START);
+  gtk_widget_set_margin_start(grid_color_label, 20);
+  gtk_box_append(GTK_BOX(vbox), grid_color_label);
+
+  GtkWidget *grid_color_button = gtk_color_button_new();
+  gtk_widget_set_margin_start(grid_color_button, 20);
+  gtk_box_append(GTK_BOX(vbox), grid_color_button);
+
+  // Set default grid color to light gray
+  GdkRGBA default_grid_color = {0.8, 0.8, 0.8, 1.0};
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(grid_color_button), &default_grid_color);
+
+  // Load current background settings
+  if (data->model && data->model->current_space_uuid) {
+    if (data->model->current_space_background_color) {
+      GdkRGBA color;
+      if (gdk_rgba_parse(&color, data->model->current_space_background_color)) {
+        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_button), &color);
+      }
+    }
+
+    // Load grid settings from model
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(grid_checkbox), data->model->current_space_show_grid);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(grid_color_button), &data->model->current_space_grid_color);
+  }
+
+
+  // Store widgets for response callback
+  g_object_set_data(G_OBJECT(dialog), "color_button", color_button);
+  g_object_set_data(G_OBJECT(dialog), "grid_checkbox", grid_checkbox);
+  g_object_set_data(G_OBJECT(dialog), "grid_color_button", grid_color_button);
+
+  g_signal_connect(dialog, "response", G_CALLBACK(background_dialog_response), data);
+
+  gtk_widget_set_visible(dialog, TRUE);
 }

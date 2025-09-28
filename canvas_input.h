@@ -15,5 +15,6 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
 gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data);
 void canvas_on_paste(GtkWidget *widget, CanvasData *data);
 gboolean canvas_on_scroll(GtkEventControllerScroll *controller, double dx, double dy, gpointer user_data);
+gboolean on_window_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data);
 
 #endif

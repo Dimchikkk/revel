@@ -1611,3 +1611,19 @@ gboolean canvas_on_scroll(GtkEventControllerScroll *controller, double dx, doubl
 
   return TRUE; // Event handled
 }
+
+gboolean on_window_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  // Get window height to detect bottom edge
+  GtkRoot *root = gtk_widget_get_root(data->drawing_area);
+  GtkWidget *window = GTK_WIDGET(root);
+  int window_height = gtk_widget_get_height(window);
+
+  // Show toolbar when mouse is near the bottom edge (within 5 pixels)
+  if (data->toolbar_auto_hide && y >= (window_height - 5)) {
+    show_toolbar(data);
+  }
+
+  return FALSE;
+}

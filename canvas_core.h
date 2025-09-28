@@ -35,4 +35,10 @@ gboolean canvas_has_hidden_children(CanvasData *data, const char *parent_uuid);
 // Space name visibility toggle
 void canvas_toggle_space_name_visibility(GtkToggleButton *button, gpointer user_data);
 
+// Toolbar functions
+void toggle_toolbar_visibility(CanvasData *data);
+void toggle_toolbar_auto_hide(CanvasData *data);
+void show_toolbar(CanvasData *data);
+void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data);
+
 #endif

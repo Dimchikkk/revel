@@ -796,3 +796,101 @@ void canvas_toggle_space_name_visibility(GtkToggleButton *button, gpointer user_
   data->show_space_name = !data->show_space_name;
   gtk_widget_queue_draw(data->drawing_area);
 }
+
+// Toolbar auto-hide functions
+static gboolean hide_toolbar_timeout(gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if (data->toolbar_auto_hide && data->toolbar_visible) {
+    gtk_revealer_set_reveal_child(GTK_REVEALER(data->toolbar_revealer), FALSE);
+    data->toolbar_visible = FALSE;
+  }
+
+  data->toolbar_hide_timer_id = 0;
+  return G_SOURCE_REMOVE;
+}
+
+void show_toolbar(CanvasData *data) {
+  if (!data->toolbar_visible) {
+    gtk_revealer_set_reveal_child(GTK_REVEALER(data->toolbar_revealer), TRUE);
+    data->toolbar_visible = TRUE;
+  }
+
+  // Reset hide timer
+  if (data->toolbar_hide_timer_id > 0) {
+    g_source_remove(data->toolbar_hide_timer_id);
+  }
+
+  if (data->toolbar_auto_hide) {
+    data->toolbar_hide_timer_id = g_timeout_add(3000, hide_toolbar_timeout, data);
+  }
+}
+
+void toggle_toolbar_visibility(CanvasData *data) {
+  if (data->toolbar_visible) {
+    gtk_revealer_set_reveal_child(GTK_REVEALER(data->toolbar_revealer), FALSE);
+    data->toolbar_visible = FALSE;
+    if (data->toolbar_hide_timer_id > 0) {
+      g_source_remove(data->toolbar_hide_timer_id);
+      data->toolbar_hide_timer_id = 0;
+    }
+  } else {
+    show_toolbar(data);
+  }
+}
+
+void toggle_toolbar_auto_hide(CanvasData *data) {
+  data->toolbar_auto_hide = !data->toolbar_auto_hide;
+
+  if (data->toolbar_auto_hide) {
+    // Start auto-hide timer
+    if (data->toolbar_visible) {
+      show_toolbar(data); // This will set the timer
+    }
+  } else {
+    // Cancel auto-hide timer and ensure toolbar is visible
+    if (data->toolbar_hide_timer_id > 0) {
+      g_source_remove(data->toolbar_hide_timer_id);
+      data->toolbar_hide_timer_id = 0;
+    }
+    show_toolbar(data);
+  }
+}
+
+// Callback for zoom entry changes
+void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data) {
+  CanvasData *data = (CanvasData *)user_data;
+  const char *text = gtk_editable_get_text(GTK_EDITABLE(entry));
+
+  // Parse the zoom percentage
+  char *endptr;
+  double zoom_percent = strtod(text, &endptr);
+
+  // Check if we have a valid number
+  if (endptr != text && zoom_percent > 0) {
+    // Remove % sign if present
+    if (*endptr == '%') {
+      zoom_percent /= 100.0;
+    } else if (zoom_percent > 1.0) {
+      // Assume it's a percentage if > 1
+      zoom_percent /= 100.0;
+    }
+
+    // Clamp to valid zoom range
+    if (zoom_percent < 0.1) zoom_percent = 0.1;
+    if (zoom_percent > 10.0) zoom_percent = 10.0;
+
+    data->zoom_scale = zoom_percent;
+    gtk_widget_queue_draw(data->drawing_area);
+
+    // Update the entry to show the normalized value
+    char zoom_text[16];
+    snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", zoom_percent * 100);
+    gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
+  } else {
+    // Invalid input, reset to current zoom
+    char zoom_text[16];
+    snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", data->zoom_scale * 100);
+    gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
+  }
+}
