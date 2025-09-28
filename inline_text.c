@@ -130,7 +130,7 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   // Draw cursor when editing
   if (text->editing) {
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
     cairo_set_line_width(cr, 1.0);
     cairo_move_to(cr, text->cursor_x, text->cursor_y);
     cairo_line_to(cr, text->cursor_x, text->cursor_y + 16); // Cursor height
