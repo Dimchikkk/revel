@@ -81,6 +81,9 @@ struct _CanvasData {
   gboolean toolbar_auto_hide;
   guint toolbar_hide_timer_id;
 
+  // Space name display
+  gboolean show_space_name;
+
   Model *model;
 };
 

@@ -266,7 +266,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   // Paper Note button with icon
   GtkWidget *add_paper_btn = gtk_button_new();
   GtkWidget *paper_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
-  GtkWidget *paper_icon = gtk_image_new_from_icon_name("text-x-generic");
+  GtkWidget *paper_icon = gtk_image_new_from_icon_name("accessories-text-editor");
   GtkWidget *paper_label = gtk_label_new("Paper");
   gtk_box_append(GTK_BOX(paper_box), paper_icon);
   gtk_box_append(GTK_BOX(paper_box), paper_label);
@@ -276,7 +276,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   // Rich Note button with icon
   GtkWidget *add_note_btn = gtk_button_new();
   GtkWidget *note_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
-  GtkWidget *note_icon = gtk_image_new_from_icon_name("accessories-text-editor");
+  GtkWidget *note_icon = gtk_image_new_from_icon_name("text-x-generic");
   GtkWidget *note_label = gtk_label_new("Note");
   gtk_box_append(GTK_BOX(note_box), note_icon);
   gtk_box_append(GTK_BOX(note_box), note_label);
@@ -404,7 +404,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_button_set_child(GTK_BUTTON(background_btn), bg_box);
   gtk_widget_set_tooltip_text(background_btn, "Change Canvas Background & Grid");
 
+  // Space name toggle button with icon only
+  GtkWidget *space_name_btn = gtk_toggle_button_new();
+  GtkWidget *space_name_icon = gtk_image_new_from_icon_name("text-x-generic");
+  gtk_button_set_child(GTK_BUTTON(space_name_btn), space_name_icon);
+  gtk_widget_set_tooltip_text(space_name_btn, "Toggle Space Name Display");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(space_name_btn), TRUE); // Default to shown
+
   gtk_box_append(GTK_BOX(view_group), zoom_box);
+  gtk_box_append(GTK_BOX(view_group), space_name_btn);
   gtk_box_append(GTK_BOX(view_group), background_btn);
   gtk_box_append(GTK_BOX(toolbar), view_group);
 
@@ -502,6 +510,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
   g_signal_connect(shapes_btn, "clicked", G_CALLBACK(canvas_show_shape_selection_dialog), data);
   g_signal_connect(background_btn, "clicked", G_CALLBACK(canvas_show_background_dialog), data);
+  g_signal_connect(space_name_btn, "toggled", G_CALLBACK(canvas_toggle_space_name_visibility), data);
   g_signal_connect(zoom_entry, "activate", G_CALLBACK(on_zoom_entry_activate), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);

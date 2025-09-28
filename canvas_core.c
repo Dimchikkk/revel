@@ -87,6 +87,9 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   data->show_grid = FALSE;
   data->grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0}; // Default light gray
 
+  // Initialize space name display (default to shown)
+  data->show_space_name = TRUE;
+
   // Initialize hidden elements tracking
   data->hidden_elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
@@ -343,7 +346,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
   }
 
   // Draw current space name in the top-left corner
-  if (data->model && data->model->current_space_name) {
+  if (data->show_space_name && data->model && data->model->current_space_name) {
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);  // Dark gray text
 
     PangoLayout *layout = pango_cairo_create_layout(cr);
@@ -782,4 +785,14 @@ gboolean canvas_has_hidden_children(CanvasData *data, const char *parent_uuid) {
   }
   g_list_free(children);
   return FALSE;
+}
+
+void canvas_toggle_space_name_visibility(GtkToggleButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  if (!data) return;
+  if (!data->drawing_area) return;
+  if (!GTK_IS_WIDGET(data->drawing_area)) return;
+
+  data->show_space_name = !data->show_space_name;
+  gtk_widget_queue_draw(data->drawing_area);
 }

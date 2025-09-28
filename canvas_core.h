@@ -32,4 +32,7 @@ void canvas_show_children(CanvasData *data, const char *parent_uuid);
 gboolean canvas_is_element_hidden(CanvasData *data, const char *element_uuid);
 gboolean canvas_has_hidden_children(CanvasData *data, const char *parent_uuid);
 
+// Space name visibility toggle
+void canvas_toggle_space_name_visibility(GtkToggleButton *button, gpointer user_data);
+
 #endif
