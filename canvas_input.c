@@ -1450,9 +1450,15 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     return TRUE;
   }
 
+  // Add Ctrl+Shift+N for new note
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_N) {
+    canvas_on_add_note(NULL, data);
+    return TRUE;
+  }
+
   // Add Ctrl+N for new note
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_n) {
-    canvas_on_add_note(NULL, data);
+    canvas_on_add_text(NULL, data);
     return TRUE;
   }
 

@@ -234,16 +234,15 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
     element->text = model_text;
   }
 
-  if (config.bg_color.a > 0.0) {
-    ModelColor *color = g_new0(ModelColor, 1);
-    color->id = -1;  // Temporary ID until saved to database
-    color->r = config.bg_color.r;
-    color->g = config.bg_color.g;
-    color->b = config.bg_color.b;
-    color->a = config.bg_color.a;
-    color->ref_count = 1;
-    element->bg_color = color;
-  }
+  // Always create background color, even if transparent
+  ModelColor *color = g_new0(ModelColor, 1);
+  color->id = -1;  // Temporary ID until saved to database
+  color->r = config.bg_color.r;
+  color->g = config.bg_color.g;
+  color->b = config.bg_color.b;
+  color->a = config.bg_color.a;
+  color->ref_count = 1;
+  element->bg_color = color;
 
   // Set connection properties
   if (config.connection.from_element_uuid) {

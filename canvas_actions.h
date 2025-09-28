@@ -5,6 +5,7 @@
 
 void canvas_on_add_note(GtkButton *button, gpointer user_data);
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data);
+void canvas_on_add_text(GtkButton *button, gpointer user_data);
 void canvas_on_add_space(GtkButton *button, gpointer user_data);
 void canvas_on_go_back(GtkButton *button, gpointer user_data);
 void canvas_toggle_drawing_mode(GtkButton *button, gpointer user_data);

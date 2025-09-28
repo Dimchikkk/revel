@@ -56,6 +56,16 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_button_set_child(GTK_BUTTON(add_note_btn), note_box);
   gtk_widget_set_tooltip_text(add_note_btn, "Create New Rich Note (Ctrl+N)");
 
+  // Text button with icon
+  GtkWidget *add_text_btn = gtk_button_new();
+  GtkWidget *text_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *text_icon = gtk_image_new_from_icon_name("format-text-bold");
+  GtkWidget *text_label = gtk_label_new("Text");
+  gtk_box_append(GTK_BOX(text_box), text_icon);
+  gtk_box_append(GTK_BOX(text_box), text_label);
+  gtk_button_set_child(GTK_BUTTON(add_text_btn), text_box);
+  gtk_widget_set_tooltip_text(add_text_btn, "Create New Text");
+
   // Space button with icon
   GtkWidget *add_space_btn = gtk_button_new();
   GtkWidget *space_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
@@ -68,6 +78,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   gtk_box_append(GTK_BOX(create_group), add_paper_btn);
   gtk_box_append(GTK_BOX(create_group), add_note_btn);
+  gtk_box_append(GTK_BOX(create_group), add_text_btn);
   gtk_box_append(GTK_BOX(create_group), add_space_btn);
   gtk_box_append(GTK_BOX(toolbar), create_group);
 
@@ -274,6 +285,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   g_signal_connect(add_paper_btn, "clicked", G_CALLBACK(canvas_on_add_paper_note), data);
   g_signal_connect(add_note_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
+  g_signal_connect(add_text_btn, "clicked", G_CALLBACK(canvas_on_add_text), data);
   g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data);
   g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
   g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);

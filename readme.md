@@ -70,7 +70,8 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 ### Keyboard Shortcuts
 
 #### Content Creation
-* **Ctrl+N:** Create new rich note
+* **Ctrl+N:** Create new text
+* **Ctrl+Shift+N:** Create new rich note
 * **Ctrl+Shift+P:** Create new paper note
 * **Ctrl+Shift+S:** Create new space
 
