@@ -19,7 +19,11 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
 
   model_load_space_settings(data->model, space_uuid);
   model_load_space(data->model);
+
+  // Set flag to enable animations for space loading
+  data->is_loading_space = TRUE;
   canvas_sync_with_model(data);
+  data->is_loading_space = FALSE;
 
   gtk_widget_queue_draw(data->drawing_area);
 }

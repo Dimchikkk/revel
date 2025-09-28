@@ -107,6 +107,11 @@ struct Element {
   int orig_x, orig_y, orig_width, orig_height;
   double bg_r, bg_g, bg_b, bg_a;
   CanvasData *canvas_data;
+
+  // Animation properties
+  gboolean animating;
+  gint64 animation_start_time;
+  double animation_alpha;
 };
 
 // Interface functions

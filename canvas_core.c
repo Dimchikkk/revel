@@ -93,6 +93,10 @@ CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay) {
   // Initialize hidden elements tracking
   data->hidden_elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
+  // Initialize animation timer
+  data->animation_timer_id = 0;
+  data->is_loading_space = FALSE;
+
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
   return data;
@@ -255,6 +259,12 @@ void canvas_data_free(CanvasData *data) {
   // Clean up hidden elements tracking
   if (data->hidden_elements) g_hash_table_destroy(data->hidden_elements);
 
+  // Clean up animation timer
+  if (data->animation_timer_id > 0) {
+    g_source_remove(data->animation_timer_id);
+    data->animation_timer_id = 0;
+  }
+
   // Don't free the model here - it's freed in canvas_on_app_shutdown
 
   g_free(data);
@@ -389,7 +399,15 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
       continue;
     }
 
-    element_draw(element, cr, canvas_is_element_selected(data, element));
+    // Apply animation alpha if element is animating
+    if (element->animating) {
+      cairo_push_group(cr);
+      element_draw(element, cr, canvas_is_element_selected(data, element));
+      cairo_pop_group_to_source(cr);
+      cairo_paint_with_alpha(cr, element->animation_alpha);
+    } else {
+      element_draw(element, cr, canvas_is_element_selected(data, element));
+    }
 
     // Draw indicator if element has hidden children
     if (model_element && canvas_has_hidden_children(data, model_element->uuid)) {
@@ -682,6 +700,19 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     break;
   }
 
+  // Initialize animation state for space loading
+  if (visual_element) {
+    if (data && data->is_loading_space) {
+      visual_element->animating = TRUE;
+      visual_element->animation_start_time = g_get_monotonic_time();
+      visual_element->animation_alpha = 0.0;
+    } else {
+      visual_element->animating = FALSE;
+      visual_element->animation_start_time = 0;
+      visual_element->animation_alpha = 1.0;
+    }
+  }
+
   return visual_element;
 }
 
@@ -710,6 +741,59 @@ GList* canvas_get_visual_elements(CanvasData *data) {
   return visual_elements;
 }
 
+// Animation functions
+static gboolean update_element_animations(gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  if (!data || !data->model || !data->model->elements) {
+    return G_SOURCE_REMOVE;
+  }
+
+  gint64 current_time = g_get_monotonic_time();
+  const gint64 animation_duration = 300000; // 300ms in microseconds
+  gboolean has_animating_elements = FALSE;
+
+  // Iterate through all model elements and update their visual element animations
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, data->model->elements);
+
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *model_element = (ModelElement*)value;
+    if (model_element && model_element->visual_element) {
+      Element *element = model_element->visual_element;
+
+      if (element->animating) {
+        gint64 elapsed = current_time - element->animation_start_time;
+
+        if (elapsed >= animation_duration) {
+          // Animation complete
+          element->animating = FALSE;
+          element->animation_alpha = 1.0;
+        } else {
+          // Calculate animation progress (ease-out)
+          double progress = (double)elapsed / animation_duration;
+          progress = 1.0 - (1.0 - progress) * (1.0 - progress); // ease-out
+          element->animation_alpha = progress;
+          has_animating_elements = TRUE;
+        }
+      }
+    }
+  }
+
+  // Redraw the canvas if we have animations
+  if (has_animating_elements || data->animation_timer_id > 0) {
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+
+  // Continue timer if we still have animating elements
+  if (!has_animating_elements) {
+    data->animation_timer_id = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
 void canvas_sync_with_model(CanvasData *canvas_data) {
   if (!canvas_data || !canvas_data->model || !canvas_data->model->elements) {
     return;
@@ -718,6 +802,11 @@ void canvas_sync_with_model(CanvasData *canvas_data) {
   GList *sorted_elements = sort_model_elements_for_serialization(canvas_data->model->elements);
   create_or_update_visual_elements(sorted_elements, canvas_data);
   g_list_free(sorted_elements);
+
+  // Start animation timer if elements were loaded and we're not already animating
+  if (g_hash_table_size(canvas_data->model->elements) > 0 && canvas_data->animation_timer_id == 0) {
+    canvas_data->animation_timer_id = g_timeout_add(16, update_element_animations, canvas_data); // ~60 FPS
+  }
 }
 
 void canvas_screen_to_canvas(CanvasData *data, int screen_x, int screen_y, int *canvas_x, int *canvas_y) {
@@ -894,3 +983,4 @@ void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data) {
     gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
   }
 }
+

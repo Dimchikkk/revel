@@ -84,6 +84,10 @@ struct _CanvasData {
   // Space name display
   gboolean show_space_name;
 
+  // Animation management
+  guint animation_timer_id;
+  gboolean is_loading_space;
+
   Model *model;
 };
 
