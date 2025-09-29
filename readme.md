@@ -7,6 +7,8 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * [Features](#features)
 * [Dependencies](#dependencies)
 * [To run on x86_64 GNU/Linux](#to-run-on-x86_64-gnulinux)
+* [Project layout](#project-layout)
+* [DSL example](#dsl-example)
 * [How to add app launcher](#how-to-add-app-launcher)
 
 ## Features:
@@ -120,7 +122,36 @@ sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1
 
 ## To run on x86_64 GNU/Linux:
 
-`make -B -j 7 && ./revel`
+`make -j 7 && ./revel`
+
+## Project layout
+
+```
+src/            Core application sources and headers
+tests/          Unit and integration test suites
+examples/       Sample DSL scripts
+assets/images   Demo images referenced by the DSL examples
+assets/videos   Demo videos referenced by the DSL examples
+build/          Generated object files and test runners (created by make)
+```
+
+## DSL example
+
+An end-to-end DSL walkthrough is provided in `examples/showcase.dsl`. It
+demonstrates notes, shapes, media, and styled connections and uses the sample
+assets bundled with the repository.
+
+Run it from the project root:
+
+```
+make -j 7
+rm -f demo.db && ./revel --dsl examples/showcase.dsl demo.db
+```
+
+This command generates `demo.db` alongside the executable. Launching `revel` and
+opening the generated database will display the scripted layout shown below:
+
+![Demo Canvas](assets/images/demo.jpg)
 
 ## How to add app launcher:
 

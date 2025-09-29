@@ -637,7 +637,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       };
 
       visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
-    } else if(model_element->image->image_data && model_element->image->image_size > 0) {
+    } else if(model_element->image && model_element->image->image_data && model_element->image->image_size > 0) {
       ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
       ElementMedia media = {
         .type = MEDIA_TYPE_IMAGE,

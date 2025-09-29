@@ -58,7 +58,14 @@ static GstFlowReturn on_new_sample(GstElement *sink, ThumbnailData *thumb_data) 
 }
 
 // Generate thumbnail from video file in memory
-static GstSample* generate_video_thumbnail(const gchar *file_path) {
+GstSample* generate_video_thumbnail(const gchar *file_path) {
+  // Ensure GStreamer is initialized
+  static gboolean gst_initialized = FALSE;
+  if (!gst_initialized) {
+    gst_init(NULL, NULL);
+    gst_initialized = TRUE;
+  }
+
   GError *error = NULL;
   ThumbnailData thumb_data = {0};
   g_mutex_init(&thumb_data.mutex);
@@ -138,7 +145,7 @@ static GstSample* generate_video_thumbnail(const gchar *file_path) {
 }
 
 // Convert GstSample to GdkPixbuf (in-memory)
-static GdkPixbuf* sample_to_pixbuf(GstSample *sample) {
+GdkPixbuf* sample_to_pixbuf(GstSample *sample) {
   if (!sample) return NULL;
 
   GstBuffer *buffer = gst_sample_get_buffer(sample);
@@ -298,7 +305,7 @@ static void create_media_note_from_pixbuf(CanvasData *data, GdkPixbuf *pixbuf,
 }
 
 // Function to get MP4 duration in seconds
-static gint64 get_mp4_duration(const gchar *file_path) {
+gint64 get_mp4_duration(const gchar *file_path) {
   GError *error = NULL;
   GstElement *pipeline;
   GstStateChangeReturn ret;

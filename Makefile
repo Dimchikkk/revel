@@ -1,37 +1,51 @@
 CC = gcc
-CFLAGS = -Wall -g `pkg-config --cflags gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0` -lm
-LIBS = `pkg-config --libs gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0` -lm -luuid
+PKG_CFLAGS = `pkg-config --cflags gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0`
+PKG_LIBS = `pkg-config --libs gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0`
+CFLAGS = -Wall -g $(PKG_CFLAGS) -Isrc
+LIBS = $(PKG_LIBS) -lm -luuid
 
-SRCS = main.c canvas_core.c canvas_input.c canvas_actions.c canvas_spaces.c canvas_space_tree.c \
-       canvas_placement.c element.c paper_note.c note.c inline_text.c connection.c media_note.c space.c \
-       database.c model.c canvas_search.c canvas_space_select.c canvas_drop.c undo_manager.c \
-       dsl_executor.c freehand_drawing.c font_dialog.c shape.c shape_dialog.c
-OBJS = $(SRCS:.c=.o)
+SRC_DIR = src
+TEST_DIR = tests
+BUILD_DIR = build
+TEST_BUILD_DIR = $(BUILD_DIR)/tests
+
+SRCS = $(wildcard $(SRC_DIR)/*.c)
+OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TARGET = revel
 
 # Test configuration
-TEST_MODEL_SRCS = test_model.c
-TEST_UNDO_SRCS = test_undo_manager.c
-TEST_SPACE_TREE_SRCS = test_canvas_space_tree.c
-TEST_MODEL_OBJS = $(TEST_MODEL_SRCS:.c=.o)
-TEST_UNDO_OBJS = $(TEST_UNDO_SRCS:.c=.o)
-TEST_SPACE_TREE_OBJS = $(TEST_SPACE_TREE_SRCS:.c=.o)
+TEST_MODEL_SRC = $(TEST_DIR)/test_model.c
+TEST_UNDO_SRC = $(TEST_DIR)/test_undo_manager.c
+TEST_SPACE_TREE_SRC = $(TEST_DIR)/test_canvas_space_tree.c
 
-# Add test files to objects but exclude main.c for test build
-TEST_MODEL_OBJS_FULL = $(filter-out main.o, $(OBJS)) $(TEST_MODEL_OBJS)
-TEST_UNDO_OBJS_FULL = $(filter-out main.o, $(OBJS)) $(TEST_UNDO_OBJS)
-TEST_SPACE_TREE_OBJS_FULL = $(filter-out main.o, $(OBJS)) $(TEST_SPACE_TREE_OBJS)
+TEST_MODEL_OBJ = $(TEST_MODEL_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
+TEST_UNDO_OBJ = $(TEST_UNDO_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
+TEST_SPACE_TREE_OBJ = $(TEST_SPACE_TREE_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
 
-TEST_MODEL_TARGET = test_model_runner
-TEST_UNDO_TARGET = test_undo_runner
-TEST_SPACE_TREE_TARGET = test_space_tree_runner
+COMMON_OBJS = $(filter-out $(BUILD_DIR)/main.o,$(OBJS))
+
+TEST_MODEL_OBJS_FULL = $(COMMON_OBJS) $(TEST_MODEL_OBJ)
+TEST_UNDO_OBJS_FULL = $(COMMON_OBJS) $(TEST_UNDO_OBJ)
+TEST_SPACE_TREE_OBJS_FULL = $(COMMON_OBJS) $(TEST_SPACE_TREE_OBJ)
+
+TEST_MODEL_TARGET = $(TEST_BUILD_DIR)/test_model_runner
+TEST_UNDO_TARGET = $(TEST_BUILD_DIR)/test_undo_runner
+TEST_SPACE_TREE_TARGET = $(TEST_BUILD_DIR)/test_space_tree_runner
+
+all: $(TARGET)
+
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) -o $@ $(OBJS) $(LIBS)
 
-%.o: %.c
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TEST_BUILD_DIR)/%.o: $(TEST_DIR)/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Test targets
@@ -47,15 +61,18 @@ test-space-tree: $(TEST_SPACE_TREE_TARGET)
 	./$(TEST_SPACE_TREE_TARGET)
 
 $(TEST_MODEL_TARGET): $(TEST_MODEL_OBJS_FULL)
+	@mkdir -p $(dir $@)
 	$(CC) -o $@ $(TEST_MODEL_OBJS_FULL) $(LIBS) `pkg-config --libs glib-2.0`
 
 $(TEST_UNDO_TARGET): $(TEST_UNDO_OBJS_FULL)
+	@mkdir -p $(dir $@)
 	$(CC) -o $@ $(TEST_UNDO_OBJS_FULL) $(LIBS) `pkg-config --libs glib-2.0`
 
 $(TEST_SPACE_TREE_TARGET): $(TEST_SPACE_TREE_OBJS_FULL)
+	@mkdir -p $(dir $@)
 	$(CC) -o $@ $(TEST_SPACE_TREE_OBJS_FULL) $(LIBS) `pkg-config --libs glib-2.0`
 
 clean:
-	rm -f $(OBJS) $(TARGET) $(TEST_MODEL_OBJS) $(TEST_UNDO_OBJS) $(TEST_SPACE_TREE_OBJS) $(TEST_MODEL_TARGET) $(TEST_UNDO_TARGET) $(TEST_SPACE_TREE_TARGET) revel.db test.db test_space_tree.db
+	rm -rf $(BUILD_DIR) $(TARGET) revel.db test.db test_space_tree.db
 
 .PHONY: all clean test test-model test-undo test-space-tree

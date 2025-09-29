@@ -290,10 +290,20 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
   element->shape_type = config.shape.shape_type;
   element->filled = config.shape.filled;
 
-  // Set default arrowhead type for connections
   if (config.type == ELEMENT_CONNECTION) {
-    element->arrowhead_type = ARROWHEAD_SINGLE;
-    element->connection_type = CONNECTION_TYPE_PARALLEL;
+    element->arrowhead_type = config.connection.arrowhead_type;
+    element->connection_type = config.connection.connection_type;
+
+    if (element->arrowhead_type != ARROWHEAD_NONE &&
+        element->arrowhead_type != ARROWHEAD_SINGLE &&
+        element->arrowhead_type != ARROWHEAD_DOUBLE) {
+      element->arrowhead_type = ARROWHEAD_SINGLE;
+    }
+
+    if (element->connection_type != CONNECTION_TYPE_PARALLEL &&
+        element->connection_type != CONNECTION_TYPE_STRAIGHT) {
+      element->connection_type = CONNECTION_TYPE_PARALLEL;
+    }
   }
 
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);

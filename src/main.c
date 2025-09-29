@@ -10,20 +10,32 @@
 #include "undo_manager.h"
 #include "shape_dialog.h"
 #include "database.h"
+#include "dsl_executor.h"
 
-// Global variable to store the database filename
+// Global variables to store command line options
 static char *g_database_filename = NULL;
+static char *g_dsl_filename = NULL;
 
 static int on_command_line(GtkApplication *app, GApplicationCommandLine *command_line, gpointer user_data) {
   gint argc;
   gchar **argv = g_application_command_line_get_arguments(command_line, &argc);
 
-  if (argc > 1) {
-    // Set the database filename from command line
-    if (g_database_filename) {
-      g_free(g_database_filename);
+  // Parse command line arguments
+  for (int i = 1; i < argc; i++) {
+    if (g_strcmp0(argv[i], "--dsl") == 0 && i + 1 < argc) {
+      // Set the DSL filename
+      if (g_dsl_filename) {
+        g_free(g_dsl_filename);
+      }
+      g_dsl_filename = g_strdup(argv[i + 1]);
+      i++; // Skip next arg since we consumed it
+    } else if (argv[i][0] != '-') {
+      // If not a flag, treat as database filename
+      if (g_database_filename) {
+        g_free(g_database_filename);
+      }
+      g_database_filename = g_strdup(argv[i]);
     }
-    g_database_filename = g_strdup(argv[1]);
   }
 
   g_strfreev(argv);
@@ -408,6 +420,22 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_object_unref(provider);
 
   gtk_window_present(GTK_WINDOW(window));
+
+  // Execute DSL file if specified via command line
+  if (g_dsl_filename) {
+    GError *error = NULL;
+    gchar *script_contents = NULL;
+    gsize length = 0;
+
+    if (g_file_get_contents(g_dsl_filename, &script_contents, &length, &error)) {
+      g_print("Executing DSL file: %s\n", g_dsl_filename);
+      canvas_execute_script(data, script_contents);
+      g_free(script_contents);
+    } else {
+      g_print("Failed to load DSL file %s: %s\n", g_dsl_filename, error ? error->message : "unknown error");
+      if (error) g_error_free(error);
+    }
+  }
 }
 
 int main(int argc, char **argv) {
@@ -421,6 +449,9 @@ int main(int argc, char **argv) {
   // Cleanup
   if (g_database_filename) {
     g_free(g_database_filename);
+  }
+  if (g_dsl_filename) {
+    g_free(g_dsl_filename);
   }
 
   g_object_unref(app);
