@@ -39,11 +39,7 @@ InlineText* inline_text_create(ElementPosition position,
   inline_text->min_width = 50;
 
   inline_text->text = g_strdup(text.text ? text.text : "");
-  inline_text->edit_text = g_strdup(inline_text->text);
   inline_text->editing = FALSE;
-  inline_text->cursor_pos = 0;
-  inline_text->cursor_x = 0;
-  inline_text->cursor_y = 0;
 
   inline_text->base.canvas_data = data;
 
@@ -54,6 +50,8 @@ InlineText* inline_text_create(ElementPosition position,
   inline_text->font_description = g_strdup(text.font_description ? text.font_description : "Ubuntu Mono 12");
 
   inline_text->layout = NULL;
+  inline_text->text_view = NULL;
+  inline_text->scrolled_window = NULL;
 
   return inline_text;
 }
@@ -72,8 +70,7 @@ void inline_text_update_layout(InlineText *text) {
   pango_layout_set_font_description(text->layout, font_desc);
   pango_font_description_free(font_desc);
 
-  const char *display_text = text->editing ? text->edit_text : text->text;
-  pango_layout_set_text(text->layout, display_text, -1);
+  pango_layout_set_text(text->layout, text->text, -1);
 
   // Get text dimensions
   int text_width, text_height;
@@ -83,14 +80,6 @@ void inline_text_update_layout(InlineText *text) {
   int padding = 8;
   text->base.width = MAX(text_width + padding * 2, text->min_width);
   text->base.height = MAX(text_height + padding * 2, 20);
-
-  // Update cursor position if editing
-  if (text->editing) {
-    PangoRectangle cursor_rect;
-    pango_layout_get_cursor_pos(text->layout, text->cursor_pos, &cursor_rect, NULL);
-    text->cursor_x = text->base.x + padding + PANGO_PIXELS(cursor_rect.x);
-    text->cursor_y = text->base.y + padding + PANGO_PIXELS(cursor_rect.y);
-  }
 
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
@@ -109,33 +98,21 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_fill(cr);
   }
 
-  // Draw border when editing or selected
-  if (text->editing || is_selected) {
-    if (text->editing) {
-      cairo_set_source_rgba(cr, 0.2, 0.6, 1.0, 0.8); // Blue border when editing
-    } else {
-      cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5); // Gray border when selected
-    }
-    cairo_set_line_width(cr, text->editing ? 2.0 : 1.0);
+  // Draw border only when selected (not when editing)
+  if (is_selected && !text->editing) {
+    cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5); // Gray border when selected
+    cairo_set_line_width(cr, 1.0);
     cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_stroke(cr);
   }
 
-  // Draw text
-  if (text->layout) {
+  // Draw text only when not editing (to avoid double text with TextView)
+  if (text->layout && !text->editing) {
     cairo_set_source_rgba(cr, text->text_r, text->text_g, text->text_b, text->text_a);
     cairo_move_to(cr, element->x + 8, element->y + 8);
     pango_cairo_show_layout(cr, text->layout);
   }
 
-  // Draw cursor when editing
-  if (text->editing) {
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 1.0);
-    cairo_move_to(cr, text->cursor_x, text->cursor_y);
-    cairo_line_to(cr, text->cursor_x, text->cursor_y + 16); // Cursor height
-    cairo_stroke(cr);
-  }
 
   // Draw connection points when selected
   if (is_selected && !text->editing) {
@@ -176,31 +153,185 @@ int inline_text_pick_connection_point(Element *element, int x, int y) {
   return -1;
 }
 
+static void on_text_buffer_changed(GtkTextBuffer *buffer, gpointer user_data) {
+  InlineText *text = (InlineText*)user_data;
+
+  // Get current text to calculate new size
+  GtkTextIter start, end;
+  gtk_text_buffer_get_start_iter(buffer, &start);
+  gtk_text_buffer_get_end_iter(buffer, &end);
+  char *current_text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+
+  // Temporarily update the text for layout calculation
+  char *old_text = text->text;
+  text->text = current_text;
+
+  // Recalculate size based on current text
+  inline_text_update_layout(text);
+
+  // Update TextView size to match the new dimensions
+  if (text->scrolled_window) {
+    gtk_widget_set_size_request(text->scrolled_window,
+                                text->base.width + 20,
+                                text->base.height + 20);
+  }
+
+  // Restore original text and free temporary text
+  text->text = old_text;
+  g_free(current_text);
+
+  // Redraw to update the visual bounds
+  gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
+}
+
+gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
+  InlineText *text = (InlineText*)user_data;
+  if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
+    if (state & GDK_CONTROL_MASK) {
+      // Ctrl+Enter does nothing special for inline text (allow newline)
+      return FALSE;
+    } else {
+      // Regular Enter finishes editing
+      inline_text_finish_editing((Element*)text);
+      return TRUE;
+    }
+  }
+  if (keyval == GDK_KEY_Escape) {
+    // Cancel editing - restore original text without saving
+    if (text->text_view) {
+      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text->text_view));
+      gtk_text_buffer_set_text(buffer, text->text, -1);
+    }
+    inline_text_finish_editing((Element*)text);
+    return TRUE;
+  }
+  return FALSE;
+}
+
 void inline_text_start_editing(Element *element, GtkWidget *overlay) {
   InlineText *text = (InlineText*)element;
   text->editing = TRUE;
 
-  // Set cursor to end of text
-  text->cursor_pos = g_utf8_strlen(text->edit_text, -1);
+  if (!text->text_view) {
+    // Create scrolled window with minimal scrollbar policy
+    GtkWidget *scrolled_window = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
+                                  GTK_POLICY_EXTERNAL,  // No horizontal scrollbar
+                                  GTK_POLICY_NEVER);    // No vertical scrollbar
 
-  // Grab keyboard focus to ensure input goes to the canvas
-  gtk_widget_grab_focus(element->canvas_data->drawing_area);
+    // Create text view
+    text->text_view = gtk_text_view_new();
 
-  // Update layout and redraw
+    // Make text view transparent
+    gtk_widget_set_name(text->text_view, "transparent-textview");
+
+    // Set font to match inline text using CSS
+    PangoFontDescription *font_desc = pango_font_description_from_string(text->font_description);
+    const char *family = pango_font_description_get_family(font_desc);
+    int size = pango_font_description_get_size(font_desc);
+
+    // Create combined CSS for font, transparency, and precise positioning
+    gchar *combined_css = g_strdup_printf(
+      "#transparent-textview { "
+      "font-family: %s; "
+      "font-size: %dpt; "
+      "background-color: transparent; "
+      "padding: 0px; "
+      "margin: 0px; "
+      "border: none; "
+      "} "
+      "#transparent-textview text { "
+      "background-color: transparent; "
+      "padding: 0px; "
+      "margin: 0px; "
+      "}",
+      family ? family : "Ubuntu Mono",
+      size > 0 ? size / PANGO_SCALE : 12);
+
+    GtkCssProvider *css_provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css_provider, combined_css, -1);
+
+    GtkStyleContext *style_context = gtk_widget_get_style_context(text->text_view);
+    gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(css_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    pango_font_description_free(font_desc);
+    g_object_unref(css_provider);
+    g_free(combined_css);
+
+    // Configure text view properties - no wrapping so it expands horizontally
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text->text_view), GTK_WRAP_NONE);
+    gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(text->text_view), FALSE);
+
+    // Add text view to scrolled window
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), text->text_view);
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), scrolled_window);
+    gtk_widget_set_halign(scrolled_window, GTK_ALIGN_START);
+    gtk_widget_set_valign(scrolled_window, GTK_ALIGN_START);
+
+    GtkEventController *key_controller = gtk_event_controller_key_new();
+    g_signal_connect(key_controller, "key-pressed", G_CALLBACK(inline_text_on_textview_key_press), text);
+    gtk_widget_add_controller(text->text_view, key_controller);
+
+    // Connect text buffer change handler for dynamic resizing
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text->text_view));
+    g_signal_connect(buffer, "changed", G_CALLBACK(on_text_buffer_changed), text);
+
+    // Store the scrolled window reference
+    text->scrolled_window = scrolled_window;
+  }
+
+  // Update layout to get current size
   inline_text_update_layout(text);
-  gtk_widget_queue_draw(element->canvas_data->drawing_area);
+
+  // Set initial size with some padding, but allow expansion up to window width
+  int window_width = gtk_widget_get_allocated_width(element->canvas_data->drawing_area);
+  int max_width = MAX(element->width + 20, window_width - 100); // Leave some margin from window edge
+  gtk_widget_set_size_request(text->scrolled_window, element->width + 20, element->height + 20);
+  gtk_widget_set_hexpand(text->scrolled_window, TRUE);
+  gtk_widget_set_vexpand(text->scrolled_window, FALSE);
+
+  // Convert canvas coordinates to screen coordinates
+  // Canvas text is drawn at element->x + 8, element->y + 8 (see inline_text_draw)
+  int screen_x, screen_y;
+  canvas_canvas_to_screen(element->canvas_data, element->x + 8, element->y + 8, &screen_x, &screen_y);
+
+  // Position TextView exactly where canvas text would be drawn
+  gtk_widget_set_margin_start(text->scrolled_window, screen_x);
+  gtk_widget_set_margin_top(text->scrolled_window, screen_y);
+
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text->text_view));
+  gtk_text_buffer_set_text(buffer, text->text, -1);
+
+  // Position cursor at end
+  GtkTextIter end_iter;
+  gtk_text_buffer_get_end_iter(buffer, &end_iter);
+  gtk_text_buffer_place_cursor(buffer, &end_iter);
+
+  gtk_widget_show(text->scrolled_window);
+  gtk_widget_grab_focus(text->text_view);
 }
 
 void inline_text_finish_editing(Element *element) {
   InlineText *text = (InlineText*)element;
-  if (!text->editing) return;
+  if (!text->editing || !text->text_view) return;
 
   // Save old text for undo
   char *old_text = g_strdup(text->text);
 
+  // Extract text from text view
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text->text_view));
+  GtkTextIter start, end;
+  gtk_text_buffer_get_start_iter(buffer, &start);
+  gtk_text_buffer_get_end_iter(buffer, &end);
+  char *new_text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+
   // Update text
   g_free(text->text);
-  text->text = g_strdup(text->edit_text);
+  text->text = g_strdup(new_text);
+
+  // Update layout with new text BEFORE changing editing state to prevent jumping
+  inline_text_update_layout(text);
 
   // Update model
   Model *model = text->base.canvas_data->model;
@@ -212,14 +343,19 @@ void inline_text_finish_editing(Element *element) {
 
   text->editing = FALSE;
 
-  // Update layout and redraw
-  inline_text_update_layout(text);
+  // Hide the text view
+  if (text->scrolled_window) {
+    gtk_widget_hide(text->scrolled_window);
+  }
+
+  // Sync with model and redraw
   if (text->base.canvas_data && text->base.canvas_data->drawing_area) {
     canvas_sync_with_model(text->base.canvas_data);
     gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
   }
 
   g_free(old_text);
+  g_free(new_text);
 }
 
 void inline_text_update_position(Element *element, int x, int y, int z) {
@@ -228,8 +364,12 @@ void inline_text_update_position(Element *element, int x, int y, int z) {
   element->z = z;
 
   InlineText *text = (InlineText*)element;
-  if (text->editing) {
-    inline_text_update_layout(text);
+  if (text->editing && text->scrolled_window) {
+    // Update text view position to match canvas text position
+    int screen_x, screen_y;
+    canvas_canvas_to_screen(element->canvas_data, element->x + 8, element->y + 8, &screen_x, &screen_y);
+    gtk_widget_set_margin_start(text->scrolled_window, screen_x);
+    gtk_widget_set_margin_top(text->scrolled_window, screen_y);
   }
 }
 
@@ -238,111 +378,24 @@ void inline_text_update_size(Element *element, int width, int height) {
   InlineText *text = (InlineText*)element;
   text->min_width = MAX(width, 50);
   inline_text_update_layout(text);
+
+  // Update text view size if editing
+  if (text->editing && text->scrolled_window) {
+    gtk_widget_set_size_request(text->scrolled_window, element->width + 20, element->height + 20);
+  }
 }
 
 void inline_text_free(Element *element) {
   InlineText *text = (InlineText*)element;
   if (text->text) g_free(text->text);
-  if (text->edit_text) g_free(text->edit_text);
   if (text->font_description) g_free(text->font_description);
   if (text->layout) g_object_unref(text->layout);
+
+  // Clean up GTK widgets if they exist
+  if (text->scrolled_window) {
+    gtk_widget_unparent(text->scrolled_window);
+  }
+
   g_free(text);
 }
 
-// Text editing functions
-void inline_text_insert_char(InlineText *text, const char *utf8_char) {
-  if (!text->editing) return;
-
-  // Convert cursor position to byte offset
-  const char *text_start = text->edit_text;
-  const char *cursor_ptr = g_utf8_offset_to_pointer(text_start, text->cursor_pos);
-  int byte_offset = cursor_ptr - text_start;
-
-  // Create new text with inserted character
-  GString *new_text = g_string_new("");
-  g_string_append_len(new_text, text->edit_text, byte_offset);
-  g_string_append(new_text, utf8_char);
-  g_string_append(new_text, cursor_ptr);
-
-  g_free(text->edit_text);
-  text->edit_text = g_string_free(new_text, FALSE);
-
-  // Move cursor forward
-  text->cursor_pos++;
-
-  inline_text_update_layout(text);
-  gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
-}
-
-void inline_text_delete_char(InlineText *text, gboolean backward) {
-  if (!text->editing) return;
-
-  if (backward && text->cursor_pos > 0) {
-    // Backspace - delete character before cursor
-    const char *text_start = text->edit_text;
-    const char *cursor_ptr = g_utf8_offset_to_pointer(text_start, text->cursor_pos);
-    const char *prev_ptr = g_utf8_prev_char(cursor_ptr);
-
-    int start_offset = prev_ptr - text_start;
-
-    GString *new_text = g_string_new("");
-    g_string_append_len(new_text, text->edit_text, start_offset);
-    g_string_append(new_text, cursor_ptr);
-
-    g_free(text->edit_text);
-    text->edit_text = g_string_free(new_text, FALSE);
-
-    text->cursor_pos--;
-  } else if (!backward && text->cursor_pos < g_utf8_strlen(text->edit_text, -1)) {
-    // Delete - delete character after cursor
-    const char *text_start = text->edit_text;
-    const char *cursor_ptr = g_utf8_offset_to_pointer(text_start, text->cursor_pos);
-    const char *next_ptr = g_utf8_next_char(cursor_ptr);
-
-    int byte_offset = cursor_ptr - text_start;
-
-    GString *new_text = g_string_new("");
-    g_string_append_len(new_text, text->edit_text, byte_offset);
-    g_string_append(new_text, next_ptr);
-
-    g_free(text->edit_text);
-    text->edit_text = g_string_free(new_text, FALSE);
-  }
-
-  inline_text_update_layout(text);
-  gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
-}
-
-void inline_text_move_cursor(InlineText *text, int direction) {
-  if (!text->editing) return;
-
-  int text_len = g_utf8_strlen(text->edit_text, -1);
-
-  if (direction < 0 && text->cursor_pos > 0) {
-    text->cursor_pos--;
-  } else if (direction > 0 && text->cursor_pos < text_len) {
-    text->cursor_pos++;
-  }
-
-  inline_text_update_layout(text);
-  gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
-}
-
-void inline_text_set_cursor_from_position(InlineText *text, int x, int y) {
-  if (!text->editing || !text->layout) return;
-
-  // Convert screen coordinates to text-relative coordinates
-  int text_x = x - text->base.x - 8; // Account for padding
-  int text_y = y - text->base.y - 8;
-
-  // Find cursor position from coordinates
-  int index, trailing;
-  pango_layout_xy_to_index(text->layout, text_x * PANGO_SCALE, text_y * PANGO_SCALE, &index, &trailing);
-
-  // Convert byte index to character position
-  const char *text_ptr = text->edit_text + index;
-  text->cursor_pos = g_utf8_pointer_to_offset(text->edit_text, text_ptr) + trailing;
-
-  inline_text_update_layout(text);
-  gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
-}

@@ -231,10 +231,6 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
                            &text->text_r, &text->text_g,
                            &text->text_b, &text->text_a,
                            model_element->text);
-          // Update edit_text as well
-          g_free(text->edit_text);
-          text->edit_text = g_strdup(text->text);
-          text->cursor_pos = g_utf8_strlen(text->edit_text, -1);
           break;
         }
         }

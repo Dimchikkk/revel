@@ -8,14 +8,15 @@
 typedef struct {
   Element base;
   char *text;
-  char *edit_text;  // Current editing text buffer
   gboolean editing;
-  int cursor_pos;   // Character position of cursor
-  int cursor_x, cursor_y;  // Visual cursor position
   double text_r, text_g, text_b, text_a;
   char *font_description;
   PangoLayout *layout;  // Layout for measuring text
   int min_width;    // Minimum width for the element
+
+  // GTK TextView widgets for editing
+  GtkWidget *text_view;
+  GtkWidget *scrolled_window;
 } InlineText;
 
 // Function declarations
@@ -36,10 +37,7 @@ void inline_text_update_size(Element *element, int width, int height);
 void inline_text_free(Element *element);
 
 // Text editing functions
-void inline_text_insert_char(InlineText *text, const char *utf8_char);
-void inline_text_delete_char(InlineText *text, gboolean backward);
-void inline_text_move_cursor(InlineText *text, int direction);
-void inline_text_set_cursor_from_position(InlineText *text, int x, int y);
 void inline_text_update_layout(InlineText *text);
+gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data);
 
 #endif

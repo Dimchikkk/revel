@@ -247,15 +247,6 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       return;
     }
 
-    // Handle single clicks on inline text for cursor positioning
-    if (n_press == 1 && element->type == ELEMENT_INLINE_TEXT) {
-      InlineText *inline_text = (InlineText*)element;
-      if (inline_text->editing) {
-        // Set cursor position from click coordinates
-        inline_text_set_cursor_from_position(inline_text, (int)x, (int)y);
-        return;
-      }
-    }
 
     if (!((element->type == ELEMENT_PAPER_NOTE && ((PaperNote*)element)->editing) ||
           (element->type == ELEMENT_MEDIA_FILE && ((MediaNote*)element)->editing) ||
@@ -1434,82 +1425,13 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
 
   GList *visual_elements = canvas_get_visual_elements(data);
 
-  // Handle inline text editing FIRST (highest priority)
-  InlineText *editing_text = NULL;
+  // Check if any inline text is editing - if so, let TextView handle all input
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
     if (element->type == ELEMENT_INLINE_TEXT && ((InlineText*)element)->editing) {
-      editing_text = (InlineText*)element;
-      break;
+      // Let the TextView handle all input - don't consume keys here
+      return FALSE;
     }
-  }
-
-  if (editing_text) {
-    // Handle special keys for inline text
-    if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-      if (state & GDK_CONTROL_MASK) {
-        // Ctrl+Enter inserts a newline
-        inline_text_insert_char(editing_text, "\n");
-        return TRUE;
-      } else {
-        // Regular Enter finishes editing
-        inline_text_finish_editing((Element*)editing_text);
-        return TRUE;
-      }
-    }
-    if (keyval == GDK_KEY_Escape) {
-      // Cancel editing - restore original text
-      g_free(editing_text->edit_text);
-      editing_text->edit_text = g_strdup(editing_text->text ? editing_text->text : "");
-      editing_text->cursor_pos = g_utf8_strlen(editing_text->edit_text, -1);
-      inline_text_finish_editing((Element*)editing_text);
-      return TRUE;
-    }
-    if (keyval == GDK_KEY_BackSpace) {
-      inline_text_delete_char(editing_text, TRUE);
-      return TRUE;
-    }
-    if (keyval == GDK_KEY_Delete) {
-      inline_text_delete_char(editing_text, FALSE);
-      return TRUE;
-    }
-    if (keyval == GDK_KEY_Left) {
-      inline_text_move_cursor(editing_text, -1);
-      return TRUE;
-    }
-    if (keyval == GDK_KEY_Right) {
-      inline_text_move_cursor(editing_text, 1);
-      return TRUE;
-    }
-    if (keyval == GDK_KEY_Home) {
-      editing_text->cursor_pos = 0;
-      inline_text_update_layout(editing_text);
-      gtk_widget_queue_draw(data->drawing_area);
-      return TRUE;
-    }
-    if (keyval == GDK_KEY_End) {
-      editing_text->cursor_pos = g_utf8_strlen(editing_text->edit_text, -1);
-      inline_text_update_layout(editing_text);
-      gtk_widget_queue_draw(data->drawing_area);
-      return TRUE;
-    }
-
-    // Handle regular character input including space
-    if (keyval == GDK_KEY_space) {
-      inline_text_insert_char(editing_text, " ");
-      return TRUE;
-    }
-
-    guint32 unicode = gdk_keyval_to_unicode(keyval);
-    if (unicode != 0 && g_unichar_isprint(unicode)) {
-      gchar utf8_char[7];
-      gint len = g_unichar_to_utf8(unicode, utf8_char);
-      utf8_char[len] = '\0';
-      inline_text_insert_char(editing_text, utf8_char);
-      return TRUE;
-    }
-
-    return TRUE; // Consume all input when editing inline text
   }
 
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_v) {
