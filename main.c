@@ -78,7 +78,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_box_append(GTK_BOX(note_box), note_icon);
   gtk_box_append(GTK_BOX(note_box), note_label);
   gtk_button_set_child(GTK_BUTTON(add_note_btn), note_box);
-  gtk_widget_set_tooltip_text(add_note_btn, "Create New Rich Note (Ctrl+N)");
+  gtk_widget_set_tooltip_text(add_note_btn, "Create New Rich Note (Ctrl+Shift+N)");
 
   // Text button with icon
   GtkWidget *add_text_btn = gtk_button_new();
@@ -88,7 +88,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_box_append(GTK_BOX(text_box), text_icon);
   gtk_box_append(GTK_BOX(text_box), text_label);
   gtk_button_set_child(GTK_BUTTON(add_text_btn), text_box);
-  gtk_widget_set_tooltip_text(add_text_btn, "Create New Text");
+  gtk_widget_set_tooltip_text(add_text_btn, "Create New Text (Ctrl+N)");
 
   // Space button with icon
   GtkWidget *add_space_btn = gtk_button_new();
@@ -129,7 +129,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *tree_btn = gtk_toggle_button_new();
   GtkWidget *tree_icon = gtk_image_new_from_icon_name("view-list-tree");
   gtk_button_set_child(GTK_BUTTON(tree_btn), tree_icon);
-  gtk_widget_set_tooltip_text(tree_btn, "Toggle Space Tree View");
+  gtk_widget_set_tooltip_text(tree_btn, "Toggle Space Tree View (Ctrl+J)");
 
   gtk_box_append(GTK_BOX(nav_group), back_btn);
   gtk_box_append(GTK_BOX(nav_group), search_btn);

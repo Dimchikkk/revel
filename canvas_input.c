@@ -1495,6 +1495,16 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     return TRUE;
   }
 
+  // Add Ctrl+J for tree view toggle
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_j) {
+    if (data->tree_scrolled) {
+      gboolean is_visible = gtk_widget_get_visible(data->tree_scrolled);
+      gtk_widget_set_visible(data->tree_scrolled, !is_visible);
+      data->tree_view_visible = !is_visible;
+    }
+    return TRUE;
+  }
+
   // Add undo/redo keyboard shortcuts
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) on_undo_clicked(NULL, data);
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);

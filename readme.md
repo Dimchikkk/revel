@@ -91,9 +91,10 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * **Ctrl+D:** Toggle drawing mode
 * **Ctrl+E:** Open DSL Executor window
 
-#### Toolbar Controls
+#### Toolbar & Views
 * **Ctrl+T:** Toggle toolbar visibility
 * **Ctrl+Shift+T:** Toggle toolbar auto-hide mode
+* **Ctrl+J:** Toggle space tree view
 
 #### Editing & Clipboard
 * **Ctrl+V:** Paste from clipboard
