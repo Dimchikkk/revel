@@ -37,6 +37,10 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * **Connection points:** 4-point connection system for precise linking
 
 ### Element Management
+* **Smart placement:** New elements automatically positioned in closest empty space from viewport center
+    * Spiral search algorithm finds optimal placement
+    * Collision detection prevents overlapping elements
+    * Preserves manual placement for drag-and-drop and interactive drawing
 * **Flexible editing:** Resize, move and style all element types
 * **Element descriptions:** Private comments/metadata with creation timestamps
 * **Background colors:** Customize appearance of any element
@@ -59,6 +63,9 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * **Shape designer:** Visual shape selection and configuration dialog
 * **Search interface:** Global content search across all spaces
 * **Space navigation:** Easy switching between hierarchical workspaces
+* **Space tree view:** Hierarchical tree view of all spaces with navigation
+    * Toggle visibility with dedicated toolbar button
+    * Quick navigation by clicking on any space
 * **Drawing toolbar:** Tools for freehand drawing and shape creation
 
 ### Automation & Scripting
