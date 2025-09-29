@@ -1659,29 +1659,36 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       gchar *text_escaped = escape_text_for_dsl(element->text ? element->text->text : "");
       gchar *pos_str = g_strdup_printf("(%d,%d)", element->position->x, element->position->y);
       gchar *size_str = g_strdup_printf("(%d,%d)", element->size->width, element->size->height);
-      gchar *color_str = g_strdup_printf("(%.2f,%.2f,%.2f,%.2f)",
-                                         element->bg_color->r,
-                                         element->bg_color->g,
-                                         element->bg_color->b,
-                                         element->bg_color->a);
-      gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
-                                            element->text->font_description : "Ubuntu Mono 16");
-      gchar *text_color_str = g_strdup_printf("(%.2f,%.2f,%.2f,%.2f)",
-                                              element->text ? element->text->r : 0.1,
-                                              element->text ? element->text->g : 0.1,
-                                              element->text ? element->text->b : 0.1,
-                                              element->text ? element->text->a : 1.0);
+      double bg_r = element->bg_color ? element->bg_color->r : 1.0;
+      double bg_g = element->bg_color ? element->bg_color->g : 1.0;
+      double bg_b = element->bg_color ? element->bg_color->b : 1.0;
+      double bg_a = element->bg_color ? element->bg_color->a : 1.0;
 
-      g_string_append_printf(dsl, "%s %s %s %s %s %s %s %s\n",
-                             command, element_id, text_escaped, pos_str, size_str, color_str,
-                             font_str, text_color_str);
+      double text_r = (element->text) ? element->text->r : 0.2;
+      double text_g = (element->text) ? element->text->g : 0.2;
+      double text_b = (element->text) ? element->text->b : 0.2;
+      double text_a = (element->text) ? element->text->a : 1.0;
+
+      const gchar *default_font = (element->type->type == ELEMENT_PAPER_NOTE) ?
+                                  "Ubuntu Mono 16" : "Ubuntu 16";
+      gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
+                                            element->text->font_description : default_font);
+
+      g_string_append_printf(dsl,
+                             "%s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+                             command,
+                             element_id,
+                             text_escaped,
+                             pos_str,
+                             size_str,
+                             bg_r, bg_g, bg_b, bg_a,
+                             font_str,
+                             text_r, text_g, text_b, text_a);
 
       g_free(text_escaped);
       g_free(pos_str);
       g_free(size_str);
-      g_free(color_str);
       g_free(font_str);
-      g_free(text_color_str);
     }
     else if (element->type->type == ELEMENT_SPACE) {
       gchar *text_escaped = escape_text_for_dsl(element->text ? element->text->text : "");
@@ -1709,33 +1716,114 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       gchar *text_escaped = escape_text_for_dsl(element->text ? element->text->text : "");
       gchar *pos_str = g_strdup_printf("(%d,%d)", element->position->x, element->position->y);
       gchar *size_str = g_strdup_printf("(%d,%d)", element->size->width, element->size->height);
-      gchar *color_str = g_strdup_printf("(%.2f,%.2f,%.2f,%.2f)",
-                                         element->bg_color->r,
-                                         element->bg_color->g,
-                                         element->bg_color->b,
-                                         element->bg_color->a);
-      gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
-                                            element->text->font_description : "Ubuntu Mono 16");
-      gchar *text_color_str = g_strdup_printf("(%.2f,%.2f,%.2f,%.2f)",
-                                              element->text ? element->text->r : 0.1,
-                                              element->text ? element->text->g : 0.1,
-                                              element->text ? element->text->b : 0.1,
-                                              element->text ? element->text->a : 1.0);
+      double bg_r = element->bg_color ? element->bg_color->r : 0.95;
+      double bg_g = element->bg_color ? element->bg_color->g : 0.95;
+      double bg_b = element->bg_color ? element->bg_color->b : 0.98;
+      double bg_a = element->bg_color ? element->bg_color->a : 1.0;
 
-      g_string_append_printf(dsl, "shape_create %s %s %s %s %s %s %d %s %s %s\n",
-                             element_id, shape_type_str, text_escaped, pos_str, size_str, color_str,
-                             element->stroke_width, element->filled ? "true" : "false",
-                             font_str, text_color_str);
+      double text_r = (element->text) ? element->text->r : 0.1;
+      double text_g = (element->text) ? element->text->g : 0.1;
+      double text_b = (element->text) ? element->text->b : 0.1;
+      double text_a = (element->text) ? element->text->a : 1.0;
+
+      gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
+                                            element->text->font_description : "Ubuntu Bold 14");
+
+      g_string_append_printf(dsl,
+                             "shape_create %s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) stroke %d filled %s font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+                             element_id,
+                             shape_type_str,
+                             text_escaped,
+                             pos_str,
+                             size_str,
+                             bg_r, bg_g, bg_b, bg_a,
+                             element->stroke_width,
+                             element->filled ? "true" : "false",
+                             font_str,
+                             text_r, text_g, text_b, text_a);
 
       g_free(text_escaped);
       g_free(pos_str);
       g_free(size_str);
-      g_free(color_str);
       g_free(font_str);
-      g_free(text_color_str);
     }
-    // Note: We don't export MEDIA_FILE (images/videos) as they require local file paths
-    // Users need to manually specify image_create/video_create with their file paths
+    else if (element->type->type == ELEMENT_INLINE_TEXT) {
+      gchar *text_escaped = escape_text_for_dsl(element->text ? element->text->text : "");
+      gchar *pos_str = g_strdup_printf("(%d,%d)", element->position->x, element->position->y);
+      gchar *size_str = g_strdup_printf("(%d,%d)", element->size->width, element->size->height);
+
+      double bg_r = element->bg_color ? element->bg_color->r : 0.0;
+      double bg_g = element->bg_color ? element->bg_color->g : 0.0;
+      double bg_b = element->bg_color ? element->bg_color->b : 0.0;
+      double bg_a = element->bg_color ? element->bg_color->a : 0.0;
+
+      double text_r = (element->text) ? element->text->r : 0.6;
+      double text_g = (element->text) ? element->text->g : 0.6;
+      double text_b = (element->text) ? element->text->b : 0.6;
+      double text_a = (element->text) ? element->text->a : 1.0;
+
+      gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
+                                            element->text->font_description : "Ubuntu Mono 14");
+
+      g_string_append_printf(dsl,
+                             "text_create %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+                             element_id,
+                             text_escaped,
+                             pos_str,
+                             size_str,
+                             bg_r, bg_g, bg_b, bg_a,
+                             font_str,
+                             text_r, text_g, text_b, text_a);
+
+      g_free(text_escaped);
+      g_free(pos_str);
+      g_free(size_str);
+      g_free(font_str);
+    }
+    else if (element->type->type == ELEMENT_MEDIA_FILE) {
+      gboolean is_video = (element->video && element->video->duration > 0);
+      const gchar *command = is_video ? "video_create" : "image_create";
+
+      gchar *pos_str = g_strdup_printf("(%d,%d)", element->position->x, element->position->y);
+      gchar *size_str = g_strdup_printf("(%d,%d)", element->size->width, element->size->height);
+
+      const gchar *placeholder_path = is_video ? "REPLACE_WITH_VIDEO_PATH.mp4" : "REPLACE_WITH_IMAGE_PATH.png";
+
+      const gchar *label_source = (element->text && element->text->text && element->text->text[0] != '\0') ?
+        element->text->text : element_id;
+      gchar *label_copy = g_strdup(label_source);
+      for (gchar *p = label_copy; p && *p; p++) {
+        if (*p == '\n' || *p == '\r' || *p == '\t') {
+          *p = ' ';
+        }
+      }
+
+      g_string_append_printf(dsl,
+                             "# TODO: Update %s file path for %s (%s) before executing\n",
+                             is_video ? "video" : "image",
+                             element_id,
+                             label_copy ? label_copy : ""
+                             );
+
+      if (is_video && element->video) {
+        g_string_append_printf(dsl,
+                               "# Hint: original runtime %d seconds\n",
+                               element->video->duration);
+      }
+
+      g_string_append_printf(dsl,
+                             "%s %s %s %s %s\n",
+                             command,
+                             element_id,
+                             placeholder_path,
+                             pos_str,
+                             size_str);
+
+      g_free(pos_str);
+      g_free(size_str);
+      g_free(label_copy);
+    }
+    // Media elements are exported with placeholder paths; users must update paths before re-importing
   }
 
   // Second pass: create connections
