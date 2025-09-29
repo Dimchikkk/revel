@@ -3,6 +3,7 @@
 # DSL quick reference (each command is one line):
 #   canvas_background (bg_r,bg_g,bg_b,bg_a) SHOW_GRID (grid_r,grid_g,grid_b,grid_a)
 #   note_create|paper_note_create ID "Text" (x,y) (w,h) [bg <color>] [text_color <color>] [font "Font Name"]
+#   text_create ID "Text" (x,y) (w,h) [bg <color>] [text_color <color>] [font "Font Name"]
 #   shape_create ID TYPE "Text" (x,y) (w,h) [bg <color>] [stroke <width>] [filled <bool>] [font "Font Name"] [text_color <color>]
 #   image_create ID /abs/path/to.png (x,y) (w,h)
 #   video_create ID /abs/path/to.mp4 (x,y) (w,h)
@@ -16,6 +17,7 @@ canvas_background (0.95,0.95,0.98,1.0) true (0.85,0.85,0.90,0.5)
 # Header notes
 note_create title "Revel Canvas" (120,40) (320,80) bg #1f7fbf text_color #FFFFFF font "Ubuntu Bold 32"
 paper_note_create subtitle "Organize ideas visually" (520,40) (320,60)
+text_create quicktext "Quick inline text (Ctrl+N)" (520,120) (320,40) text_color #FFFFFF font "Ubuntu Mono 14"
 
 # Feature showcase with shapes
 shape_create circle1 circle "Text Notes" (120,200) (160,160) bg #d0e8ff stroke 3 filled true text_color #1a2b50 font "Ubuntu Bold 16"

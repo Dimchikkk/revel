@@ -629,6 +629,195 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       g_free(clean_text);
       g_free(font_override);
     }
+    else if (g_strcmp0(tokens[0], "text_create") == 0 && token_count >= 5) {
+      // text_create ID "Text" (x,y) (width,height)
+      const gchar *id = tokens[1];
+      const gchar *text_token = tokens[2];
+
+      gchar *clean_text = NULL;
+      if (text_token[0] == '"' && text_token[strlen(text_token)-1] == '"') {
+        gchar *quoted_text = g_strndup(text_token + 1, strlen(text_token) - 2);
+        clean_text = unescape_text(quoted_text);
+        g_free(quoted_text);
+      } else {
+        clean_text = unescape_text(text_token);
+      }
+
+      int x, y, width, height;
+      if (!parse_point(tokens[3], &x, &y) || !parse_point(tokens[4], &width, &height)) {
+        g_print("Failed to parse position/size for text_create\n");
+        g_free(clean_text);
+        for (int j = 0; j < token_count; j++)
+          g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      double bg_r = 0.0, bg_g = 0.0, bg_b = 0.0, bg_a = 0.0;
+      double text_r = 0.6, text_g = 0.6, text_b = 0.6, text_a = 1.0;
+      const gchar *default_font = "Ubuntu Mono 14";
+      gchar *font_override = NULL;
+
+      gboolean bg_set = FALSE;
+      gboolean text_color_set = FALSE;
+      gboolean font_set = FALSE;
+      gboolean expect_bg = FALSE;
+      gboolean expect_text_color = FALSE;
+      gboolean expect_font = FALSE;
+
+      for (int t = 5; t < token_count; t++) {
+        const gchar *token = tokens[t];
+
+        if (expect_bg) {
+          if (!parse_color_token(token, &bg_r, &bg_g, &bg_b, &bg_a)) {
+            g_print("Failed to parse background color: %s\n", token);
+          } else {
+            bg_set = TRUE;
+          }
+          expect_bg = FALSE;
+          continue;
+        }
+
+        if (expect_text_color) {
+          if (!parse_color_token(token, &text_r, &text_g, &text_b, &text_a)) {
+            g_print("Failed to parse text color: %s\n", token);
+          } else {
+            text_color_set = TRUE;
+          }
+          expect_text_color = FALSE;
+          continue;
+        }
+
+        if (expect_font) {
+          if (!parse_font_value(token, &font_override)) {
+            g_print("Failed to parse font description: %s\n", token);
+          } else {
+            font_set = TRUE;
+          }
+          expect_font = FALSE;
+          continue;
+        }
+
+        if (!bg_set && (g_strcmp0(token, "bg") == 0 || g_strcmp0(token, "background") == 0)) {
+          expect_bg = TRUE;
+          continue;
+        }
+        if (!bg_set && (g_str_has_prefix(token, "bg=") || g_str_has_prefix(token, "background=") ||
+                        g_str_has_prefix(token, "bg:") || g_str_has_prefix(token, "background:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (parse_color_token(value + 1, &bg_r, &bg_g, &bg_b, &bg_a)) {
+              bg_set = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse background color: %s\n", token);
+          continue;
+        }
+        if (!bg_set && parse_color_token(token, &bg_r, &bg_g, &bg_b, &bg_a)) {
+          bg_set = TRUE;
+          continue;
+        }
+
+        if (!text_color_set && (g_strcmp0(token, "text_color") == 0 ||
+                                 g_strcmp0(token, "text") == 0 ||
+                                 g_strcmp0(token, "font_color") == 0)) {
+          expect_text_color = TRUE;
+          continue;
+        }
+        if (!text_color_set && (g_str_has_prefix(token, "text_color=") ||
+                                 g_str_has_prefix(token, "text=") ||
+                                 g_str_has_prefix(token, "font_color="))) {
+          const gchar *value = strchr(token, '=');
+          if (value && *(value + 1) != '\0' &&
+              parse_color_token(value + 1, &text_r, &text_g, &text_b, &text_a)) {
+            text_color_set = TRUE;
+            continue;
+          }
+          g_print("Failed to parse text color: %s\n", token);
+          continue;
+        }
+
+        if (!font_set && g_strcmp0(token, "font") == 0) {
+          expect_font = TRUE;
+          continue;
+        }
+        if (!font_set && (g_str_has_prefix(token, "font=") || g_str_has_prefix(token, "font:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (parse_font_value(value + 1, &font_override)) {
+              font_set = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse font description: %s\n", token);
+          continue;
+        }
+        if (!font_set && token[0] == '"') {
+          if (parse_font_value(token, &font_override)) {
+            font_set = TRUE;
+            continue;
+          }
+        }
+
+        g_print("Warning: Unrecognized token in text_create: %s\n", token);
+      }
+
+      ElementPosition position = { .x = x, .y = y, .z = data->next_z_index++ };
+      ElementColor bg_color = { .r = bg_r, .g = bg_g, .b = bg_b, .a = bg_a };
+      ElementColor text_color = { .r = text_r, .g = text_g, .b = text_b, .a = text_a };
+      ElementSize size = { .width = width, .height = height };
+      ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0,
+                             .video_data = NULL, .video_size = 0, .duration = 0 };
+      ElementConnection connection = {
+        .from_element_uuid = NULL,
+        .to_element_uuid = NULL,
+        .from_point = -1,
+        .to_point = -1,
+      };
+      ElementDrawing drawing = {
+        .drawing_points = NULL,
+        .stroke_width = 0,
+      };
+
+      const gchar *font_to_use = font_override ? font_override : default_font;
+      ElementText inline_text = {
+        .text = clean_text,
+        .text_color = text_color,
+        .font_description = g_strdup(font_to_use),
+      };
+      ElementShape shape = {
+        .shape_type = -1,
+        .stroke_width = 0,
+        .filled = FALSE,
+      };
+
+      ElementConfig config = {
+        .type = ELEMENT_INLINE_TEXT,
+        .bg_color = bg_color,
+        .position = position,
+        .size = size,
+        .media = media,
+        .drawing = drawing,
+        .connection = connection,
+        .text = inline_text,
+        .shape = shape,
+      };
+
+      ModelElement *model_element = model_create_element(data->model, config);
+
+      if (model_element) {
+        model_element->visual_element = create_visual_element(model_element, data);
+        g_hash_table_insert(element_map, g_strdup(id), model_element);
+        undo_manager_push_create_action(data->undo_manager, model_element);
+      }
+
+      g_free(inline_text.font_description);
+      g_free(clean_text);
+      g_free(font_override);
+    }
     else if (g_strcmp0(tokens[0], "image_create") == 0 && token_count >= 5) {
       // image_create ID PATH (x,y) (width,height)
       const gchar *id = tokens[1];
