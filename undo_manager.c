@@ -23,6 +23,8 @@ static void update_log_window(UndoManager *manager) {
   // Clear existing entries
   gtk_list_store_clear(manager->log_store);
 
+  int position = 0;
+
   // Add actions from undo stack (current timeline)
   for (GList *l = manager->undo_stack; l != NULL; l = l->next) {
     Action *action = (Action*)l->data;
@@ -34,25 +36,32 @@ static void update_log_window(UndoManager *manager) {
     gtk_list_store_set(manager->log_store, &iter,
                        0, action->description,
                        1, timestamp_str,
+                       2, position, // Add position for time-travel
                        -1);
     g_free(timestamp_str);
+    position++;
   }
 
-  // Optionally, add actions from redo stack (alternative timeline)
-  // This would show the full history including undone actions
-  for (GList *l = manager->redo_stack; l != NULL; l = l->next) {
+  // Add actions from redo stack (alternative timeline) with negative positions
+  int redo_position = -1;
+  for (GList *l = g_list_reverse(g_list_copy(manager->redo_stack)); l != NULL; l = l->next) {
     Action *action = (Action*)l->data;
 
     GtkTreeIter iter;
     gtk_list_store_append(manager->log_store, &iter);
 
     gchar *timestamp_str = g_date_time_format(action->timestamp, "%H:%M:%S");
+    gchar *description = g_strdup_printf("[Undone] %s", action->description);
     gtk_list_store_set(manager->log_store, &iter,
-                       0, action->description,
+                       0, description,
                        1, timestamp_str,
+                       2, redo_position, // Negative position for undone actions
                        -1);
     g_free(timestamp_str);
+    g_free(description);
+    redo_position--;
   }
+  g_list_free(g_list_reverse(g_list_copy(manager->redo_stack)));
 }
 
 static const char* element_get_type_name(ModelElement *element) {
@@ -437,6 +446,62 @@ void undo_manager_redo(UndoManager *manager) {
   manager->undo_stack = g_list_append(manager->undo_stack, action);
 }
 
+// Time-travel function to go to a specific point in the action history
+static void time_travel_to_position(UndoManager *manager, int target_position, CanvasData *canvas_data) {
+  if (!manager || !canvas_data) return;
+
+  int current_position = g_list_length(manager->undo_stack);
+
+  if (target_position == current_position) {
+    // Already at the target position
+    return;
+  } else if (target_position > current_position) {
+    // Need to redo actions to reach target
+    int redos_needed = target_position - current_position;
+    for (int i = 0; i < redos_needed && manager->redo_stack; i++) {
+      undo_manager_redo(manager);
+    }
+  } else if (target_position < current_position) {
+    if (target_position < 0) {
+      // Target is in the redo stack (undone actions)
+      int undos_needed = current_position + abs(target_position);
+      for (int i = 0; i < undos_needed && manager->undo_stack; i++) {
+        undo_manager_undo(manager);
+      }
+    } else {
+      // Target is earlier in the undo stack
+      int undos_needed = current_position - target_position;
+      for (int i = 0; i < undos_needed && manager->undo_stack; i++) {
+        undo_manager_undo(manager);
+      }
+    }
+  }
+
+  // Update canvas to reflect the state change
+  canvas_sync_with_model(canvas_data);
+  gtk_widget_queue_draw(canvas_data->drawing_area);
+
+  // Update the log window to reflect new state
+  update_log_window(manager);
+}
+
+// Callback for when a row is activated (double-clicked) in the log
+static void on_log_row_activated(GtkTreeView *tree_view, GtkTreePath *path,
+                                GtkTreeViewColumn *column, gpointer user_data) {
+  CanvasData *canvas_data = (CanvasData*)user_data;
+  UndoManager *manager = canvas_data->undo_manager;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(tree_view);
+  GtkTreeIter iter;
+
+  if (gtk_tree_model_get_iter(model, &iter, path)) {
+    int position;
+    gtk_tree_model_get(model, &iter, 2, &position, -1);
+
+    time_travel_to_position(manager, position, canvas_data);
+  }
+}
+
 // Callback for when log window is destroyed
 static void on_log_window_destroy(GtkWidget *widget, gpointer user_data) {
   UndoManager *manager = (UndoManager*)user_data;
@@ -462,7 +527,7 @@ void show_action_log(CanvasData *data) {
 
   // Create new dialog
   GtkWidget *dialog = gtk_dialog_new();
-  gtk_window_set_title(GTK_WINDOW(dialog), "Available undo/redo actions");
+  gtk_window_set_title(GTK_WINDOW(dialog), "Action Log - Double-click to time-travel");
   gtk_window_set_default_size(GTK_WINDOW(dialog), 800, 500);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(main_window));
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
@@ -472,8 +537,8 @@ void show_action_log(CanvasData *data) {
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
-  // Create list store for the action log
-  manager->log_store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
+  // Create list store for the action log (3 columns: description, time, position)
+  manager->log_store = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
   GtkTreeView *tree_view = GTK_TREE_VIEW(gtk_tree_view_new());
 
   // Configure the tree view for expanded row height
@@ -516,6 +581,9 @@ void show_action_log(CanvasData *data) {
 
   // Set the model
   gtk_tree_view_set_model(tree_view, GTK_TREE_MODEL(manager->log_store));
+
+  // Connect the row activation signal for time-travel functionality
+  g_signal_connect(tree_view, "row-activated", G_CALLBACK(on_log_row_activated), data);
 
   // Populate with actions
   update_log_window(manager);
