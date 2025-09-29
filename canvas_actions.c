@@ -1,6 +1,7 @@
 #include "canvas_actions.h"
 #include "canvas_core.h"
 #include "canvas_spaces.h"
+#include "canvas_space_tree.h"
 #include "canvas_input.h"
 #include "element.h"
 #include "paper_note.h"
@@ -485,4 +486,27 @@ void canvas_on_add_inline_text(GtkButton *button, gpointer user_data) {
   element_start_editing(model_element->visual_element, data->overlay);
 
   gtk_widget_queue_draw(data->drawing_area);
+}
+
+void canvas_toggle_tree_view(GtkToggleButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if (!data || !data->tree_scrolled) return;
+
+  gboolean is_active = gtk_toggle_button_get_active(button);
+
+  if (is_active) {
+    // Show tree view
+    gtk_widget_set_visible(data->tree_scrolled, TRUE);
+    data->tree_view_visible = TRUE;
+
+    // Refresh tree view to show current state
+    if (data->space_tree_view) {
+      space_tree_view_schedule_refresh(data->space_tree_view);
+    }
+  } else {
+    // Hide tree view
+    gtk_widget_set_visible(data->tree_scrolled, FALSE);
+    data->tree_view_visible = FALSE;
+  }
 }

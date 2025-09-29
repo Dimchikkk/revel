@@ -9,6 +9,9 @@
 #include "freehand_drawing.h"
 #include "shape.h"
 
+// Forward declare to avoid circular dependency
+typedef struct _SpaceTreeView SpaceTreeView;
+
 typedef struct _CanvasData CanvasData;
 typedef struct _UndoManager UndoManager;
 
@@ -87,6 +90,11 @@ struct _CanvasData {
   // Animation management
   guint animation_timer_id;
   gboolean is_loading_space;
+
+  // Space tree view
+  SpaceTreeView *space_tree_view;
+  GtkWidget *tree_scrolled;
+  gboolean tree_view_visible;
 
   Model *model;
 };

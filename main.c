@@ -5,6 +5,7 @@
 #include "canvas_spaces.h"
 #include "canvas_search.h"
 #include "canvas_drop.h"
+#include "canvas_space_tree.h"
 #include "freehand_drawing.h"
 #include "undo_manager.h"
 #include "shape_dialog.h"
@@ -125,8 +126,14 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_button_set_child(GTK_BUTTON(search_btn), search_icon);
   gtk_widget_set_tooltip_text(search_btn, "Search Elements (Ctrl+S)");
 
+  GtkWidget *tree_btn = gtk_toggle_button_new();
+  GtkWidget *tree_icon = gtk_image_new_from_icon_name("view-list-tree");
+  gtk_button_set_child(GTK_BUTTON(tree_btn), tree_icon);
+  gtk_widget_set_tooltip_text(tree_btn, "Toggle Space Tree View");
+
   gtk_box_append(GTK_BOX(nav_group), back_btn);
   gtk_box_append(GTK_BOX(nav_group), search_btn);
+  gtk_box_append(GTK_BOX(nav_group), tree_btn);
   gtk_box_append(GTK_BOX(toolbar), nav_group);
 
   // Group separator
@@ -249,10 +256,33 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   GdkRGBA initial_color = INITIAL_DRAWING_COLOR;
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_btn), &initial_color);
 
+  // Create horizontal paned layout for main content and tree view
+  GtkWidget *main_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_widget_set_hexpand(main_paned, TRUE);
+  gtk_widget_set_vexpand(main_paned, TRUE);
+  gtk_box_append(GTK_BOX(vbox), main_paned);
+
+  // Create tree view side panel with scrolled window
+  GtkWidget *tree_scrolled = gtk_scrolled_window_new();
+  gtk_widget_set_size_request(tree_scrolled, 250, -1);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(tree_scrolled),
+                                GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+
+  // Create overlay for main canvas
   GtkWidget *overlay = gtk_overlay_new();
   gtk_widget_set_hexpand(overlay, TRUE);
   gtk_widget_set_vexpand(overlay, TRUE);
-  gtk_box_append(GTK_BOX(vbox), overlay);
+
+  // Add to paned layout
+  gtk_paned_set_start_child(GTK_PANED(main_paned), tree_scrolled);
+  gtk_paned_set_end_child(GTK_PANED(main_paned), overlay);
+  gtk_paned_set_resize_start_child(GTK_PANED(main_paned), FALSE);
+  gtk_paned_set_shrink_start_child(GTK_PANED(main_paned), FALSE);
+  gtk_paned_set_resize_end_child(GTK_PANED(main_paned), TRUE);
+  gtk_paned_set_shrink_end_child(GTK_PANED(main_paned), FALSE);
+
+  // Initially hide the tree view
+  gtk_widget_set_visible(tree_scrolled, FALSE);
 
   // Add toolbar revealer at the bottom
   gtk_box_append(GTK_BOX(vbox), toolbar_revealer);
@@ -274,13 +304,27 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   data->toolbar_visible = TRUE;
   data->toolbar_auto_hide = FALSE;
   data->toolbar_hide_timer_id = 0;
+
+  // Initialize tree view
+  data->tree_scrolled = tree_scrolled;
+  data->tree_view_visible = FALSE;
+  data->space_tree_view = space_tree_view_new(data);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(tree_scrolled),
+                               space_tree_view_get_widget(data->space_tree_view));
+
   canvas_setup_drop_target(data);
 
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(drawing_area), canvas_on_draw, data, NULL);
 
+  // Add key controller to drawing area
   GtkEventController *key_controller = gtk_event_controller_key_new();
   g_signal_connect(key_controller, "key-pressed", G_CALLBACK(canvas_on_key_pressed), data);
   gtk_widget_add_controller(drawing_area, key_controller);
+
+  // Add key controller to window for global shortcuts (works even when tree view has focus)
+  GtkEventController *window_key_controller = gtk_event_controller_key_new();
+  g_signal_connect(window_key_controller, "key-pressed", G_CALLBACK(canvas_on_key_pressed), data);
+  gtk_widget_add_controller(window, window_key_controller);
 
   // Right-click controller
   GtkGesture *right_click_controller = gtk_gesture_click_new();
@@ -318,6 +362,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
   g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);
   g_signal_connect(search_btn, "clicked", G_CALLBACK(canvas_show_search_dialog), data);
+  g_signal_connect(tree_btn, "toggled", G_CALLBACK(canvas_toggle_tree_view), data);
   g_signal_connect(drawing_btn, "clicked", G_CALLBACK(canvas_toggle_drawing_mode), data);
   g_signal_connect(color_btn, "color-set", G_CALLBACK(on_drawing_color_changed), data);
   g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
@@ -363,9 +408,6 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_object_unref(provider);
 
   gtk_window_present(GTK_WINDOW(window));
-
-  // Give initial focus to the drawing area
-  gtk_widget_grab_focus(drawing_area);
 }
 
 int main(int argc, char **argv) {

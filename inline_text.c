@@ -350,6 +350,7 @@ void inline_text_finish_editing(Element *element) {
   if (text->base.canvas_data && text->base.canvas_data->drawing_area) {
     canvas_sync_with_model(text->base.canvas_data);
     gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
+    gtk_widget_grab_focus(text->base.canvas_data->drawing_area);
   }
 
   g_free(old_text);
@@ -396,4 +397,3 @@ void inline_text_free(Element *element) {
 
   g_free(text);
 }
-

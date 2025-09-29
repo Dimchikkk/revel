@@ -75,3 +75,17 @@ void element_bring_to_front(Element *element, int *next_z) {
   ModelElement* model_element = model_get_by_visual(model, element);
   model_update_position(model, model_element, model_element->position->x, model_element->position->y, element->z);
 }
+
+const char* element_get_type_name(ElementType type) {
+  switch (type) {
+    case ELEMENT_NOTE: return "Note";
+    case ELEMENT_PAPER_NOTE: return "Paper";
+    case ELEMENT_INLINE_TEXT: return "Text";
+    case ELEMENT_SPACE: return "Space";
+    case ELEMENT_CONNECTION: return "Connection";
+    case ELEMENT_FREEHAND_DRAWING: return "Drawing";
+    case ELEMENT_SHAPE: return "Shape";
+    case ELEMENT_MEDIA_FILE: return "Media";
+    default: return "Unknown";
+  }
+}

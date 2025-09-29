@@ -267,6 +267,7 @@ void paper_note_finish_editing(Element *element) {
   if (note->base.canvas_data && note->base.canvas_data->drawing_area) {
     canvas_sync_with_model(note->base.canvas_data);
     gtk_widget_queue_draw(note->base.canvas_data->drawing_area);
+    gtk_widget_grab_focus(note->base.canvas_data->drawing_area);
   }
 }
 

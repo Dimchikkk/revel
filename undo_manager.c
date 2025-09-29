@@ -64,20 +64,9 @@ static void update_log_window(UndoManager *manager) {
   g_list_free(g_list_reverse(g_list_copy(manager->redo_stack)));
 }
 
-static const char* element_get_type_name(ModelElement *element) {
+static const char* get_element_type_name_for_element(ModelElement *element) {
   if (!element || !element->type) return "Unknown";
-
-  switch (element->type->type) {
-  case ELEMENT_NOTE: return "Note";
-  case ELEMENT_PAPER_NOTE: return "Paper Note";
-  case ELEMENT_CONNECTION: return "Connection";
-  case ELEMENT_SPACE: return "Space";
-  case ELEMENT_MEDIA_FILE: return "Media File";
-  case ELEMENT_FREEHAND_DRAWING: return "Freehand Drawing";
-  case ELEMENT_SHAPE: return "Shape";
-  case ELEMENT_INLINE_TEXT: return "Inline Text";
-  default: return "Unknown";
-  }
+  return element_get_type_name(element->type->type);
 }
 
 static Action* action_new(ActionType type, gpointer data, const char *description) {
@@ -164,7 +153,7 @@ void undo_manager_push_move_action(UndoManager *manager, ModelElement *element,
   move_data->new_x = new_x;
   move_data->new_y = new_y;
 
-  char *description = g_strdup_printf("Moved %s", element_get_type_name(element));
+  char *description = g_strdup_printf("Moved %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_MOVE_ELEMENT, move_data, description);
   g_free(description);
 }
@@ -181,7 +170,7 @@ void undo_manager_push_resize_action(UndoManager *manager, ModelElement *element
   resize_data->new_width = new_width;
   resize_data->new_height = new_height;
 
-  char *description = g_strdup_printf("Resized %s", element_get_type_name(element));
+  char *description = g_strdup_printf("Resized %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_RESIZE_ELEMENT, resize_data, description);
   g_free(description);
 }
@@ -195,7 +184,7 @@ void undo_manager_push_text_action(UndoManager *manager, ModelElement *element,
   text_data->old_text = g_strdup(old_text);
   text_data->new_text = g_strdup(new_text);
 
-  char *description = g_strdup_printf("Edited text in %s", element_get_type_name(element));
+  char *description = g_strdup_printf("Edited text in %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_EDIT_TEXT, text_data, description);
   g_free(description);
 }
@@ -216,7 +205,7 @@ void undo_manager_push_color_action(UndoManager *manager, ModelElement *element,
   color_data->new_b = new_b;
   color_data->new_a = new_a;
 
-  char *description = g_strdup_printf("Changed color of %s", element_get_type_name(element));
+  char *description = g_strdup_printf("Changed color of %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_CHANGE_COLOR, color_data, description);
   g_free(description);
 }
@@ -228,7 +217,7 @@ void undo_manager_push_delete_action(UndoManager *manager, ModelElement *element
   delete_data->element = element;
   delete_data->previous_state = element->state;  // Store the previous state
 
-  char *description = g_strdup_printf("Deleted %s", element_get_type_name(element));
+  char *description = g_strdup_printf("Deleted %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_DELETE_ELEMENT, delete_data, description);
   g_free(description);
 }
@@ -619,7 +608,7 @@ void undo_manager_push_create_action(UndoManager *manager, ModelElement *element
   create_data->element = element;
   create_data->initial_state = element->state;
 
-  char *description = g_strdup_printf("Created %s", element_get_type_name(element));
+  char *description = g_strdup_printf("Created %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_CREATE_ELEMENT, create_data, description);
   g_free(description);
 }

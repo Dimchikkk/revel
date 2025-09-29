@@ -15,7 +15,7 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   if (data->model->current_space_uuid) {
     g_free(data->model->current_space_uuid);
   }
-  data->model->current_space_uuid = g_strdup(space_uuid);;
+  data->model->current_space_uuid = g_strdup(space_uuid);
 
   model_load_space_settings(data->model, space_uuid);
   model_load_space(data->model);
@@ -25,13 +25,15 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   canvas_sync_with_model(data);
   data->is_loading_space = FALSE;
 
-  gtk_widget_queue_draw(data->drawing_area);
+  if (data->drawing_area && GTK_IS_WIDGET(data->drawing_area)) {
+    gtk_widget_queue_draw(data->drawing_area);
+  }
 }
 
 void go_back_to_parent_space(CanvasData *data) {
   model_save_elements(data->model);
   gchar *parent_space_name = NULL;
-  model_get_parent_id(data->model, &parent_space_name);
+  model_get_space_parent_uuid(data->model, data->model->current_space_uuid, &parent_space_name);
   switch_to_space(data, parent_space_name);
 }
 

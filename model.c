@@ -170,10 +170,6 @@ int model_get_space_name(Model *model, const char *space_uuid, char **space_name
   return database_get_space_name(model->db, space_uuid, space_name);
 }
 
-int model_get_parent_id(Model *model, char **space_parent_id) {
-  if (!model || !model->db) return 0;
-  return database_get_space_parent_id(model->db, model->current_space_uuid, space_parent_id);
-}
 
 gchar* model_generate_uuid(void) {
   uuid_t uuid;
@@ -195,7 +191,7 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
   element->uuid = model_generate_uuid();
   element->state = MODEL_STATE_NEW;
 
-  element->space_uuid = model->current_space_uuid;
+  element->space_uuid = g_strdup(model->current_space_uuid);
 
   // Create type reference
   ModelType *model_type = g_new0(ModelType, 1);
@@ -825,7 +821,8 @@ int model_save_elements(Model *model) {
       }
 
       // Save NEW elements to database
-      if (database_create_element(model->db, model->current_space_uuid, element)) {
+      const char *target_space_uuid = element->space_uuid ? element->space_uuid : model->current_space_uuid;
+      if (database_create_element(model->db, target_space_uuid, element)) {
         // Add shared resources to model caches
         if (element->type && element->type->id > 0) {
           g_hash_table_insert(model->types, GINT_TO_POINTER(element->type->id), element->type);
@@ -1088,19 +1085,12 @@ int move_element_to_space(Model *model, ModelElement *element, const char *new_s
   for (GList *iter = all_elements_to_move; iter != NULL; iter = iter->next) {
     ModelElement *elem = (ModelElement*)iter->data;
 
-    // Check if this space UUID is the same content as model's current space UUID
-    if (elem->space_uuid && model->current_space_uuid &&
-        strcmp(elem->space_uuid, model->current_space_uuid) == 0) {
-      // This element's space UUID matches the model's current space UUID
-      // Don't free it - just duplicate the new one
-      elem->space_uuid = g_strdup(new_space_uuid);
-    } else {
-      // Safe to free and replace
-      g_free(elem->space_uuid);
-      elem->space_uuid = g_strdup(new_space_uuid);
-    }
+    g_free(elem->space_uuid);
+    elem->space_uuid = g_strdup(new_space_uuid);
 
-    elem->state = MODEL_STATE_UPDATED;
+    if (elem->state != MODEL_STATE_NEW) {
+      elem->state = MODEL_STATE_UPDATED;
+    }
   }
 
   g_list_free(all_elements_to_move);
@@ -1182,4 +1172,13 @@ int model_set_space_grid_settings(Model *model, const char *space_uuid, int grid
   }
 
   return 0;
+}
+
+// Space hierarchy operations
+int model_get_space_parent_uuid(Model *model, const char *space_uuid, char **parent_uuid) {
+  if (!model || !model->db || !space_uuid || !parent_uuid) {
+    return 0;
+  }
+
+  return database_get_space_parent_id(model->db, space_uuid, parent_uuid);
 }

@@ -146,7 +146,7 @@ void model_load_space(Model *model);
 int model_save_elements(Model *model);
 
 int model_get_space_name(Model *model, const char *space_uuid, char **space_name);
-int model_get_parent_id(Model *model, char **space_parent_id);
+int model_get_space_parent_uuid(Model *model, const char *space_uuid, char **parent_uuid);
 int model_get_amount_of_elements(Model *model, const char *space_uuid);
 
 // Creation
@@ -204,5 +204,6 @@ int model_load_video_data(Model *model, ModelVideo *video);
 void model_load_space_settings(Model *model, const char *space_uuid);
 int model_set_space_background_color(Model *model, const char *space_uuid, const char *background_color);
 int model_set_space_grid_settings(Model *model, const char *space_uuid, int grid_enabled, const char *grid_color);
+
 
 #endif

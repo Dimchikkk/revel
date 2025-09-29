@@ -126,4 +126,7 @@ void element_update_size(Element *element, int width, int height);
 void element_free(Element *element);
 void element_bring_to_front(Element *element, int *next_z);
 
+// Utility function to get human-readable name for element types
+const char* element_get_type_name(ElementType type);
+
 #endif
