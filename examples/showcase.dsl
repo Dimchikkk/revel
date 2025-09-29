@@ -24,8 +24,8 @@ shape_create vcyl1 vcylinder "Media" (640,200) (120,120) bg color(0.97,0.92,1.0,
 shape_create hcyl1 hcylinder "Spaces" (900,210) (160,90) bg #f7e5b4 filled true text_color #4d3a1a
 
 # Visual content
-image_create img1 assets/images/cat.jpeg (140,440) (200,200)
-video_create vid1 assets/videos/blah_silent.mp4 (420,440) (320,220)
+image_create img1 examples/media/cat.jpeg (140,440) (200,200)
+video_create vid1 examples/media/blah_silent.mp4 (420,440) (320,220)
 
 # Workspace section
 space_create workspace "Projects" (860,440) (280,200)

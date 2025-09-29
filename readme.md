@@ -127,12 +127,10 @@ sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1
 ## Project layout
 
 ```
-src/            Core application sources and headers
-tests/          Unit and integration test suites
-examples/       Sample DSL scripts
-assets/images   Demo images referenced by the DSL examples
-assets/videos   Demo videos referenced by the DSL examples
-build/          Generated object files and test runners (created by make)
+src/              Core application sources and headers
+tests/            Unit and integration test suites
+examples/         Sample DSL scripts and their media assets
+build/            Generated object files and test runners (created by make)
 ```
 
 ## DSL example
@@ -151,7 +149,7 @@ rm -f demo.db && ./revel --dsl examples/showcase.dsl demo.db
 This command generates `demo.db` alongside the executable. Launching `revel` and
 opening the generated database will display the scripted layout shown below:
 
-![Demo Canvas](assets/images/demo.jpg)
+![Demo Canvas](examples/media/demo.jpg)
 
 ## How to add app launcher:
 
