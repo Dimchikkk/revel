@@ -3,6 +3,7 @@
 #include "canvas_spaces.h"
 #include "canvas_space_tree.h"
 #include "canvas_input.h"
+#include "canvas_placement.h"
 #include "element.h"
 #include "paper_note.h"
 #include "note.h"
@@ -17,9 +18,19 @@ static void on_space_entry_activate(GtkEntry *entry, gpointer user_data) {
 
 void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  ElementSize size = {
+    .width = 200,
+    .height = 150,
+  };
+
+  // Find smart placement position
+  int smart_x, smart_y;
+  canvas_find_empty_position(data, size.width, size.height, &smart_x, &smart_y);
+
   ElementPosition position = {
-    .x = 100,
-    .y = 100,
+    .x = smart_x,
+    .y = smart_y,
     .z = data->next_z_index++,
   };
   ElementColor bg_color = {
@@ -33,10 +44,6 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     .g = 0.2,
     .b = 0.2,
     .a = 1.0,
-  };
-  ElementSize size = {
-    .width = 200,
-    .height = 150,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
@@ -84,9 +91,18 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
 void canvas_on_add_note(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
+  ElementSize size = {
+    .width = 200,
+    .height = 150,
+  };
+
+  // Find smart placement position
+  int smart_x, smart_y;
+  canvas_find_empty_position(data, size.width, size.height, &smart_x, &smart_y);
+
   ElementPosition position = {
-    .x = 100,
-    .y = 100,
+    .x = smart_x,
+    .y = smart_y,
     .z = data->next_z_index++,
   };
   ElementColor bg_color = {
@@ -100,10 +116,6 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     .g = 0.2,
     .b = 0.2,
     .a = 1.0,
-  };
-  ElementSize size = {
-    .width = 200,
-    .height = 150,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
@@ -152,9 +164,19 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
 
 void canvas_on_add_text(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  ElementSize size = {
+    .width = 100,
+    .height = 20,
+  };
+
+  // Find smart placement position
+  int smart_x, smart_y;
+  canvas_find_empty_position(data, size.width, size.height, &smart_x, &smart_y);
+
   ElementPosition position = {
-    .x = 100,
-    .y = 100,
+    .x = smart_x,
+    .y = smart_y,
     .z = data->next_z_index++,
   };
   ElementColor bg_color = {
@@ -168,10 +190,6 @@ void canvas_on_add_text(GtkButton *button, gpointer user_data) {
     .g = 0.6,
     .b = 0.6,
     .a = 1.0,
-  };
-  ElementSize size = {
-    .width = 100,
-    .height = 20,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
@@ -425,9 +443,19 @@ void canvas_show_background_dialog(GtkButton *button, gpointer user_data) {
 
 void canvas_on_add_inline_text(GtkButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  ElementSize size = {
+    .width = 100,
+    .height = 20,
+  };
+
+  // Find smart placement position
+  int smart_x, smart_y;
+  canvas_find_empty_position(data, size.width, size.height, &smart_x, &smart_y);
+
   ElementPosition position = {
-    .x = 100,
-    .y = 100,
+    .x = smart_x,
+    .y = smart_y,
     .z = data->next_z_index++,
   };
   ElementColor bg_color = {
@@ -441,10 +469,6 @@ void canvas_on_add_inline_text(GtkButton *button, gpointer user_data) {
     .g = 0.6,
     .b = 0.6,
     .a = 1.0,
-  };
-  ElementSize size = {
-    .width = 100,
-    .height = 20,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {

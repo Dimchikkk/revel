@@ -1,5 +1,6 @@
 #include "canvas_spaces.h"
 #include "canvas_core.h"
+#include "canvas_placement.h"
 #include "element.h"
 #include "space.h"
 #include "model.h"
@@ -48,9 +49,18 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
 
       if (space_name && strlen(space_name) > 0) {
         // Create a new space element in the model
+        ElementSize size = {
+          .width = 200,
+          .height = 150,
+        };
+
+        // Find smart placement position
+        int smart_x, smart_y;
+        canvas_find_empty_position(data, size.width, size.height, &smart_x, &smart_y);
+
         ElementPosition position = {
-          .x = 100,
-          .y = 100,
+          .x = smart_x,
+          .y = smart_y,
           .z = data->next_z_index++,
         };
         ElementColor bg_color = {
@@ -64,10 +74,6 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
           .g = 0.1,
           .b = 0.1,
           .a = 1.0,
-        };
-        ElementSize size = {
-          .width = 200,
-          .height = 150,
         };
         ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
         ElementConnection connection = {
