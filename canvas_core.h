@@ -4,7 +4,6 @@
 #include "canvas.h"
 #include "element.h"
 
-CanvasData* canvas_data_new(GtkWidget *drawing_area, GtkWidget *overlay);
 CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay, const char *db_filename);
 void canvas_data_free(CanvasData *data);
 void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int height, gpointer user_data);

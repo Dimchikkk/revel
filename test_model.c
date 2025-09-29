@@ -19,31 +19,9 @@ static void test_setup(TestFixture *fixture, gconstpointer user_data) {
   // Remove any existing test database
   remove(TEST_DB_FILE);
 
-  // Initialize database
-  if (sqlite3_open_v2(TEST_DB_FILE, &fixture->db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK) {
-    g_error("Failed to open test database");
-  }
-
-  // Create tables
-  if (!database_create_tables(fixture->db)) {
-    g_error("Failed to create tables");
-  }
-
-  // Initialize default namespace
-  if (!database_init_default_namespace(fixture->db)) {
-    g_error("Failed to initialize default namespace");
-  }
-
-  // Create model
-  fixture->model = model_new();
-  fixture->model->db = fixture->db;
-
-  // Get current space UUID
-  char *current_space_uuid = NULL;
-  if (!database_get_current_space_uuid(fixture->db, &current_space_uuid)) {
-    g_error("Failed to get current space UUID");
-  }
-  fixture->model->current_space_uuid = current_space_uuid;
+  // Create model (this will initialize the database)
+  fixture->model = model_new_with_file(TEST_DB_FILE);
+  fixture->db = fixture->model->db;
 }
 
 // Teardown function

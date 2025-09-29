@@ -139,7 +139,6 @@ struct _Model {
 };
 
 // Model management
-Model* model_new();
 Model* model_new_with_file(const char *db_filename);
 void model_free(Model *model);
 void model_element_free(ModelElement *element);

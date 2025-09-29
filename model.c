@@ -89,9 +89,6 @@ void model_element_free(ModelElement *element) {
   g_free(element);
 }
 
-Model* model_new() {
-  return model_new_with_file("revel.db");
-}
 
 Model* model_new_with_file(const char *db_filename) {
   Model *model = g_new0(Model, 1);
