@@ -284,9 +284,7 @@ void inline_text_start_editing(Element *element, GtkWidget *overlay) {
   // Update layout to get current size
   inline_text_update_layout(text);
 
-  // Set initial size with some padding, but allow expansion up to window width
-  int window_width = gtk_widget_get_allocated_width(element->canvas_data->drawing_area);
-  int max_width = MAX(element->width + 20, window_width - 100); // Leave some margin from window edge
+  // Set initial size with some padding
   gtk_widget_set_size_request(text->scrolled_window, element->width + 20, element->height + 20);
   gtk_widget_set_hexpand(text->scrolled_window, TRUE);
   gtk_widget_set_vexpand(text->scrolled_window, FALSE);

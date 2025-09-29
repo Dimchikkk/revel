@@ -1,5 +1,4 @@
 - [improvement] add curve arrows with control points
-- [new feature] allow choosing DB file
 - [improvement] disable back to parent button if at root space
 - [improvement] ability to set text alignment
 - [new feature] save images/videos to file via context menu

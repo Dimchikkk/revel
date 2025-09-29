@@ -90,6 +90,10 @@ void model_element_free(ModelElement *element) {
 }
 
 Model* model_new() {
+  return model_new_with_file("revel.db");
+}
+
+Model* model_new_with_file(const char *db_filename) {
   Model *model = g_new0(Model, 1);
   model->elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)model_element_free);
   model->types = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
@@ -106,7 +110,7 @@ Model* model_new() {
   model->current_space_show_grid = FALSE;
   model->current_space_grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0};
 
-  if (!database_init(&model->db, "revel.db")) {
+  if (!database_init(&model->db, db_filename)) {
     g_free(model);
     return NULL;
   }

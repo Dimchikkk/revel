@@ -10,6 +10,29 @@
 #include "shape_dialog.h"
 #include "database.h"
 
+// Global variable to store the database filename
+static char *g_database_filename = NULL;
+
+static int on_command_line(GtkApplication *app, GApplicationCommandLine *command_line, gpointer user_data) {
+  gint argc;
+  gchar **argv = g_application_command_line_get_arguments(command_line, &argc);
+
+  if (argc > 1) {
+    // Set the database filename from command line
+    if (g_database_filename) {
+      g_free(g_database_filename);
+    }
+    g_database_filename = g_strdup(argv[1]);
+  }
+
+  g_strfreev(argv);
+
+  // Activate the application
+  g_application_activate(G_APPLICATION(app));
+
+  return 0;
+}
+
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
   gtk_window_set_default_size(GTK_WINDOW(window), 1000, 700);
@@ -241,7 +264,10 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_widget_set_focusable(drawing_area, TRUE);
   gtk_overlay_set_child(GTK_OVERLAY(overlay), drawing_area);
 
-  CanvasData *data = canvas_data_new(drawing_area, overlay);
+  // Use the database filename from command line args or default
+  const char *db_filename = g_database_filename ? g_database_filename : "revel.db";
+
+  CanvasData *data = canvas_data_new_with_db(drawing_area, overlay, db_filename);
   data->zoom_entry = zoom_entry;
   data->toolbar = toolbar;
   data->toolbar_revealer = toolbar_revealer;
@@ -343,11 +369,18 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 }
 
 int main(int argc, char **argv) {
-  GtkApplication *app = gtk_application_new("com.example.notecanvas", G_APPLICATION_FLAGS_NONE);
+  GtkApplication *app = gtk_application_new("com.example.notecanvas", G_APPLICATION_HANDLES_COMMAND_LINE);
   g_signal_connect(app, "activate", G_CALLBACK(on_activate), NULL);
+  g_signal_connect(app, "command-line", G_CALLBACK(on_command_line), NULL);
   g_signal_connect(app, "shutdown", G_CALLBACK(canvas_on_app_shutdown), NULL);
 
   int status = g_application_run(G_APPLICATION(app), argc, argv);
+
+  // Cleanup
+  if (g_database_filename) {
+    g_free(g_database_filename);
+  }
+
   g_object_unref(app);
   return status;
 }
