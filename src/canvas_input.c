@@ -21,6 +21,93 @@
 #include "font_dialog.h"
 #include "shape.h"
 
+typedef struct {
+  const char *shortcut;
+  const char *description;
+} ShortcutInfo;
+
+static void canvas_show_shortcuts_dialog(CanvasData *data) {
+  if (!data || !data->drawing_area) {
+    return;
+  }
+
+  static const ShortcutInfo shortcuts[] = {
+    { "Ctrl+N", "Create inline text note" },
+    { "Ctrl+Shift+N", "Create rich text note" },
+    { "Ctrl+Shift+P", "Create paper note" },
+    { "Ctrl+Shift+S", "Create nested space" },
+    { "Ctrl+S", "Open search" },
+    { "Ctrl+E", "Open DSL executor" },
+    { "Ctrl+D", "Toggle drawing mode" },
+    { "Ctrl+V", "Paste from clipboard" },
+    { "Ctrl+Z", "Undo" },
+    { "Ctrl+Y", "Redo" },
+    { "Ctrl+A", "Select all elements" },
+    { "Delete", "Delete selected elements" },
+    { "Backspace", "Return to parent space" },
+    { "Ctrl+J", "Toggle space tree" },
+    { "Ctrl+T", "Toggle toolbar visibility" },
+    { "Ctrl+Shift+T", "Toggle toolbar auto-hide" }
+  };
+
+  GtkWidget *root = GTK_WIDGET(gtk_widget_get_root(data->drawing_area));
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+    "Keyboard Shortcuts",
+    GTK_WINDOW(root),
+    GTK_DIALOG_MODAL,
+    "Close",
+    GTK_RESPONSE_CLOSE,
+    NULL);
+
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(root));
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 440, 420);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+  GtkWidget *header = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(header), "<span size='large' weight='bold'>Keyboard Shortcuts</span>");
+  gtk_label_set_xalign(GTK_LABEL(header), 0.0);
+  gtk_widget_set_margin_start(header, 8);
+  gtk_widget_set_margin_end(header, 8);
+  gtk_widget_set_margin_top(header, 8);
+  gtk_widget_set_margin_bottom(header, 12);
+  gtk_box_append(GTK_BOX(content), header);
+
+  GtkWidget *scrolled = gtk_scrolled_window_new();
+  gtk_widget_set_vexpand(scrolled, TRUE);
+  gtk_widget_set_hexpand(scrolled, TRUE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_box_append(GTK_BOX(content), scrolled);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_widget_set_margin_start(grid, 12);
+  gtk_widget_set_margin_end(grid, 12);
+  gtk_widget_set_margin_bottom(grid, 12);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 6);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 16);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), grid);
+
+  const size_t shortcut_count = G_N_ELEMENTS(shortcuts);
+  for (size_t i = 0; i < shortcut_count; i++) {
+    GtkWidget *shortcut_label = gtk_label_new(NULL);
+    gchar *markup = g_strdup_printf("<tt>%s</tt>", shortcuts[i].shortcut);
+    gtk_label_set_markup(GTK_LABEL(shortcut_label), markup);
+    g_free(markup);
+    gtk_label_set_xalign(GTK_LABEL(shortcut_label), 0.0);
+
+    GtkWidget *description_label = gtk_label_new(shortcuts[i].description);
+    gtk_label_set_xalign(GTK_LABEL(description_label), 0.0);
+    gtk_label_set_wrap(GTK_LABEL(description_label), TRUE);
+
+    gtk_grid_attach(GTK_GRID(grid), shortcut_label, 0, (int)i, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), description_label, 1, (int)i, 1, 1);
+  }
+
+  g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
@@ -1432,6 +1519,11 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
       // Let the TextView handle all input - don't consume keys here
       return FALSE;
     }
+  }
+
+  if (keyval == GDK_KEY_F1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) {
+    canvas_show_shortcuts_dialog(data);
+    return TRUE;
   }
 
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_v) {

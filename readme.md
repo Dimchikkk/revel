@@ -78,32 +78,7 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 
 ### Keyboard Shortcuts
 
-#### Content Creation
-* **Ctrl+N:** Create new text
-* **Ctrl+Shift+N:** Create new rich note
-* **Ctrl+Shift+P:** Create new paper note
-* **Ctrl+Shift+S:** Create new space
-
-#### Navigation & Search
-* **Ctrl+S:** Search elements
-* **Backspace:** Go to parent space
-* **Ctrl+A:** Select all elements (when not editing)
-
-#### Drawing & Tools
-* **Ctrl+D:** Toggle drawing mode
-* **Ctrl+E:** Open DSL Executor window
-
-#### Toolbar & Views
-* **Ctrl+T:** Toggle toolbar visibility
-* **Ctrl+Shift+T:** Toggle toolbar auto-hide mode
-* **Ctrl+J:** Toggle space tree view
-
-#### Editing & Clipboard
-* **Ctrl+V:** Paste from clipboard
-* **Ctrl+Z:** Undo action
-* **Ctrl+Y:** Redo action
-* **Enter:** Finish text editing
-* **Delete:** Delete selected elements
+Press `F1` inside the app to open an in-product reference with every shortcut.
 
 ## Dependencies
 
