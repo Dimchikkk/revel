@@ -26,6 +26,16 @@ typedef struct {
   const char *description;
 } ShortcutInfo;
 
+static void append_section_if_not_empty(GMenu *parent, GMenu *section) {
+  if (!parent || !section) return;
+
+  if (g_menu_model_get_n_items(G_MENU_MODEL(section)) > 0) {
+    g_menu_append_section(parent, NULL, G_MENU_MODEL(section));
+  }
+
+  g_object_unref(section);
+}
+
 static void canvas_show_shortcuts_dialog(CanvasData *data) {
   if (!data || !data->drawing_area) {
     return;
@@ -1312,38 +1322,53 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
           g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_arrowhead_type_action));
         }
 
-        // Create the menu model with delete option first
+        // Build the context menu with visual separators between sections
         GMenu *menu_model = g_menu_new();
-        g_menu_append(menu_model, "Change Space", "menu.change-space");
-        g_menu_append(menu_model, "Change Color", "menu.change-color");
+        GMenu *modify_section = g_menu_new();
+        GMenu *structure_section = g_menu_new();
+        GMenu *clone_section = g_menu_new();
+        GMenu *info_section = g_menu_new();
+        GMenu *danger_section = g_menu_new();
+
+        g_menu_append(modify_section, "Change Space", "menu.change-space");
+        g_menu_append(modify_section, "Change Color", "menu.change-color");
 
         if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE  ||
             element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE ||
             element->type == ELEMENT_SHAPE || element->type == ELEMENT_INLINE_TEXT) {
-          g_menu_append(menu_model, "Change Text", "menu.change-text");
-          g_menu_append(menu_model, "Clone by Text", "menu.clone-text");
+          g_menu_append(modify_section, "Change Text", "menu.change-text");
+          g_menu_append(clone_section, "Clone by Text", "menu.clone-text");
         }
+
         if (element->type == ELEMENT_CONNECTION) {
-          g_menu_append(menu_model, "Change Arrow Type", "menu.change-arrow-type");
-          g_menu_append(menu_model, "Change Arrowhead", "menu.change-arrowhead-type");
+          g_menu_append(modify_section, "Change Arrow Type", "menu.change-arrow-type");
+          g_menu_append(modify_section, "Change Arrowhead", "menu.change-arrowhead-type");
         }
+
         // Add hide/show children options if element has children (outgoing arrows)
         GList *children = find_children_bfs(data->model, model_element->uuid);
         if (children) { // Has children via outgoing arrows
           gboolean has_hidden_children = canvas_has_hidden_children(data, model_element->uuid);
 
           if (has_hidden_children) {
-            g_menu_append(menu_model, "Show Children", "menu.show-children");
+            g_menu_append(structure_section, "Show Children", "menu.show-children");
           } else {
-            g_menu_append(menu_model, "Hide Children", "menu.hide-children");
+            g_menu_append(structure_section, "Hide Children", "menu.hide-children");
           }
           g_list_free(children);
         }
 
-        g_menu_append(menu_model, "Clone by Size", "menu.clone-size");
-        g_menu_append(menu_model, "Fork Element", "menu.fork");
-        g_menu_append(menu_model, "Description", "menu.description");
-        g_menu_append(menu_model, "Delete", "menu.delete");
+        g_menu_append(clone_section, "Clone by Size", "menu.clone-size");
+        g_menu_append(clone_section, "Fork Element", "menu.fork");
+
+        g_menu_append(info_section, "Description", "menu.description");
+        g_menu_append(danger_section, "Delete", "menu.delete");
+
+        append_section_if_not_empty(menu_model, modify_section);
+        append_section_if_not_empty(menu_model, structure_section);
+        append_section_if_not_empty(menu_model, clone_section);
+        append_section_if_not_empty(menu_model, info_section);
+        append_section_if_not_empty(menu_model, danger_section);
 
         // Create the popover menu
         GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu_model));
