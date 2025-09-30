@@ -382,35 +382,31 @@ void canvas_show_background_dialog(GtkButton *button, gpointer user_data) {
   );
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-  gtk_box_append(GTK_BOX(content_area), vbox);
-  gtk_widget_set_margin_start(vbox, 12);
-  gtk_widget_set_margin_end(vbox, 12);
-  gtk_widget_set_margin_top(vbox, 12);
-  gtk_widget_set_margin_bottom(vbox, 12);
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 16);
+  gtk_widget_set_margin_start(grid, 18);
+  gtk_widget_set_margin_end(grid, 18);
+  gtk_widget_set_margin_top(grid, 18);
+  gtk_widget_set_margin_bottom(grid, 18);
+  gtk_box_append(GTK_BOX(content_area), grid);
 
-  // Color option
   GtkWidget *color_label = gtk_label_new("Background Color:");
-  gtk_widget_set_halign(color_label, GTK_ALIGN_START);
-  gtk_box_append(GTK_BOX(vbox), color_label);
-
+  gtk_label_set_xalign(GTK_LABEL(color_label), 0.0);
   GtkWidget *color_button = gtk_color_button_new();
-  gtk_widget_set_margin_start(color_button, 20);
-  gtk_box_append(GTK_BOX(vbox), color_button);
+  gtk_widget_set_hexpand(color_button, TRUE);
+  gtk_grid_attach(GTK_GRID(grid), color_label, 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), color_button, 1, 0, 1, 1);
 
-  // Grid option
   GtkWidget *grid_checkbox = gtk_check_button_new_with_label("Show Grid");
-  gtk_box_append(GTK_BOX(vbox), grid_checkbox);
+  gtk_grid_attach(GTK_GRID(grid), grid_checkbox, 0, 1, 2, 1);
 
-  // Grid color option
   GtkWidget *grid_color_label = gtk_label_new("Grid Color:");
-  gtk_widget_set_halign(grid_color_label, GTK_ALIGN_START);
-  gtk_widget_set_margin_start(grid_color_label, 20);
-  gtk_box_append(GTK_BOX(vbox), grid_color_label);
-
+  gtk_label_set_xalign(GTK_LABEL(grid_color_label), 0.0);
   GtkWidget *grid_color_button = gtk_color_button_new();
-  gtk_widget_set_margin_start(grid_color_button, 20);
-  gtk_box_append(GTK_BOX(vbox), grid_color_button);
+  gtk_widget_set_hexpand(grid_color_button, TRUE);
+  gtk_grid_attach(GTK_GRID(grid), grid_color_label, 0, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), grid_color_button, 1, 2, 1, 1);
 
   // Set default grid color to light gray
   GdkRGBA default_grid_color = {0.8, 0.8, 0.8, 1.0};
