@@ -158,10 +158,18 @@ int model_get_amount_of_elements(Model *model, const char *space_uuid);
 // Creation
 ModelElement* model_create_element(Model *model, ElementConfig config);
 
+// Clone flags
+typedef enum {
+  CLONE_FLAG_NONE     = 0,
+  CLONE_FLAG_TEXT     = 1 << 0,
+  CLONE_FLAG_SIZE     = 1 << 1,
+  CLONE_FLAG_POSITION = 1 << 2,
+  CLONE_FLAG_COLOR    = 1 << 3,
+} CloneFlags;
+
 // Fork/cloning
 ModelElement* model_element_fork(Model *model, ModelElement *element);
-ModelElement* model_element_clone_by_text(Model *model, ModelElement *element);
-ModelElement* model_element_clone_by_size(Model *model, ModelElement *element);
+ModelElement* model_element_clone(Model *model, ModelElement *element, CloneFlags flags);
 
 // Updating props
 int model_update_text(Model *model, ModelElement *element, const char *text);

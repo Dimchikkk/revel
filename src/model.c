@@ -688,7 +688,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
   return model_create_element(model, config);
 }
 
-ModelElement* model_element_clone_by_text(Model *model, ModelElement *element) {
+ModelElement* model_element_clone(Model *model, ModelElement *element, CloneFlags flags) {
   if (!model || !element || !element->type) {
     return NULL;
   }
@@ -697,41 +697,48 @@ ModelElement* model_element_clone_by_text(Model *model, ModelElement *element) {
     return NULL;
   }
 
+  // If no flags set, just fork (independent copy)
+  if (flags == CLONE_FLAG_NONE) {
+    return model_element_fork(model, element);
+  }
+
   ModelElement *cloned_element = model_element_fork(model, element);
   if (!cloned_element) {
     return NULL;
   }
 
-  if (element->text && cloned_element->text) {
+  // Clone text if requested and available
+  if ((flags & CLONE_FLAG_TEXT) && element->text && cloned_element->text) {
     g_free(cloned_element->text->text);
+    g_free(cloned_element->text->font_description);
     g_free(cloned_element->text);
 
     cloned_element->text = element->text;
     cloned_element->text->ref_count++;
   }
 
-  return cloned_element;
-}
-
-ModelElement* model_element_clone_by_size(Model *model, ModelElement *element) {
-  if (!model || !element || !element->type) {
-    return NULL;
-  }
-
-  if (element->state == MODEL_STATE_NEW || element->state == MODEL_STATE_DELETED) {
-    return NULL;
-  }
-
-  ModelElement *cloned_element = model_element_fork(model, element);
-  if (!cloned_element) {
-    return NULL;
-  }
-
-  if (element->size && cloned_element->size) {
+  // Clone size if requested and available
+  if ((flags & CLONE_FLAG_SIZE) && element->size && cloned_element->size) {
     g_free(cloned_element->size);
 
     cloned_element->size = element->size;
     cloned_element->size->ref_count++;
+  }
+
+  // Clone position if requested and available
+  if ((flags & CLONE_FLAG_POSITION) && element->position && cloned_element->position) {
+    g_free(cloned_element->position);
+
+    cloned_element->position = element->position;
+    cloned_element->position->ref_count++;
+  }
+
+  // Clone color if requested and available
+  if ((flags & CLONE_FLAG_COLOR) && element->bg_color && cloned_element->bg_color) {
+    g_free(cloned_element->bg_color);
+
+    cloned_element->bg_color = element->bg_color;
+    cloned_element->bg_color->ref_count++;
   }
 
   return cloned_element;

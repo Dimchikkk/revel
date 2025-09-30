@@ -21,6 +21,7 @@
 #include "shape.h"
 #include "shape_dialog.h"
 #include "font_dialog.h"
+#include "clone_dialog.h"
 #include <graphene.h>
 
 typedef struct {
@@ -916,6 +917,7 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
   }
 
   // Handle undo for drag operations
+  gboolean was_moved = FALSE;
   if (data->drag_start_positions && g_hash_table_size(data->drag_start_positions) > 0) {
     GHashTableIter iter;
     gpointer key, value;
@@ -931,6 +933,8 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
       if (visual_element && model_element->position &&
           (visual_element->x != start_pos->x ||
            visual_element->y != start_pos->y)) {
+
+        was_moved = TRUE;
 
         // Update the model with the new position
         model_update_position(data->model, model_element,
@@ -989,8 +993,9 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
     element->rotating = FALSE;
   }
 
-  // Re-create visual elements since some properties may be changed due to resizing or rotation
-  if (was_resized || was_rotated) canvas_sync_with_model(data);
+  // Re-create visual elements since some properties may be changed due to moving, resizing, or rotation
+  // This is needed to sync cloned elements (e.g., elements that share position, size, or color)
+  if (was_moved || was_resized || was_rotated) canvas_sync_with_model(data);
 
   gtk_widget_queue_draw(data->drawing_area);
 }
@@ -1103,7 +1108,7 @@ void canvas_set_cursor(CanvasData *data, GdkCursor *cursor) {
   }
 }
 
-static void on_fork_element_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+static void on_clone_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
   CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
   const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
 
@@ -1111,51 +1116,7 @@ static void on_fork_element_action(GSimpleAction *action, GVariant *parameter, g
     model_save_elements(data->model);
     ModelElement *original = g_hash_table_lookup(data->model->elements, element_uuid);
     if (original) {
-      ModelElement *forked = model_element_fork(data->model, original);
-      if (forked) {
-        forked->visual_element = create_visual_element(forked, data);
-        // Push undo action for fork
-        undo_manager_push_create_action(data->undo_manager, forked);
-        gtk_widget_queue_draw(data->drawing_area);
-      }
-    }
-  }
-}
-
-static void on_clone_by_text_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
-  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
-  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
-
-  if (data && data->model && element_uuid) {
-    model_save_elements(data->model);
-    ModelElement *original = g_hash_table_lookup(data->model->elements, element_uuid);
-    if (original) {
-      ModelElement *clone = model_element_clone_by_text(data->model, original);
-      if (clone) {
-        clone->visual_element = create_visual_element(clone, data);
-        // Push undo action for clone
-        undo_manager_push_create_action(data->undo_manager, clone);
-        gtk_widget_queue_draw(data->drawing_area);
-      }
-    }
-  }
-}
-
-static void on_clone_by_size_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
-  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
-  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
-
-  if (data && data->model && element_uuid) {
-    model_save_elements(data->model);
-    ModelElement *original = g_hash_table_lookup(data->model->elements, element_uuid);
-    if (original) {
-      ModelElement *clone = model_element_clone_by_size(data->model, original);
-      if (clone) {
-        clone->visual_element = create_visual_element(clone, data);
-        // Push undo action for clone
-        undo_manager_push_create_action(data->undo_manager, clone);
-        gtk_widget_queue_draw(data->drawing_area);
-      }
+      clone_dialog_open(data, original);
     }
   }
 }
@@ -1734,9 +1695,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data(G_OBJECT(change_color_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(change_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
 
-        GSimpleAction *fork_action = g_simple_action_new("fork", NULL);
-        GSimpleAction *clone_text_action = g_simple_action_new("clone-text", NULL);
-        GSimpleAction *clone_size_action = g_simple_action_new("clone-size", NULL);
+        GSimpleAction *clone_action = g_simple_action_new("clone", NULL);
         GSimpleAction *change_space_action = g_simple_action_new("change-space", NULL);
         GSimpleAction *change_text_action = g_simple_action_new("change-text", NULL);
 
@@ -1747,12 +1706,8 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         // Store data for existing actions
         g_object_set_data(G_OBJECT(change_space_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(change_space_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-        g_object_set_data(G_OBJECT(fork_action), "canvas_data", data);
-        g_object_set_data_full(G_OBJECT(fork_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-        g_object_set_data(G_OBJECT(clone_text_action), "canvas_data", data);
-        g_object_set_data_full(G_OBJECT(clone_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-        g_object_set_data(G_OBJECT(clone_size_action), "canvas_data", data);
-        g_object_set_data_full(G_OBJECT(clone_size_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+        g_object_set_data(G_OBJECT(clone_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(clone_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_object_set_data(G_OBJECT(change_text_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(change_text_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_object_set_data(G_OBJECT(hide_children_action), "canvas_data", data);
@@ -1761,9 +1716,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(show_children_action), "element_uuid", g_strdup(model_element->uuid), g_free);
 
         // Connect existing actions
-        g_signal_connect(fork_action, "activate", G_CALLBACK(on_fork_element_action), NULL);
-        g_signal_connect(clone_text_action, "activate", G_CALLBACK(on_clone_by_text_action), NULL);
-        g_signal_connect(clone_size_action, "activate", G_CALLBACK(on_clone_by_size_action), NULL);
+        g_signal_connect(clone_action, "activate", G_CALLBACK(on_clone_action), NULL);
         g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
         g_signal_connect(change_space_action, "activate", G_CALLBACK(on_change_space_action), NULL);
         g_signal_connect(change_text_action, "activate", G_CALLBACK(on_change_text_action), NULL);
@@ -1773,9 +1726,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         // Add all actions to the action group
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(description_action));
-        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(fork_action));
-        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_text_action));
-        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_size_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_text_action));
@@ -1831,7 +1782,6 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
             element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE ||
             element->type == ELEMENT_SHAPE || element->type == ELEMENT_INLINE_TEXT) {
           g_menu_append(modify_section, "Change Text", "menu.change-text");
-          g_menu_append(clone_section, "Clone by Text", "menu.clone-text");
         }
 
         if (element->type == ELEMENT_SHAPE) {
@@ -1857,8 +1807,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
           g_list_free(children);
         }
 
-        g_menu_append(clone_section, "Clone by Size", "menu.clone-size");
-        g_menu_append(clone_section, "Fork Element", "menu.fork");
+        g_menu_append(clone_section, "Clone", "menu.clone");
 
         g_menu_append(info_section, "Description", "menu.description");
         g_menu_append(danger_section, "Delete", "menu.delete");
@@ -1884,9 +1833,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(popover), "action_group", action_group, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "menu_model", menu_model, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "delete_action", delete_action, g_object_unref);
-        g_object_set_data_full(G_OBJECT(popover), "fork_action", fork_action, g_object_unref);
-        g_object_set_data_full(G_OBJECT(popover), "clone_text_action", clone_text_action, g_object_unref);
-        g_object_set_data_full(G_OBJECT(popover), "clone_size_action", clone_size_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "clone_action", clone_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_space_action", change_space_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_color_action", change_color_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_text_action", change_text_action, g_object_unref);
