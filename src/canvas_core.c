@@ -9,6 +9,7 @@
 #include "note.h"
 #include "inline_text.h"
 #include <pango/pangocairo.h>
+#include <string.h>
 #include "model.h"
 #include "space.h"
 #include "undo_manager.h"
@@ -37,6 +38,32 @@ static gboolean parse_hex_color(const char *hex_color, double *r, double *g, dou
   return TRUE;
 }
 
+
+static gboolean parse_hex_color_rgba(const char *hex_color, ElementColor *color) {
+  if (!hex_color || hex_color[0] != '#') {
+    return FALSE;
+  }
+
+  unsigned int r, g, b, a = 255;
+  size_t len = strlen(hex_color);
+  if (len == 9) {
+    if (sscanf(hex_color + 1, "%02x%02x%02x%02x", &r, &g, &b, &a) != 4) {
+      return FALSE;
+    }
+  } else if (len == 7) {
+    if (sscanf(hex_color + 1, "%02x%02x%02x", &r, &g, &b) != 3) {
+      return FALSE;
+    }
+  } else {
+    return FALSE;
+  }
+
+  color->r = r / 255.0;
+  color->g = g / 255.0;
+  color->b = b / 255.0;
+  color->a = a / 255.0;
+  return TRUE;
+}
 
 CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay, const char *db_filename) {
   CanvasData *data = g_new0(CanvasData, 1);
@@ -81,6 +108,8 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   data->shape_mode = FALSE;
   data->selected_shape_type = SHAPE_CIRCLE;
   data->shape_filled = FALSE;
+  data->shape_stroke_style = STROKE_STYLE_SOLID;
+  data->shape_fill_style = FILL_STYLE_SOLID;
   data->current_shape = NULL;
   data->shape_start_x = 0;
   data->shape_start_y = 0;
@@ -224,6 +253,37 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
                            &shape->text_r, &shape->text_g,
                            &shape->text_b, &shape->text_a,
                            model_element->text);
+
+          int new_stroke_width = model_element->stroke_width > 0 ? model_element->stroke_width : shape->stroke_width;
+          if (shape->stroke_width != new_stroke_width) {
+            shape->stroke_width = new_stroke_width;
+          }
+          shape->filled = model_element->filled;
+
+          if (model_element->stroke_style >= STROKE_STYLE_SOLID && model_element->stroke_style <= STROKE_STYLE_DOTTED) {
+            shape->stroke_style = model_element->stroke_style;
+          } else {
+            shape->stroke_style = STROKE_STYLE_SOLID;
+          }
+
+          if (model_element->fill_style >= FILL_STYLE_SOLID && model_element->fill_style <= FILL_STYLE_CROSS_HATCH) {
+            shape->fill_style = model_element->fill_style;
+          } else {
+            shape->fill_style = FILL_STYLE_SOLID;
+          }
+
+          ElementColor stroke_color = { .r = shape->base.bg_r, .g = shape->base.bg_g, .b = shape->base.bg_b, .a = 1.0 };
+          if (parse_hex_color_rgba(model_element->stroke_color, &stroke_color)) {
+            shape->stroke_r = stroke_color.r;
+            shape->stroke_g = stroke_color.g;
+            shape->stroke_b = stroke_color.b;
+            shape->stroke_a = stroke_color.a;
+          } else {
+            shape->stroke_r = stroke_color.r;
+            shape->stroke_g = stroke_color.g;
+            shape->stroke_b = stroke_color.b;
+            shape->stroke_a = stroke_color.a;
+          }
           break;
         }
         case ELEMENT_INLINE_TEXT: {
@@ -698,10 +758,26 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       int stroke_width = model_element->stroke_width > 0 ? model_element->stroke_width : 3;
       ShapeType shape_type = model_element->shape_type >= 0 ? model_element->shape_type : SHAPE_CIRCLE;
       gboolean filled = model_element->filled;
+      int stroke_style = (model_element->stroke_style >= STROKE_STYLE_SOLID && model_element->stroke_style <= STROKE_STYLE_DOTTED)
+                           ? model_element->stroke_style
+                           : STROKE_STYLE_SOLID;
+      int fill_style = (model_element->fill_style >= FILL_STYLE_SOLID && model_element->fill_style <= FILL_STYLE_CROSS_HATCH)
+                         ? model_element->fill_style
+                         : FILL_STYLE_SOLID;
+      ElementColor stroke_color = { .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 };
+      if (!parse_hex_color_rgba(model_element->stroke_color, &stroke_color)) {
+        stroke_color.r = shape_color.r;
+        stroke_color.g = shape_color.g;
+        stroke_color.b = shape_color.b;
+        stroke_color.a = 1.0;
+      }
       ElementShape shape_config = {
         .shape_type = shape_type,
         .stroke_width = stroke_width,
-        .filled = filled
+        .filled = filled,
+        .stroke_style = stroke_style,
+        .fill_style = fill_style,
+        .stroke_color = stroke_color
       };
       ElementDrawing drawing_config = {
         .drawing_points = model_element->drawing_points,

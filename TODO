@@ -1,5 +1,5 @@
-- [new feature] allow changing stroke style (dotted, dashed, solid), allow having filled style (hachure, cross-hatch, solid)
 - [new feature] allow rotation of elements
+- [new feature] expose position and bg_color to be clonable
 - [writing] write blog post presenting revel Part II
 - [improvement] add curve arrows with control points
 - [improvement] ability to set text alignment

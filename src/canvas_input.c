@@ -14,6 +14,7 @@
 #include "space.h"
 #include <pango/pangocairo.h>
 #include <gtk/gtkdialog.h>
+#include <math.h>
 #include "undo_manager.h"
 #include "dsl_executor.h"
 #include "freehand_drawing.h"
@@ -140,12 +141,21 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
         .text_color = { .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 },
         .font_description = "Ubuntu Mono 12"
       };
+      ElementColor stroke_color = data->drawing_color;
+      if (stroke_color.a <= 0.0) {
+        stroke_color.a = 1.0;
+      }
+      // Initialize bg_color to match stroke_color for shapes
+      ElementColor bg_color = stroke_color;
       ElementShape shape_config = {
         .shape_type = data->selected_shape_type,
         .stroke_width = data->drawing_stroke_width,
-        .filled = data->shape_filled
+        .filled = data->shape_filled,
+        .stroke_style = data->shape_stroke_style,
+        .fill_style = data->shape_fill_style,
+        .stroke_color = stroke_color
       };
-      data->current_shape = shape_create(position, size, data->drawing_color,
+      data->current_shape = shape_create(position, size, bg_color,
                                          data->drawing_stroke_width,
                                          data->selected_shape_type,
                                          data->shape_filled, text, shape_config,
@@ -697,6 +707,12 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
     config.shape.shape_type = shape->shape_type;
     config.shape.stroke_width = shape->stroke_width;
     config.shape.filled = shape->filled;
+    config.shape.stroke_style = shape->stroke_style;
+    config.shape.fill_style = shape->fill_style;
+    config.shape.stroke_color.r = shape->stroke_r;
+    config.shape.stroke_color.g = shape->stroke_g;
+    config.shape.stroke_color.b = shape->stroke_b;
+    config.shape.stroke_color.a = shape->stroke_a;
     ElementDrawing drawing = { .drawing_points = NULL, .stroke_width = shape->stroke_width };
 
     GArray *line_points = NULL;
@@ -1260,6 +1276,263 @@ static void on_change_space_action(GSimpleAction *action, GVariant *parameter, g
   }
 }
 
+typedef struct {
+  CanvasData *canvas_data;
+  ModelElement *model_element;
+  GtkWidget *stroke_combo;
+  GtkWidget *fill_combo;
+} ShapeStyleDialogData;
+
+static void on_shape_style_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
+  ShapeStyleDialogData *style_data = (ShapeStyleDialogData*)user_data;
+  if (!style_data) {
+    gtk_window_destroy(GTK_WINDOW(dialog));
+    return;
+  }
+
+  if (response_id == GTK_RESPONSE_OK) {
+    CanvasData *data = style_data->canvas_data;
+    ModelElement *model_element = style_data->model_element;
+    if (data && model_element && model_element->visual_element && model_element->type->type == ELEMENT_SHAPE) {
+      Shape *shape = (Shape*)model_element->visual_element;
+
+      int stroke_index = gtk_combo_box_get_active(GTK_COMBO_BOX(style_data->stroke_combo));
+      StrokeStyle new_stroke_style = STROKE_STYLE_SOLID;
+      switch (stroke_index) {
+        case 1:
+          new_stroke_style = STROKE_STYLE_DASHED;
+          break;
+        case 2:
+          new_stroke_style = STROKE_STYLE_DOTTED;
+          break;
+        default:
+          new_stroke_style = STROKE_STYLE_SOLID;
+          break;
+      }
+
+      int fill_index = gtk_combo_box_get_active(GTK_COMBO_BOX(style_data->fill_combo));
+      gboolean new_filled = FALSE;
+      FillStyle new_fill_style = FILL_STYLE_SOLID;
+      switch (fill_index) {
+        case 0:
+          new_filled = FALSE;
+          new_fill_style = FILL_STYLE_SOLID;
+          break;
+        case 1:
+          new_filled = TRUE;
+          new_fill_style = FILL_STYLE_SOLID;
+          break;
+        case 2:
+          new_filled = TRUE;
+          new_fill_style = FILL_STYLE_HACHURE;
+          break;
+        case 3:
+          new_filled = TRUE;
+          new_fill_style = FILL_STYLE_CROSS_HATCH;
+          break;
+        default:
+          new_filled = FALSE;
+          new_fill_style = FILL_STYLE_SOLID;
+          break;
+      }
+
+      gboolean style_changed = (shape->stroke_style != new_stroke_style) ||
+                               (shape->filled != new_filled) ||
+                               (shape->fill_style != new_fill_style);
+
+      if (style_changed) {
+        shape->stroke_style = new_stroke_style;
+        shape->filled = new_filled;
+        shape->fill_style = new_fill_style;
+
+        model_element->stroke_style = new_stroke_style;
+        model_element->filled = new_filled;
+        model_element->fill_style = new_fill_style;
+        if (model_element->state != MODEL_STATE_NEW) {
+          model_element->state = MODEL_STATE_UPDATED;
+        }
+
+        gtk_widget_queue_draw(data->drawing_area);
+      }
+    }
+  }
+
+  gtk_window_destroy(GTK_WINDOW(dialog));
+  g_free(style_data);
+}
+
+static void on_change_shape_style_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (!data || !data->model || !element_uuid) {
+    return;
+  }
+
+  ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+  if (!model_element || !model_element->visual_element || model_element->type->type != ELEMENT_SHAPE) {
+    return;
+  }
+
+  Shape *shape = (Shape*)model_element->visual_element;
+  GtkRoot *root = gtk_widget_get_root(data->drawing_area);
+  GtkWidget *window = GTK_WIDGET(root);
+  if (!GTK_IS_WINDOW(window)) {
+    return;
+  }
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+    "Change Shape Style",
+    GTK_WINDOW(window),
+    GTK_DIALOG_MODAL,
+    "_Cancel", GTK_RESPONSE_CANCEL,
+    "_OK", GTK_RESPONSE_OK,
+    NULL);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_widget_set_margin_top(content, 10);
+  gtk_widget_set_margin_bottom(content, 10);
+  gtk_widget_set_margin_start(content, 10);
+  gtk_widget_set_margin_end(content, 10);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
+  gtk_box_append(GTK_BOX(content), grid);
+
+  GtkWidget *fill_label = gtk_label_new("Fill Style");
+  gtk_widget_set_halign(fill_label, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(grid), fill_label, 0, 0, 1, 1);
+
+  GtkWidget *fill_combo = gtk_combo_box_text_new();
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Outline");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Solid");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Hachure");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Cross Hatch");
+  gtk_widget_set_hexpand(fill_combo, TRUE);
+  int fill_index = 0;
+  if (shape->filled) {
+    switch (shape->fill_style) {
+      case FILL_STYLE_HACHURE:
+        fill_index = 2;
+        break;
+      case FILL_STYLE_CROSS_HATCH:
+        fill_index = 3;
+        break;
+      default:
+        fill_index = 1;
+        break;
+    }
+  } else {
+    fill_index = 0;
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(fill_combo), fill_index);
+  gtk_grid_attach(GTK_GRID(grid), fill_combo, 1, 0, 1, 1);
+
+  GtkWidget *stroke_label = gtk_label_new("Stroke Style");
+  gtk_widget_set_halign(stroke_label, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(grid), stroke_label, 0, 1, 1, 1);
+
+  GtkWidget *stroke_combo = gtk_combo_box_text_new();
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Solid");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Dashed");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Dotted");
+  gtk_widget_set_hexpand(stroke_combo, TRUE);
+  int stroke_index = 0;
+  switch (shape->stroke_style) {
+    case STROKE_STYLE_DASHED:
+      stroke_index = 1;
+      break;
+    case STROKE_STYLE_DOTTED:
+      stroke_index = 2;
+      break;
+    default:
+      stroke_index = 0;
+      break;
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(stroke_combo), stroke_index);
+  gtk_grid_attach(GTK_GRID(grid), stroke_combo, 1, 1, 1, 1);
+
+  ShapeStyleDialogData *style_data = g_new0(ShapeStyleDialogData, 1);
+  style_data->canvas_data = data;
+  style_data->model_element = model_element;
+  style_data->stroke_combo = stroke_combo;
+  style_data->fill_combo = fill_combo;
+
+  g_signal_connect(dialog, "response", G_CALLBACK(on_shape_style_dialog_response), style_data);
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
+static void on_stroke_color_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
+  if (response_id == GTK_RESPONSE_OK) {
+    CanvasData *data = g_object_get_data(G_OBJECT(dialog), "canvas_data");
+    const gchar *element_uuid = g_object_get_data(G_OBJECT(dialog), "element_uuid");
+    if (data && data->model && element_uuid) {
+      ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+      if (model_element && model_element->visual_element && model_element->type->type == ELEMENT_SHAPE) {
+        Shape *shape = (Shape*)model_element->visual_element;
+        GtkColorChooser *chooser = GTK_COLOR_CHOOSER(dialog);
+        GdkRGBA color;
+        gtk_color_chooser_get_rgba(chooser, &color);
+
+        shape->stroke_r = color.red;
+        shape->stroke_g = color.green;
+        shape->stroke_b = color.blue;
+        shape->stroke_a = color.alpha;
+
+        if (model_element->stroke_color) {
+          g_free(model_element->stroke_color);
+        }
+        model_element->stroke_color = g_strdup_printf("#%02X%02X%02X%02X",
+          (int)CLAMP(color.red * 255.0, 0, 255),
+          (int)CLAMP(color.green * 255.0, 0, 255),
+          (int)CLAMP(color.blue * 255.0, 0, 255),
+          (int)CLAMP(color.alpha * 255.0, 0, 255));
+
+        if (model_element->state != MODEL_STATE_NEW) {
+          model_element->state = MODEL_STATE_UPDATED;
+        }
+
+        gtk_widget_queue_draw(data->drawing_area);
+      }
+    }
+  }
+
+  gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void on_change_shape_stroke_color_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (!data || !data->model || !element_uuid) {
+    return;
+  }
+
+  ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+  if (!model_element || !model_element->visual_element || model_element->type->type != ELEMENT_SHAPE) {
+    return;
+  }
+
+  Shape *shape = (Shape*)model_element->visual_element;
+  GtkRoot *root = gtk_widget_get_root(data->drawing_area);
+  GtkWidget *window = GTK_WIDGET(root);
+  if (!GTK_IS_WINDOW(window)) {
+    return;
+  }
+  GtkWidget *dialog = gtk_color_chooser_dialog_new("Choose Stroke Color",
+                                                   GTK_WINDOW(window));
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(dialog), TRUE);
+
+  GdkRGBA initial = { .red = shape->stroke_r, .green = shape->stroke_g, .blue = shape->stroke_b, .alpha = shape->stroke_a };
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog), &initial);
+
+  g_object_set_data(G_OBJECT(dialog), "canvas_data", data);
+  g_object_set_data_full(G_OBJECT(dialog), "element_uuid", g_strdup(element_uuid), g_free);
+
+  g_signal_connect(dialog, "response", G_CALLBACK(on_stroke_color_dialog_response), NULL);
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
 static void on_change_arrow_type_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
   CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
   const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
@@ -1416,6 +1689,23 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(hide_children_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(show_children_action));
 
+        GSimpleAction *change_shape_style_action = NULL;
+        GSimpleAction *change_shape_stroke_color_action = NULL;
+
+        if (element->type == ELEMENT_SHAPE) {
+          change_shape_style_action = g_simple_action_new("change-shape-style", NULL);
+          g_object_set_data(G_OBJECT(change_shape_style_action), "canvas_data", data);
+          g_object_set_data_full(G_OBJECT(change_shape_style_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+          g_signal_connect(change_shape_style_action, "activate", G_CALLBACK(on_change_shape_style_action), NULL);
+          g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_shape_style_action));
+
+          change_shape_stroke_color_action = g_simple_action_new("change-shape-stroke-color", NULL);
+          g_object_set_data(G_OBJECT(change_shape_stroke_color_action), "canvas_data", data);
+          g_object_set_data_full(G_OBJECT(change_shape_stroke_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+          g_signal_connect(change_shape_stroke_color_action, "activate", G_CALLBACK(on_change_shape_stroke_color_action), NULL);
+          g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_shape_stroke_color_action));
+        }
+
         // Connection-specific actions
         GSimpleAction *change_arrow_type_action = NULL;
         GSimpleAction *change_arrowhead_type_action = NULL;
@@ -1449,6 +1739,11 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
             element->type == ELEMENT_SHAPE || element->type == ELEMENT_INLINE_TEXT) {
           g_menu_append(modify_section, "Change Text", "menu.change-text");
           g_menu_append(clone_section, "Clone by Text", "menu.clone-text");
+        }
+
+        if (element->type == ELEMENT_SHAPE) {
+          g_menu_append(modify_section, "Change Shape Style", "menu.change-shape-style");
+          g_menu_append(modify_section, "Change Stroke Color", "menu.change-shape-stroke-color");
         }
 
         if (element->type == ELEMENT_CONNECTION) {
@@ -1504,6 +1799,12 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(popover), "change_text_action", change_text_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "hide_children_action", hide_children_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "show_children_action", show_children_action, g_object_unref);
+        if (change_shape_style_action) {
+          g_object_set_data_full(G_OBJECT(popover), "change_shape_style_action", change_shape_style_action, g_object_unref);
+        }
+        if (change_shape_stroke_color_action) {
+          g_object_set_data_full(G_OBJECT(popover), "change_shape_stroke_color_action", change_shape_stroke_color_action, g_object_unref);
+        }
         if (change_arrow_type_action) {
           g_object_set_data_full(G_OBJECT(popover), "change_arrow_type_action", change_arrow_type_action, g_object_unref);
         }

@@ -8,8 +8,10 @@ typedef struct {
   GtkWidget *dialog;
   ShapeType selected_shape;
   gboolean filled;
-  GtkWidget *filled_toggle;
-  GtkWidget *outline_toggle;
+  StrokeStyle stroke_style;
+  FillStyle fill_style;
+  GtkWidget *stroke_combo;
+  GtkWidget *fill_combo;
   GPtrArray *icon_widgets;
 } ShapeDialogData;
 
@@ -254,6 +256,57 @@ static void queue_icon_redraws(ShapeDialogData *data) {
   }
 }
 
+static void on_stroke_style_changed(GtkComboBox *combo, gpointer user_data) {
+  ShapeDialogData *data = (ShapeDialogData*)user_data;
+  if (!data) return;
+
+  int active = gtk_combo_box_get_active(combo);
+  switch (active) {
+    case 0:
+      data->stroke_style = STROKE_STYLE_SOLID;
+      break;
+    case 1:
+      data->stroke_style = STROKE_STYLE_DASHED;
+      break;
+    case 2:
+      data->stroke_style = STROKE_STYLE_DOTTED;
+      break;
+    default:
+      data->stroke_style = STROKE_STYLE_SOLID;
+      break;
+  }
+}
+
+static void on_fill_style_changed(GtkComboBox *combo, gpointer user_data) {
+  ShapeDialogData *data = (ShapeDialogData*)user_data;
+  if (!data) return;
+
+  int active = gtk_combo_box_get_active(combo);
+  switch (active) {
+    case 0: // Outline
+      data->filled = FALSE;
+      data->fill_style = FILL_STYLE_SOLID;
+      break;
+    case 1: // Solid
+      data->filled = TRUE;
+      data->fill_style = FILL_STYLE_SOLID;
+      break;
+    case 2: // Hachure
+      data->filled = TRUE;
+      data->fill_style = FILL_STYLE_HACHURE;
+      break;
+    case 3: // Cross Hatch
+      data->filled = TRUE;
+      data->fill_style = FILL_STYLE_CROSS_HATCH;
+      break;
+    default:
+      data->filled = FALSE;
+      data->fill_style = FILL_STYLE_SOLID;
+      break;
+  }
+  queue_icon_redraws(data);
+}
+
 static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   ShapeDialogData *data = (ShapeDialogData*)user_data;
 
@@ -268,6 +321,8 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   // Set the canvas to shape drawing mode (shape mode only, not drawing mode)
   data->canvas_data->drawing_mode = FALSE;  // Ensure drawing mode is OFF
   data->canvas_data->shape_mode = TRUE;
+  data->canvas_data->shape_stroke_style = data->stroke_style;
+  data->canvas_data->shape_fill_style = data->fill_style;
   data->canvas_data->selected_shape_type = shape_type;
   if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
     data->canvas_data->shape_filled = FALSE;
@@ -283,32 +338,6 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   canvas_set_cursor(data->canvas_data, data->canvas_data->draw_cursor);
 
   shape_dialog_data_free(data);
-}
-
-static void on_fill_mode_toggle(GtkToggleButton *toggle, gpointer user_data) {
-  ShapeDialogData *data = (ShapeDialogData*)user_data;
-  gboolean should_fill = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(toggle), "shape_fill_mode"));
-  gboolean active = gtk_toggle_button_get_active(toggle);
-
-  if (!active) {
-    if (data->filled == should_fill) {
-      g_signal_handlers_block_by_func(toggle, on_fill_mode_toggle, data);
-      gtk_toggle_button_set_active(toggle, TRUE);
-      g_signal_handlers_unblock_by_func(toggle, on_fill_mode_toggle, data);
-    }
-    return;
-  }
-
-  data->filled = should_fill;
-
-  GtkToggleButton *other = GTK_TOGGLE_BUTTON(should_fill ? data->outline_toggle : data->filled_toggle);
-  if (other) {
-    g_signal_handlers_block_by_func(other, on_fill_mode_toggle, data);
-    gtk_toggle_button_set_active(other, FALSE);
-    g_signal_handlers_unblock_by_func(other, on_fill_mode_toggle, data);
-  }
-
-  queue_icon_redraws(data);
 }
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
@@ -367,7 +396,20 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
 
   ShapeDialogData *data = g_new0(ShapeDialogData, 1);
   data->canvas_data = canvas_data;
-  data->filled = FALSE;
+  data->filled = canvas_data->shape_filled;
+  data->stroke_style = canvas_data->shape_stroke_style;
+  data->fill_style = canvas_data->shape_fill_style;
+
+  if (!data->filled) {
+    data->fill_style = FILL_STYLE_SOLID;
+  }
+
+  if (data->stroke_style < STROKE_STYLE_SOLID || data->stroke_style > STROKE_STYLE_DOTTED) {
+    data->stroke_style = STROKE_STYLE_SOLID;
+  }
+  if (data->fill_style < FILL_STYLE_SOLID || data->fill_style > FILL_STYLE_CROSS_HATCH) {
+    data->fill_style = FILL_STYLE_SOLID;
+  }
 
   GtkWidget *dialog = gtk_dialog_new();
   data->dialog = dialog;
@@ -387,26 +429,70 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
   gtk_box_append(GTK_BOX(content_area), vbox);
 
-  GtkWidget *fill_toggle_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  gtk_widget_set_halign(fill_toggle_box, GTK_ALIGN_CENTER);
-  gtk_box_append(GTK_BOX(vbox), fill_toggle_box);
+  GtkWidget *style_grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(style_grid), 8);
+  gtk_grid_set_column_spacing(GTK_GRID(style_grid), 12);
+  gtk_widget_set_margin_start(style_grid, 8);
+  gtk_widget_set_margin_end(style_grid, 8);
+  gtk_widget_set_margin_top(style_grid, 6);
+  gtk_box_append(GTK_BOX(vbox), style_grid);
 
-  GtkWidget *outline_toggle = gtk_toggle_button_new_with_label("Outline");
-  GtkWidget *filled_toggle = gtk_toggle_button_new_with_label("Filled");
+  GtkWidget *fill_label = gtk_label_new("Fill Style");
+  gtk_widget_set_halign(fill_label, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(style_grid), fill_label, 0, 0, 1, 1);
 
-  data->outline_toggle = outline_toggle;
-  data->filled_toggle = filled_toggle;
+  GtkWidget *fill_combo = gtk_combo_box_text_new();
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Outline");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Solid");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Hachure");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Cross Hatch");
+  gtk_widget_set_hexpand(fill_combo, TRUE);
+  int fill_index = 0;
+  if (data->filled) {
+    switch (data->fill_style) {
+      case FILL_STYLE_HACHURE:
+        fill_index = 2;
+        break;
+      case FILL_STYLE_CROSS_HATCH:
+        fill_index = 3;
+        break;
+      default:
+        fill_index = 1;
+        break;
+    }
+  } else {
+    fill_index = 0;
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(fill_combo), fill_index);
+  gtk_grid_attach(GTK_GRID(style_grid), fill_combo, 1, 0, 1, 1);
+  data->fill_combo = fill_combo;
+  g_signal_connect(fill_combo, "changed", G_CALLBACK(on_fill_style_changed), data);
 
-  g_object_set_data(G_OBJECT(outline_toggle), "shape_fill_mode", GINT_TO_POINTER(FALSE));
-  g_object_set_data(G_OBJECT(filled_toggle), "shape_fill_mode", GINT_TO_POINTER(TRUE));
+  GtkWidget *stroke_label = gtk_label_new("Stroke Style");
+  gtk_widget_set_halign(stroke_label, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(style_grid), stroke_label, 0, 1, 1, 1);
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(outline_toggle), TRUE);
-
-  gtk_box_append(GTK_BOX(fill_toggle_box), outline_toggle);
-  gtk_box_append(GTK_BOX(fill_toggle_box), filled_toggle);
-
-  g_signal_connect(outline_toggle, "toggled", G_CALLBACK(on_fill_mode_toggle), data);
-  g_signal_connect(filled_toggle, "toggled", G_CALLBACK(on_fill_mode_toggle), data);
+  GtkWidget *stroke_combo = gtk_combo_box_text_new();
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Solid");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Dashed");
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Dotted");
+  gtk_widget_set_hexpand(stroke_combo, TRUE);
+  int stroke_index = 0;
+  switch (data->stroke_style) {
+    case STROKE_STYLE_DASHED:
+      stroke_index = 1;
+      break;
+    case STROKE_STYLE_DOTTED:
+      stroke_index = 2;
+      break;
+    default:
+      stroke_index = 0;
+      break;
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(stroke_combo), stroke_index);
+  gtk_grid_attach(GTK_GRID(style_grid), stroke_combo, 1, 1, 1, 1);
+  data->stroke_combo = stroke_combo;
+  g_signal_connect(stroke_combo, "changed", G_CALLBACK(on_stroke_style_changed), data);
 
   GtkWidget *shapes_grid = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(shapes_grid), 10);

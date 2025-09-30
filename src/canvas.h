@@ -61,6 +61,8 @@ struct _CanvasData {
   gboolean shape_mode;
   int selected_shape_type;
   gboolean shape_filled;
+  StrokeStyle shape_stroke_style;
+  FillStyle shape_fill_style;
   Shape *current_shape;
   int shape_start_x;
   int shape_start_y;

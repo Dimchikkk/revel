@@ -105,6 +105,9 @@ struct _ModelElement {
   // For shape elements
   gint shape_type;
   gboolean filled;
+  gint stroke_style;  // 0=solid, 1=dashed, 2=dotted
+  gint fill_style;    // 0=solid, 1=hachure, 2=cross-hatch
+  gchar* stroke_color;  // Stroke color in hex format (separate from bg_color)
 
   // For connection elements
   gint connection_type;

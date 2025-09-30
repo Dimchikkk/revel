@@ -356,6 +356,43 @@ static gboolean parse_bool_value(const gchar *token, gboolean *out_value) {
   return FALSE;
 }
 
+static gboolean parse_stroke_style_value(const gchar *token, StrokeStyle *out_style) {
+  if (!token || !out_style) return FALSE;
+
+  if (g_ascii_strcasecmp(token, "solid") == 0) {
+    *out_style = STROKE_STYLE_SOLID;
+    return TRUE;
+  }
+  if (g_ascii_strcasecmp(token, "dashed") == 0) {
+    *out_style = STROKE_STYLE_DASHED;
+    return TRUE;
+  }
+  if (g_ascii_strcasecmp(token, "dotted") == 0) {
+    *out_style = STROKE_STYLE_DOTTED;
+    return TRUE;
+  }
+  return FALSE;
+}
+
+static gboolean parse_fill_style_value(const gchar *token, FillStyle *out_style) {
+  if (!token || !out_style) return FALSE;
+
+  if (g_ascii_strcasecmp(token, "solid") == 0) {
+    *out_style = FILL_STYLE_SOLID;
+    return TRUE;
+  }
+  if (g_ascii_strcasecmp(token, "hachure") == 0 || g_ascii_strcasecmp(token, "hatch") == 0) {
+    *out_style = FILL_STYLE_HACHURE;
+    return TRUE;
+  }
+  if (g_ascii_strcasecmp(token, "cross-hatch") == 0 || g_ascii_strcasecmp(token, "cross_hatch") == 0 ||
+      g_ascii_strcasecmp(token, "crosshatch") == 0 || g_ascii_strcasecmp(token, "cross") == 0) {
+    *out_style = FILL_STYLE_CROSS_HATCH;
+    return TRUE;
+  }
+  return FALSE;
+}
+
 static gboolean parse_int_value(const gchar *token, int *out_value) {
   if (!token || !out_value) return FALSE;
 
@@ -647,6 +684,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .shape_type = -1,
         .stroke_width = 0,
         .filled = FALSE,
+        .stroke_style = STROKE_STYLE_SOLID,
+        .fill_style = FILL_STYLE_SOLID,
+        .stroke_color = { .r = bg_color.r, .g = bg_color.g, .b = bg_color.b, .a = 1.0 },
       };
 
       ElementConfig config = {
@@ -836,6 +876,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .shape_type = -1,
         .stroke_width = 0,
         .filled = FALSE,
+        .stroke_style = STROKE_STYLE_SOLID,
+        .fill_style = FILL_STYLE_SOLID,
+        .stroke_color = { .r = bg_color.r, .g = bg_color.g, .b = bg_color.b, .a = 1.0 },
       };
 
       ElementConfig config = {
@@ -911,6 +954,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             .shape_type = -1,
             .stroke_width = 0,
             .filled = FALSE,
+            .stroke_style = STROKE_STYLE_SOLID,
+            .fill_style = FILL_STYLE_SOLID,
+            .stroke_color = { .r = bg_color.r, .g = bg_color.g, .b = bg_color.b, .a = 1.0 },
           };
 
           ElementConfig config = {
@@ -1036,6 +1082,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             .shape_type = -1,
             .stroke_width = 0,
             .filled = FALSE,
+            .stroke_style = STROKE_STYLE_SOLID,
+            .fill_style = FILL_STYLE_SOLID,
+            .stroke_color = { .r = bg_color.r, .g = bg_color.g, .b = bg_color.b, .a = 1.0 },
           };
 
           ElementConfig config = {
@@ -1106,6 +1155,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           .shape_type = -1,
           .stroke_width = 0,
           .filled = FALSE,
+          .stroke_style = STROKE_STYLE_SOLID,
+          .fill_style = FILL_STYLE_SOLID,
+          .stroke_color = { .r = bg_color.r, .g = bg_color.g, .b = bg_color.b, .a = 1.0 },
         };
 
         ElementConfig config = {
@@ -1170,6 +1222,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
       double bg_r = 0.95, bg_g = 0.95, bg_b = 0.98, bg_a = 1.0;
       double text_r = 0.1, text_g = 0.1, text_b = 0.1, text_a = 1.0;
+      double stroke_r = 0.95, stroke_g = 0.95, stroke_b = 0.98, stroke_a = 1.0;
       int stroke_width = 2;
       gboolean filled = FALSE;
       const gchar *default_font = "Ubuntu Bold 14";
@@ -1177,6 +1230,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
       gboolean bg_set = FALSE;
       gboolean text_color_set = FALSE;
+      gboolean stroke_color_set = FALSE;
       gboolean font_set = FALSE;
       gboolean stroke_set = FALSE;
       gboolean filled_set = FALSE;
@@ -1187,14 +1241,36 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       gboolean line_start_defined = FALSE;
       gboolean line_end_defined = FALSE;
 
+      StrokeStyle stroke_style_value = STROKE_STYLE_SOLID;
+      FillStyle fill_style_value = FILL_STYLE_SOLID;
+
       gboolean expect_bg = FALSE;
       gboolean expect_text_color = FALSE;
+      gboolean expect_stroke_color = FALSE;
       gboolean expect_font = FALSE;
       gboolean expect_stroke = FALSE;
       gboolean expect_filled = FALSE;
+      gboolean expect_stroke_style = FALSE;
+      gboolean expect_fill_style = FALSE;
 
       for (int t = 6; t < token_count; t++) {
         const gchar *token = tokens[t];
+
+        if (expect_stroke_style) {
+          if (!parse_stroke_style_value(token, &stroke_style_value)) {
+            g_print("Failed to parse stroke style: %s\n", token);
+          }
+          expect_stroke_style = FALSE;
+          continue;
+        }
+
+        if (expect_fill_style) {
+          if (!parse_fill_style_value(token, &fill_style_value)) {
+            g_print("Failed to parse fill style: %s\n", token);
+          }
+          expect_fill_style = FALSE;
+          continue;
+        }
 
         if (expect_bg) {
           if (!parse_color_token(token, &bg_r, &bg_g, &bg_b, &bg_a)) {
@@ -1213,6 +1289,16 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             text_color_set = TRUE;
           }
           expect_text_color = FALSE;
+          continue;
+        }
+
+        if (expect_stroke_color) {
+          if (!parse_color_token(token, &stroke_r, &stroke_g, &stroke_b, &stroke_a)) {
+            g_print("Failed to parse stroke color: %s\n", token);
+          } else {
+            stroke_color_set = TRUE;
+          }
+          expect_stroke_color = FALSE;
           continue;
         }
 
@@ -1322,6 +1408,26 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (!stroke_color_set && (g_strcmp0(token, "stroke_color") == 0 ||
+                                  g_strcmp0(token, "stroke-color") == 0)) {
+          expect_stroke_color = TRUE;
+          continue;
+        }
+        if (!stroke_color_set && (g_str_has_prefix(token, "stroke_color=") ||
+                                  g_str_has_prefix(token, "stroke-color=") ||
+                                  g_str_has_prefix(token, "stroke_color:") ||
+                                  g_str_has_prefix(token, "stroke-color:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0' &&
+              parse_color_token(value + 1, &stroke_r, &stroke_g, &stroke_b, &stroke_a)) {
+            stroke_color_set = TRUE;
+            continue;
+          }
+          g_print("Failed to parse stroke color: %s\n", token);
+          continue;
+        }
+
         if (!font_set && g_strcmp0(token, "font") == 0) {
           expect_font = TRUE;
           continue;
@@ -1418,21 +1524,37 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
-        if ((shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) &&
-            (g_str_has_prefix(token, "line_to=") || g_str_has_prefix(token, "line_to:") ||
-             g_str_has_prefix(token, "line_end=") || g_str_has_prefix(token, "line_end:"))) {
+        if (g_strcmp0(token, "stroke_style") == 0 || g_strcmp0(token, "stroke-style") == 0) {
+          expect_stroke_style = TRUE;
+          continue;
+        }
+        if (g_str_has_prefix(token, "stroke_style=") || g_str_has_prefix(token, "stroke_style:") ||
+            g_str_has_prefix(token, "stroke-style=") || g_str_has_prefix(token, "stroke-style:")) {
           const gchar *value = strchr(token, '=');
           if (!value) value = strchr(token, ':');
           if (value && *(value + 1) != '\0') {
-            double fx, fy;
-            if (parse_float_point(value + 1, &fx, &fy)) {
-              line_end_u = fx;
-              line_end_v = fy;
-              line_end_defined = TRUE;
+            if (parse_stroke_style_value(value + 1, &stroke_style_value)) {
               continue;
             }
           }
-          g_print("Failed to parse line end point: %s\n", token);
+          g_print("Failed to parse stroke style: %s\n", token);
+          continue;
+        }
+
+        if (g_strcmp0(token, "fill_style") == 0 || g_strcmp0(token, "fill-style") == 0) {
+          expect_fill_style = TRUE;
+          continue;
+        }
+        if (g_str_has_prefix(token, "fill_style=") || g_str_has_prefix(token, "fill_style:") ||
+            g_str_has_prefix(token, "fill-style=") || g_str_has_prefix(token, "fill-style:")) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (parse_fill_style_value(value + 1, &fill_style_value)) {
+              continue;
+            }
+          }
+          g_print("Failed to parse fill style: %s\n", token);
           continue;
         }
 
@@ -1494,6 +1616,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .shape_type = shape_type,
         .stroke_width = stroke_width,
         .filled = filled,
+        .stroke_style = stroke_style_value,
+        .fill_style = fill_style_value,
+        .stroke_color = { .r = stroke_r, .g = stroke_g, .b = stroke_b, .a = stroke_a },
       };
 
       ElementConfig config = {
@@ -1888,16 +2013,53 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
                                             element->text->font_description : "Ubuntu Bold 14");
 
+      // Get stroke style name
+      const gchar *stroke_style_str = "solid";
+      switch (element->stroke_style) {
+        case STROKE_STYLE_SOLID: stroke_style_str = "solid"; break;
+        case STROKE_STYLE_DASHED: stroke_style_str = "dashed"; break;
+        case STROKE_STYLE_DOTTED: stroke_style_str = "dotted"; break;
+      }
+
+      // Get fill style name
+      const gchar *fill_style_str = "solid";
+      switch (element->fill_style) {
+        case FILL_STYLE_SOLID: fill_style_str = "solid"; break;
+        case FILL_STYLE_HACHURE: fill_style_str = "hachure"; break;
+        case FILL_STYLE_CROSS_HATCH: fill_style_str = "crosshatch"; break;
+      }
+
+      // Build the shape_create command
       g_string_append_printf(dsl,
-                             "shape_create %s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) stroke %d filled %s font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+                             "shape_create %s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) stroke %d",
                              element_id,
                              shape_type_str,
                              text_escaped,
                              pos_str,
                              size_str,
                              bg_r, bg_g, bg_b, bg_a,
-                             element->stroke_width,
-                             element->filled ? "true" : "false",
+                             element->stroke_width);
+
+      // Add stroke_color if available
+      if (element->stroke_color) {
+        g_string_append_printf(dsl, " stroke_color %s", element->stroke_color);
+      }
+
+      // Add stroke_style if not solid
+      if (element->stroke_style != STROKE_STYLE_SOLID) {
+        g_string_append_printf(dsl, " stroke_style %s", stroke_style_str);
+      }
+
+      // Add filled flag
+      g_string_append_printf(dsl, " filled %s", element->filled ? "true" : "false");
+
+      // Add fill_style if filled and not solid
+      if (element->filled && element->fill_style != FILL_STYLE_SOLID) {
+        g_string_append_printf(dsl, " fill_style %s", fill_style_str);
+      }
+
+      // Add font and text_color
+      g_string_append_printf(dsl, " font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
                              font_str,
                              text_r, text_g, text_b, text_a);
 

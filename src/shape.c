@@ -43,6 +43,119 @@ static void shape_update_text_view_position(Shape *shape) {
                               shape->base.height + 20);
 }
 
+static void draw_hatch_lines(cairo_t *cr, double cx, double cy, double span, double spacing, double angle) {
+  double dir_x = cos(angle);
+  double dir_y = sin(angle);
+  double perp_x = -dir_y;
+  double perp_y = dir_x;
+  double half_span = span / 2.0;
+  double max_offset = span;
+
+  for (double offset = -max_offset; offset <= max_offset; offset += spacing) {
+    double start_x = cx + perp_x * offset - dir_x * half_span;
+    double start_y = cy + perp_y * offset - dir_y * half_span;
+    double end_x = cx + perp_x * offset + dir_x * half_span;
+    double end_y = cy + perp_y * offset + dir_y * half_span;
+    cairo_move_to(cr, start_x, start_y);
+    cairo_line_to(cr, end_x, end_y);
+  }
+}
+
+static void build_vertical_cylinder_path(cairo_t *cr, double x, double y, double width, double height) {
+  double ellipse_h = height * 0.15;
+  double center_x = x + width / 2.0;
+  double top_y = y + ellipse_h / 2.0;
+  double bottom_y = y + height - ellipse_h / 2.0;
+
+  cairo_rectangle(cr, x, top_y, width, bottom_y - top_y);
+
+  cairo_new_sub_path(cr);
+  cairo_save(cr);
+  cairo_translate(cr, center_x, top_y);
+  cairo_scale(cr, width / 2.0, ellipse_h / 2.0);
+  cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
+  cairo_restore(cr);
+
+  cairo_new_sub_path(cr);
+  cairo_save(cr);
+  cairo_translate(cr, center_x, bottom_y);
+  cairo_scale(cr, width / 2.0, ellipse_h / 2.0);
+  cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
+  cairo_restore(cr);
+}
+
+static void build_horizontal_cylinder_path(cairo_t *cr, double x, double y, double width, double height) {
+  double ellipse_w = width * 0.15;
+  double center_y = y + height / 2.0;
+  double left_x = x + ellipse_w / 2.0;
+  double right_x = x + width - ellipse_w / 2.0;
+
+  cairo_rectangle(cr, left_x, y, right_x - left_x, height);
+
+  cairo_new_sub_path(cr);
+  cairo_save(cr);
+  cairo_translate(cr, left_x, center_y);
+  cairo_scale(cr, ellipse_w / 2.0, height / 2.0);
+  cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
+  cairo_restore(cr);
+
+  cairo_new_sub_path(cr);
+  cairo_save(cr);
+  cairo_translate(cr, right_x, center_y);
+  cairo_scale(cr, ellipse_w / 2.0, height / 2.0);
+  cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
+  cairo_restore(cr);
+}
+
+static void apply_fill(Shape *shape, cairo_t *cr) {
+  if (!shape->filled) return;
+
+  cairo_path_t *path = cairo_copy_path(cr);
+
+  double x1, y1, x2, y2;
+  cairo_path_extents(cr, &x1, &y1, &x2, &y2);
+  double width = MAX(x2 - x1, 1.0);
+  double height = MAX(y2 - y1, 1.0);
+
+  if (shape->fill_style == FILL_STYLE_SOLID) {
+    cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
+    cairo_fill_preserve(cr);
+    cairo_path_destroy(path);
+    return;
+  }
+
+  cairo_save(cr);
+  cairo_new_path(cr);
+  cairo_append_path(cr, path);
+  cairo_clip(cr);
+
+  cairo_set_dash(cr, NULL, 0, 0);
+  double spacing = MAX(4.0, shape->stroke_width * 2.0);
+  double pattern_alpha = MIN(1.0, shape->base.bg_a);
+  double line_width = MAX(1.0, shape->stroke_width * 0.35);
+  cairo_set_line_width(cr, line_width);
+  cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, pattern_alpha);
+
+  double cx = (x1 + x2) / 2.0;
+  double cy = (y1 + y2) / 2.0;
+  double span = hypot(width, height) + spacing * 2.0;
+
+  cairo_new_path(cr);
+  draw_hatch_lines(cr, cx, cy, span, spacing, G_PI / 4.0);
+  cairo_stroke(cr);
+
+  if (shape->fill_style == FILL_STYLE_CROSS_HATCH) {
+    cairo_new_path(cr);
+    draw_hatch_lines(cr, cx, cy, span, spacing, -G_PI / 4.0);
+    cairo_stroke(cr);
+  }
+
+  cairo_restore(cr);
+  cairo_new_path(cr);
+  cairo_append_path(cr, path);
+  cairo_path_destroy(path);
+}
+
 static void shape_get_connection_point(Element *element, int point, int *cx, int *cy) {
   Shape *shape = (Shape*)element;
 
@@ -107,10 +220,18 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     shape_update_text_view_position(shape);
   }
 
-  cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g,
-                        shape->base.bg_b, shape->base.bg_a);
-  cairo_set_line_width(cr, shape->stroke_width);
+  // Set stroke style (dashed, dotted, or solid)
+  if (shape->stroke_style == STROKE_STYLE_DASHED) {
+    double dashes[] = {10.0, 5.0};
+    cairo_set_dash(cr, dashes, 2, 0);
+  } else if (shape->stroke_style == STROKE_STYLE_DOTTED) {
+    double dashes[] = {2.0, 3.0};
+    cairo_set_dash(cr, dashes, 2, 0);
+  } else {
+    cairo_set_dash(cr, NULL, 0, 0);  // Solid line
+  }
 
+  cairo_set_line_width(cr, shape->stroke_width);
   cairo_new_path(cr);
 
   switch (shape->shape_type) {
@@ -122,20 +243,20 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         double radius = MIN(element->width, element->height) / 2.0;
 
         cairo_arc(cr, center_x, center_y, radius, 0, 2 * M_PI);
+        apply_fill(shape, cr);
 
-        if (shape->filled) {
-          cairo_fill_preserve(cr);
-        }
+        // Handle stroke
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
     case SHAPE_RECTANGLE:
       {
         cairo_rectangle(cr, element->x, element->y, element->width, element->height);
+        apply_fill(shape, cr);
 
-        if (shape->filled) {
-          cairo_fill_preserve(cr);
-        }
+        // Handle stroke
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
@@ -158,9 +279,8 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_arc(cr, x + radius, y + radius, radius, G_PI, 3 * G_PI_2);
         cairo_close_path(cr);
 
-        if (shape->filled) {
-          cairo_fill_preserve(cr);
-        }
+        apply_fill(shape, cr);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
@@ -176,9 +296,8 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_line_to(cr, element->x + element->width, bottom_y);
         cairo_close_path(cr);
 
-        if (shape->filled) {
-          cairo_fill_preserve(cr);
-        }
+        apply_fill(shape, cr);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
@@ -193,8 +312,16 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
         // Fill the cylinder body if filled
         if (shape->filled) {
-          cairo_rectangle(cr, element->x, top_y, element->width, bottom_y - top_y);
-          cairo_fill(cr);
+          if (shape->fill_style == FILL_STYLE_SOLID) {
+            cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
+            cairo_rectangle(cr, element->x, top_y, element->width, bottom_y - top_y);
+            cairo_fill(cr);
+          } else {
+            cairo_new_path(cr);
+            build_vertical_cylinder_path(cr, element->x, element->y, element->width, element->height);
+            apply_fill(shape, cr);
+            cairo_new_path(cr);
+          }
         }
 
         // Draw top ellipse (complete)
@@ -204,9 +331,11 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
         cairo_restore(cr);
 
-        if (shape->filled) {
+        if (shape->filled && shape->fill_style == FILL_STYLE_SOLID) {
+          cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
           cairo_fill_preserve(cr);
         }
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
 
         // Draw side lines
@@ -223,9 +352,11 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
         cairo_restore(cr);
 
-        if (shape->filled) {
+        if (shape->filled && shape->fill_style == FILL_STYLE_SOLID) {
+          cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
           cairo_fill_preserve(cr);
         }
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
@@ -240,8 +371,16 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
         // Fill the cylinder body if filled
         if (shape->filled) {
-          cairo_rectangle(cr, left_x, element->y, right_x - left_x, element->height);
-          cairo_fill(cr);
+          if (shape->fill_style == FILL_STYLE_SOLID) {
+            cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
+            cairo_rectangle(cr, left_x, element->y, right_x - left_x, element->height);
+            cairo_fill(cr);
+          } else {
+            cairo_new_path(cr);
+            build_horizontal_cylinder_path(cr, element->x, element->y, element->width, element->height);
+            apply_fill(shape, cr);
+            cairo_new_path(cr);
+          }
         }
 
         // Draw left ellipse (complete)
@@ -251,9 +390,11 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
         cairo_restore(cr);
 
-        if (shape->filled) {
+        if (shape->filled && shape->fill_style == FILL_STYLE_SOLID) {
+          cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
           cairo_fill_preserve(cr);
         }
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
 
         // Draw top and bottom lines
@@ -270,9 +411,11 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
         cairo_restore(cr);
 
-        if (shape->filled) {
+        if (shape->filled && shape->fill_style == FILL_STYLE_SOLID) {
+          cairo_set_source_rgba(cr, shape->base.bg_r, shape->base.bg_g, shape->base.bg_b, shape->base.bg_a);
           cairo_fill_preserve(cr);
         }
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
@@ -287,9 +430,8 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_line_to(cr, element->x, center_y);
         cairo_close_path(cr);
 
-        if (shape->filled) {
-          cairo_fill_preserve(cr);
-        }
+        apply_fill(shape, cr);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
       }
       break;
@@ -310,6 +452,7 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
 
         cairo_move_to(cr, start_x, start_y);
         cairo_line_to(cr, end_x, end_y);
@@ -602,6 +745,12 @@ Shape* shape_create(ElementPosition position,
   shape->shape_type = shape_config.shape_type;
   shape->stroke_width = shape_config.stroke_width;
   shape->filled = shape_config.filled;
+  shape->stroke_style = shape_config.stroke_style;
+  shape->fill_style = shape_config.fill_style;
+  shape->stroke_r = shape_config.stroke_color.r;
+  shape->stroke_g = shape_config.stroke_color.g;
+  shape->stroke_b = shape_config.stroke_color.b;
+  shape->stroke_a = shape_config.stroke_color.a;
   shape->base.canvas_data = data;
 
   shape->text = g_strdup(text.text);

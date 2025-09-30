@@ -15,11 +15,26 @@ typedef enum {
   SHAPE_ARROW
 } ShapeType;
 
+typedef enum {
+  STROKE_STYLE_SOLID = 0,
+  STROKE_STYLE_DASHED = 1,
+  STROKE_STYLE_DOTTED = 2
+} StrokeStyle;
+
+typedef enum {
+  FILL_STYLE_SOLID = 0,
+  FILL_STYLE_HACHURE = 1,
+  FILL_STYLE_CROSS_HATCH = 2
+} FillStyle;
+
 typedef struct {
   Element base;
   ShapeType shape_type;
   int stroke_width;
   gboolean filled;
+  StrokeStyle stroke_style;
+  FillStyle fill_style;
+  double stroke_r, stroke_g, stroke_b, stroke_a;
   char *text;
   double text_r, text_g, text_b, text_a;
   char* font_description;

@@ -76,6 +76,7 @@ void model_element_free(ModelElement *element) {
   g_free(element->target_space_uuid);
   g_free(element->description);
   g_free(element->created_at);
+  g_free(element->stroke_color);
 
   if (element->drawing_points != NULL) {
     g_array_free(element->drawing_points, TRUE);
@@ -289,6 +290,19 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
   element->stroke_width = config.drawing.stroke_width != 0 ? config.drawing.stroke_width : config.shape.stroke_width;
   element->shape_type = config.shape.shape_type;
   element->filled = config.shape.filled;
+  element->stroke_style = config.shape.stroke_style;
+  element->fill_style = config.shape.fill_style;
+
+  // Convert stroke color from ElementColor to hex string
+  if (config.shape.stroke_color.a > 0.0) {
+    element->stroke_color = g_strdup_printf("#%02x%02x%02x%02x",
+      (int)(config.shape.stroke_color.r * 255),
+      (int)(config.shape.stroke_color.g * 255),
+      (int)(config.shape.stroke_color.b * 255),
+      (int)(config.shape.stroke_color.a * 255));
+  } else {
+    element->stroke_color = NULL;
+  }
 
   if (config.type == ELEMENT_CONNECTION) {
     element->arrowhead_type = config.connection.arrowhead_type;
@@ -339,6 +353,12 @@ ModelElement* model_create_element_from_visual(Model *model, Element *element) {
     config.shape.shape_type = shape->shape_type;
     config.shape.stroke_width = shape->stroke_width;
     config.shape.filled = shape->filled;
+    config.shape.stroke_style = shape->stroke_style;
+    config.shape.fill_style = shape->fill_style;
+    config.shape.stroke_color.r = shape->stroke_r;
+    config.shape.stroke_color.g = shape->stroke_g;
+    config.shape.stroke_color.b = shape->stroke_b;
+    config.shape.stroke_color.a = shape->stroke_a;
   }
 
   return model_create_element(model, config);
@@ -603,10 +623,25 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .text_color = text_color,
     .font_description = element->text->font_description,
   };
+  ElementColor stroke_color = {0};
+  if (element->stroke_color) {
+    // Parse hex color back to ElementColor
+    unsigned int r, g, b, a;
+    if (sscanf(element->stroke_color, "#%02x%02x%02x%02x", &r, &g, &b, &a) == 4) {
+      stroke_color.r = r / 255.0;
+      stroke_color.g = g / 255.0;
+      stroke_color.b = b / 255.0;
+      stroke_color.a = a / 255.0;
+    }
+  }
+
   ElementShape shape = {
     .shape_type = element->shape_type,
     .stroke_width = element->stroke_width,
     .filled = element->filled,
+    .stroke_style = element->stroke_style,
+    .fill_style = element->fill_style,
+    .stroke_color = stroke_color,
   };
   ElementConfig config = {
     .type = element->type->type,

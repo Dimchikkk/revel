@@ -81,6 +81,9 @@ typedef struct {
   int shape_type;
   int stroke_width;
   gboolean filled;
+  int stroke_style;   // 0=solid, 1=dashed, 2=dotted
+  int fill_style;     // 0=solid, 1=hachure, 2=cross-hatch
+  ElementColor stroke_color;
 } ElementShape;
 
 typedef struct {
