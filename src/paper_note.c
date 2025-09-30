@@ -83,6 +83,31 @@ gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, gui
   return FALSE;
 }
 
+static void paper_note_draw_shadow(Element *element, cairo_t *cr) {
+  const double bottom_radius_x = fmax(22.0, element->width * 0.58);
+  const double bottom_radius_y = fmax(8.0, element->height * 0.11);
+  const double bottom_offset_x = -fmax(3.0, element->width * 0.03);
+  const double bottom_offset_y = fmax(1.5, element->height * 0.02);
+
+  // Bottom soft shadow inspired by Lucid sticky note
+  cairo_save(cr);
+  cairo_translate(cr,
+                  element->x + element->width * 0.5 + bottom_offset_x,
+                  element->y + element->height + bottom_offset_y);
+  cairo_scale(cr, bottom_radius_x, bottom_radius_y);
+  cairo_pattern_t *bottom_radial = cairo_pattern_create_radial(0.0, 0.0, 0.15,
+                                                               0.0, 0.0, 1.0);
+  cairo_pattern_add_color_stop_rgba(bottom_radial, 0.0, 0.0, 0.0, 0.0, 0.18);
+  cairo_pattern_add_color_stop_rgba(bottom_radial, 0.5, 0.0, 0.0, 0.0, 0.12);
+  cairo_pattern_add_color_stop_rgba(bottom_radial, 0.8, 0.0, 0.0, 0.0, 0.07);
+  cairo_pattern_add_color_stop_rgba(bottom_radial, 1.0, 0.0, 0.0, 0.0, 0.0);
+  cairo_arc(cr, 0.0, 0.0, 1.0, 0, 2 * G_PI);
+  cairo_set_source(cr, bottom_radial);
+  cairo_fill(cr);
+  cairo_pattern_destroy(bottom_radial);
+  cairo_restore(cr);
+}
+
 void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   PaperNote *note = (PaperNote*)element;
 
@@ -90,6 +115,7 @@ void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     note_update_text_view_position(note);
   }
 
+  paper_note_draw_shadow(element, cr);
 
   cairo_rectangle(cr, element->x, element->y, element->width, element->height);
   cairo_clip(cr);
