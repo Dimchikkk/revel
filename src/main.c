@@ -67,6 +67,8 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_widget_set_name(toolbar_scroll, "toolbar-scroll");
   gtk_widget_set_hexpand(toolbar_scroll, TRUE);
   gtk_widget_set_halign(toolbar_scroll, GTK_ALIGN_FILL);
+  gtk_widget_set_margin_start(toolbar_scroll, 0);
+  gtk_widget_set_margin_end(toolbar_scroll, 0);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(toolbar_scroll),
                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
   gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(toolbar_scroll), FALSE);
@@ -461,8 +463,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     "}"
     "#toolbar-background {"
     "   background: rgba(18, 18, 18, 0.92);"
-    "   padding: 8px 16px;"
-    "   border-radius: 0;"
+    "   padding: 8px 0;"
     "}"
     "scrolledwindow#toolbar-scroll {"
     "   background: transparent;"
