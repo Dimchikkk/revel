@@ -21,6 +21,38 @@ Vec2 vec2_div(Vec2 v, double scalar) {
   return (Vec2){v.x / scalar, v.y / scalar};
 }
 
+void connection_determine_optimal_points(ConnectionRect from_rect,
+                                         ConnectionRect to_rect,
+                                         int *from_point,
+                                         int *to_point) {
+  if (!from_point || !to_point) return;
+
+  double from_center_x = from_rect.x + from_rect.width / 2.0;
+  double from_center_y = from_rect.y + from_rect.height / 2.0;
+  double to_center_x = to_rect.x + to_rect.width / 2.0;
+  double to_center_y = to_rect.y + to_rect.height / 2.0;
+
+  double dx = to_center_x - from_center_x;
+  double dy = to_center_y - from_center_y;
+
+  double angle = atan2(dy, dx) * 180.0 / M_PI;
+  if (angle < 0) angle += 360.0;
+
+  if (angle >= 45.0 && angle < 135.0) {
+    *from_point = 2;
+    *to_point = 0;
+  } else if (angle >= 135.0 && angle < 225.0) {
+    *from_point = 3;
+    *to_point = 1;
+  } else if (angle >= 225.0 && angle < 315.0) {
+    *from_point = 0;
+    *to_point = 2;
+  } else {
+    *from_point = 1;
+    *to_point = 3;
+  }
+}
+
 Connection* connection_create(ElementConnection connection_config,
                               ElementColor bg_color,
                               int z,
@@ -258,6 +290,4 @@ int connection_pick_connection_point(Element *element, int x, int y) {
   // Connections don't have connection points to pick
   return -1;
 }
-
-
 

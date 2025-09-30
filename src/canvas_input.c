@@ -389,6 +389,71 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
   gtk_widget_queue_draw(data->drawing_area);
 }
 
+static void canvas_update_connections_for_selection(CanvasData *data) {
+  if (!data || !data->model || !data->selected_elements) {
+    return;
+  }
+
+  GHashTable *elements = data->model->elements;
+  if (!elements) return;
+
+  GHashTableIter iter;
+  gpointer key, value;
+
+  g_hash_table_iter_init(&iter, elements);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *model_element = (ModelElement*)value;
+    if (!model_element || model_element->state == MODEL_STATE_DELETED) {
+      continue;
+    }
+
+    if (!model_element->type || model_element->type->type != ELEMENT_CONNECTION) {
+      continue;
+    }
+
+    Connection *connection = (Connection*)model_element->visual_element;
+    if (!connection || !connection->from || !connection->to) {
+      continue;
+    }
+
+    gboolean affects_from = g_list_find(data->selected_elements, connection->from) != NULL;
+    gboolean affects_to = g_list_find(data->selected_elements, connection->to) != NULL;
+
+    if (!affects_from && !affects_to) {
+      continue;
+    }
+
+    int new_from_point = connection->from_point;
+    int new_to_point = connection->to_point;
+
+    ConnectionRect from_rect = {
+      .x = connection->from->x,
+      .y = connection->from->y,
+      .width = connection->from->width,
+      .height = connection->from->height,
+    };
+    ConnectionRect to_rect = {
+      .x = connection->to->x,
+      .y = connection->to->y,
+      .width = connection->to->width,
+      .height = connection->to->height,
+    };
+
+    connection_determine_optimal_points(from_rect, to_rect, &new_from_point, &new_to_point);
+
+    if (new_from_point != connection->from_point || new_to_point != connection->to_point) {
+      connection->from_point = new_from_point;
+      connection->to_point = new_to_point;
+
+      model_element->from_point = new_from_point;
+      model_element->to_point = new_to_point;
+      if (model_element->state != MODEL_STATE_NEW) {
+        model_element->state = MODEL_STATE_UPDATED;
+      }
+    }
+  }
+}
+
 void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
@@ -559,6 +624,8 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
         selected_element->x = new_x;
         selected_element->y = new_y;
       }
+
+      canvas_update_connections_for_selection(data);
 
       gtk_widget_queue_draw(data->drawing_area);
       return;

@@ -9,6 +9,13 @@ typedef struct {
   double x, y;
 } Vec2;
 
+typedef struct {
+  double x;
+  double y;
+  double width;
+  double height;
+} ConnectionRect;
+
 Vec2 vec2_add(Vec2 a, Vec2 b);
 Vec2 vec2_div(Vec2 v, double scalar);
 
@@ -46,5 +53,9 @@ void connection_draw_parallel_arrow(cairo_t *cr, Vec2 start, Vec2 end, int start
 void connection_draw_straight_arrow(cairo_t *cr, Vec2 start, Vec2 end);
 void connection_parallel_arrow_mid(Vec2 start, Vec2 end, int start_pos, int end_pos, Vec2 *mid1, Vec2 *mid2);
 void connection_draw_arrow_head_at_pos(cairo_t *cr, Vec2 base, Vec2 tip, ArrowheadType type);
+void connection_determine_optimal_points(ConnectionRect from_rect,
+                                         ConnectionRect to_rect,
+                                         int *from_point,
+                                         int *to_point);
 
 #endif

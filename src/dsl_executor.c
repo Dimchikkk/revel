@@ -57,39 +57,28 @@ static gchar* unescape_text(const gchar *str) {
 // Helper function to determine optimal connection points based on relative positions
 static void determine_optimal_connection_points(ModelElement *from, ModelElement *to,
                                                 int *from_point, int *to_point) {
-  // Get center positions of both elements
-  double from_center_x = from->position->x + from->size->width / 2.0;
-  double from_center_y = from->position->y + from->size->height / 2.0;
-  double to_center_x = to->position->x + to->size->width / 2.0;
-  double to_center_y = to->position->y + to->size->height / 2.0;
+  if (!from || !to || !from_point || !to_point) return;
 
-  // Calculate angle between centers
-  double dx = to_center_x - from_center_x;
-  double dy = to_center_y - from_center_y;
-  double angle = atan2(dy, dx);
-
-  // Convert angle to degrees and normalize to 0-360 range
-  angle = angle * 180.0 / M_PI;
-  if (angle < 0) angle += 360;
-
-  // Determine optimal connection points based on angle
-  if (angle >= 45 && angle < 135) {
-    // To element is below from element
-    *from_point = 2; // Bottom of from element
-    *to_point = 0;   // Top of to element
-  } else if (angle >= 135 && angle < 225) {
-    // To element is to the left of from element
-    *from_point = 3; // Left of from element
-    *to_point = 1;   // Right of to element
-  } else if (angle >= 225 && angle < 315) {
-    // To element is above from element
-    *from_point = 0; // Top of from element
-    *to_point = 2;   // Bottom of to element
-  } else {
-    // To element is to the right of from element (or very close)
-    *from_point = 1; // Right of from element
-    *to_point = 3;   // Left of to element
+  if (!from->position || !from->size || !to->position || !to->size) {
+    *from_point = 1;
+    *to_point = 3;
+    return;
   }
+
+  ConnectionRect from_rect = {
+    .x = from->position->x,
+    .y = from->position->y,
+    .width = from->size->width,
+    .height = from->size->height,
+  };
+  ConnectionRect to_rect = {
+    .x = to->position->x,
+    .y = to->position->y,
+    .width = to->size->width,
+    .height = to->size->height,
+  };
+
+  connection_determine_optimal_points(from_rect, to_rect, from_point, to_point);
 }
 
 // Helper function to trim whitespace from a string
