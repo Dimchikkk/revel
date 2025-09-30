@@ -89,3 +89,47 @@ const char* element_get_type_name(ElementType type) {
     default: return "Unknown";
   }
 }
+
+void element_get_rotation_handle_position(Element *element, int *hx, int *hy) {
+  // Position rotation handle above the element center
+  double center_x = element->x + element->width / 2.0;
+  double center_y = element->y + element->height / 2.0;
+  double handle_distance = element->height / 2.0 + 30; // 30 pixels above element
+
+  // Apply rotation to handle position
+  double angle_rad = element->rotation_degrees * M_PI / 180.0;
+  *hx = center_x + handle_distance * sin(angle_rad);
+  *hy = center_y - handle_distance * cos(angle_rad);
+}
+
+int element_pick_rotation_handle(Element *element, int x, int y) {
+  // Get rotation handle position in canvas coordinates
+  int hx, hy;
+  element_get_rotation_handle_position(element, &hx, &hy);
+
+  // Check distance in canvas coordinates
+  int dx = x - hx;
+  int dy = y - hy;
+  int distance = sqrt(dx * dx + dy * dy);
+
+  return distance <= 8; // 8 pixel radius for picking
+}
+
+void element_draw_rotation_handle(Element *element, cairo_t *cr) {
+  int hx, hy;
+  element_get_rotation_handle_position(element, &hx, &hy);
+
+  // Draw handle circle
+  cairo_arc(cr, hx, hy, 8, 0, 2 * M_PI);
+  cairo_set_source_rgba(cr, 0.3, 0.6, 1.0, 0.5);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.5);
+  cairo_set_line_width(cr, 2.0);
+  cairo_stroke(cr);
+
+  // Draw rotation icon (circular arrow)
+  cairo_arc(cr, hx, hy, 4, M_PI/4, M_PI * 1.75);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.5);
+  cairo_set_line_width(cr, 1.5);
+  cairo_stroke(cr);
+}

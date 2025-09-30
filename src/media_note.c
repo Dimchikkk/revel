@@ -619,6 +619,16 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   // Always draw the element, even when video is playing
   if (!media_note->pixbuf) return;
 
+  // Save cairo state and apply rotation if needed
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
+  }
+
   // Draw the image scaled to fit the entire element
   int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
   int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
@@ -740,12 +750,15 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_restore(cr);
   }
 
+  // Restore cairo state before drawing selection UI
+  cairo_restore(cr);
+
   // Draw resize handles and connection points (only when selected)
   if (is_selected) {
+    // Draw resize handles at the corners of the actual image (without rotation)
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.8);
     cairo_set_line_width(cr, 2.0);
 
-    // Draw resize handles at the corners of the actual image
     int handles[4][2] = {
       {draw_x, draw_y},
       {draw_x + draw_width, draw_y},
@@ -758,62 +771,84 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_fill(cr);
     }
 
-    // Draw connection points on the actual image borders
-    int connection_points[4][2] = {
-      {draw_x + draw_width/2, draw_y},                    // top center
-      {draw_x + draw_width, draw_y + draw_height/2},      // right center
-      {draw_x + draw_width/2, draw_y + draw_height},      // bottom center
-      {draw_x, draw_y + draw_height/2}                    // left center
-    };
-
+    // Draw connection points on the actual image borders (with rotation)
     for (int i = 0; i < 4; i++) {
-      cairo_arc(cr, connection_points[i][0], connection_points[i][1], 5, 0, 2 * G_PI);
+      int cx, cy;
+      media_note_get_connection_point(element, i, &cx, &cy);
+      cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
       cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
       cairo_fill(cr);
     }
+
+    // Draw rotation handle (without rotation)
+    element_draw_rotation_handle(element, cr);
   }
 }
 
 void media_note_get_connection_point(Element *element, int point, int *cx, int *cy) {
   MediaNote *media_note = (MediaNote*)element;
+  int unrotated_x, unrotated_y;
 
   if (!media_note->pixbuf) {
     // Fallback to element bounds if no pixbuf
     switch(point) {
-    case 0: *cx = element->x + element->width/2; *cy = element->y; break;
-    case 1: *cx = element->x + element->width; *cy = element->y + element->height/2; break;
-    case 2: *cx = element->x + element->width/2; *cy = element->y + element->height; break;
-    case 3: *cx = element->x; *cy = element->y + element->height/2; break;
+    case 0: unrotated_x = element->x + element->width/2; unrotated_y = element->y; break;
+    case 1: unrotated_x = element->x + element->width; unrotated_y = element->y + element->height/2; break;
+    case 2: unrotated_x = element->x + element->width/2; unrotated_y = element->y + element->height; break;
+    case 3: unrotated_x = element->x; unrotated_y = element->y + element->height/2; break;
     }
-    return;
+  } else {
+    // Calculate actual image position and size
+    int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
+    int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+
+    double scale_x = element->width / (double)pixbuf_width;
+    double scale_y = element->height / (double)pixbuf_height;
+    double scale = MIN(scale_x, scale_y);
+
+    int draw_width = pixbuf_width * scale;
+    int draw_height = pixbuf_height * scale;
+    int draw_x = element->x + (element->width - draw_width) / 2;
+    int draw_y = element->y + (element->height - draw_height) / 2;
+
+    // Return connection points on the actual image borders
+    switch(point) {
+    case 0: unrotated_x = draw_x + draw_width/2; unrotated_y = draw_y; break;                    // top center
+    case 1: unrotated_x = draw_x + draw_width; unrotated_y = draw_y + draw_height/2; break;      // right center
+    case 2: unrotated_x = draw_x + draw_width/2; unrotated_y = draw_y + draw_height; break;      // bottom center
+    case 3: unrotated_x = draw_x; unrotated_y = draw_y + draw_height/2; break;                   // left center
+    }
   }
 
-  // Calculate actual image position and size
-  int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-  int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
-
-  double scale_x = element->width / (double)pixbuf_width;
-  double scale_y = element->height / (double)pixbuf_height;
-  double scale = MIN(scale_x, scale_y);
-
-  int draw_width = pixbuf_width * scale;
-  int draw_height = pixbuf_height * scale;
-  int draw_x = element->x + (element->width - draw_width) / 2;
-  int draw_y = element->y + (element->height - draw_height) / 2;
-
-  // Return connection points on the actual image borders
-  switch(point) {
-  case 0: *cx = draw_x + draw_width/2; *cy = draw_y; break;                    // top center
-  case 1: *cx = draw_x + draw_width; *cy = draw_y + draw_height/2; break;      // right center
-  case 2: *cx = draw_x + draw_width/2; *cy = draw_y + draw_height; break;      // bottom center
-  case 3: *cx = draw_x; *cy = draw_y + draw_height/2; break;                   // left center
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = unrotated_x - center_x;
+    double dy = unrotated_y - center_y;
+    double angle_rad = element->rotation_degrees * M_PI / 180.0;
+    *cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    *cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  } else {
+    *cx = unrotated_x;
+    *cy = unrotated_y;
   }
 }
 
 int media_note_pick_resize_handle(Element *element, int x, int y) {
   MediaNote *media_note = (MediaNote*)element;
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
+
+  // Apply inverse rotation to mouse coordinates if element is rotated
+  double rotated_cx = x;
+  double rotated_cy = y;
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = x - center_x;
+    double dy = y - center_y;
+    double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+    rotated_cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    rotated_cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  }
 
   if (!media_note->pixbuf) {
     // Fallback to element bounds if no pixbuf
@@ -826,7 +861,7 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
     };
 
     for (int i = 0; i < 4; i++) {
-      if (abs(cx - handles[i][0]) <= size && abs(cy - handles[i][1]) <= size) {
+      if (abs(rotated_cx - handles[i][0]) <= size && abs(rotated_cy - handles[i][1]) <= size) {
         return i;
       }
     }
@@ -855,7 +890,7 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(cx - handles[i][0]) <= size && abs(cy - handles[i][1]) <= size) {
+    if (abs(rotated_cx - handles[i][0]) <= size && abs(rotated_cy - handles[i][1]) <= size) {
       return i;
     }
   }
@@ -863,43 +898,10 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int media_note_pick_connection_point(Element *element, int x, int y) {
-  MediaNote *media_note = (MediaNote*)element;
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
-
-  if (!media_note->pixbuf) {
-    // Fallback to element bounds if no pixbuf
-    for (int i = 0; i < 4; i++) {
-      int px, py;
-      media_note_get_connection_point(element, i, &px, &py);
-      int dx = cx - px, dy = cy - py;
-      if (dx * dx + dy * dy < 100) return i;
-    }
-    return -1;
-  }
-
-  // Calculate actual image position and size
-  int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-  int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
-
-  double scale_x = element->width / (double)pixbuf_width;
-  double scale_y = element->height / (double)pixbuf_height;
-  double scale = MIN(scale_x, scale_y);
-
-  int draw_width = pixbuf_width * scale;
-  int draw_height = pixbuf_height * scale;
-  int draw_x = element->x + (element->width - draw_width) / 2;
-  int draw_y = element->y + (element->height - draw_height) / 2;
-
-  int connection_points[4][2] = {
-    {draw_x + draw_width/2, draw_y},                    // top center
-    {draw_x + draw_width, draw_y + draw_height/2},      // right center
-    {draw_x + draw_width/2, draw_y + draw_height},      // bottom center
-    {draw_x, draw_y + draw_height/2}                    // left center
-  };
-
   for (int i = 0; i < 4; i++) {
-    int dx = cx - connection_points[i][0], dy = cy - connection_points[i][1];
+    int px, py;
+    media_note_get_connection_point(element, i, &px, &py);
+    int dx = x - px, dy = y - py;
     if (dx * dx + dy * dy < 100) return i;
   }
   return -1;

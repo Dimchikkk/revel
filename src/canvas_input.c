@@ -19,6 +19,7 @@
 #include "dsl_executor.h"
 #include "freehand_drawing.h"
 #include "shape.h"
+#include "shape_dialog.h"
 #include "font_dialog.h"
 #include <graphene.h>
 
@@ -47,6 +48,7 @@ static void canvas_show_shortcuts_dialog(CanvasData *data) {
     { "Ctrl+Shift+N", "Create rich text note" },
     { "Ctrl+Shift+P", "Create paper note" },
     { "Ctrl+Shift+S", "Create nested space" },
+    { "Ctrl+L", "Open shape library" },
     { "Ctrl+S", "Open search" },
     { "Ctrl+E", "Open DSL executor" },
     { "Ctrl+D", "Toggle drawing mode" },
@@ -127,11 +129,11 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     data->modifier_state = gdk_event_get_modifier_state(event);
   }
 
+  int cx, cy;
+  canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
   // Handle shape mode separately from drawing mode to avoid conflicts
   if (data->shape_mode) {
-    int cx, cy;
-    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
-
     // Handle shape creation
     if (!data->current_shape) {
       ElementPosition position = { cx, cy, data->next_z_index++ };
@@ -170,9 +172,6 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
   }
 
   if (data->drawing_mode && !data->shape_mode) {
-    int cx, cy;
-    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
-
     // Handle freehand/line drawing
     if (!data->current_drawing) {
       ElementPosition position = { cx, cy, data->next_z_index++ };
@@ -192,7 +191,36 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     return;
   }
 
-  Element *element = canvas_pick_element(data, (int)x, (int)y);
+  // Check if the click is on a rotation handle of a selected element
+  if (data->selected_elements) {
+      GList *l;
+      for (l = data->selected_elements; l != NULL; l = l->next) {
+          Element *selected_element = (Element *)l->data;
+          if (element_pick_rotation_handle(selected_element, cx, cy)) {
+              if (!(data->modifier_state & GDK_SHIFT_MASK)) {
+                  // Keep the current selection
+              } else {
+                  // Add to selection if not already selected
+                  if (!canvas_is_element_selected(data, selected_element)) {
+                      data->selected_elements = g_list_append(data->selected_elements, selected_element);
+                  }
+              }
+
+              element_bring_to_front(selected_element, &data->next_z_index);
+              selected_element->rotating = TRUE;
+
+              ModelElement *model_element = model_get_by_visual(data->model, selected_element);
+              if (model_element) {
+                  selected_element->orig_rotation = model_element->rotation_degrees;
+              } else {
+                  selected_element->orig_rotation = selected_element->rotation_degrees;
+              }
+              return; // Rotation handle has priority
+          }
+      }
+  }
+
+  Element *element = canvas_pick_element(data, cx, cy);
 
   // Handle video playback toggle on SINGLE click only
   if (element && element->type == ELEMENT_MEDIA_FILE && n_press == 2) {
@@ -239,7 +267,7 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
   }
 
   if (element) {
-    int rh = element_pick_resize_handle(element, (int)x, (int)y);
+    int rh = element_pick_resize_handle(element, cx, cy);
     if (rh >= 0) {
       if (!(data->modifier_state & GDK_SHIFT_MASK)) {
         canvas_clear_selection(data);
@@ -251,8 +279,8 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       element_bring_to_front(element, &data->next_z_index);
       element->resizing = TRUE;
       element->resize_edge = rh;
-      element->resize_start_x = (int)x;
-      element->resize_start_y = (int)y;
+      element->resize_start_x = cx;
+      element->resize_start_y = cy;
       element->orig_x = element->x;
       element->orig_y = element->y;
 
@@ -269,7 +297,7 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       return;
     }
 
-    int cp = element_pick_connection_point(element, (int)x, (int)y);
+    int cp = element_pick_connection_point(element, cx, cy);
     if (cp >= 0) {
       if (!data->connection_start) {
         data->connection_start = element;
@@ -380,8 +408,8 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
         }
       }
       element->dragging = TRUE;
-      element->drag_offset_x = (int)x - element->x;
-      element->drag_offset_y = (int)y - element->y;
+      element->drag_offset_x = cx - element->x;
+      element->drag_offset_y = cy - element->y;
     }
   } else {
     data->connection_start = NULL;
@@ -392,10 +420,10 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     }
 
     data->selecting = TRUE;
-    data->start_x = (int)x;
-    data->start_y = (int)y;
-    data->current_x = (int)x;
-    data->current_y = (int)y;
+    data->start_x = cx;
+    data->start_y = cy;
+    data->current_x = cx;
+    data->current_y = cy;
   }
 
   gtk_widget_queue_draw(data->drawing_area);
@@ -478,6 +506,9 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     data->modifier_state = gdk_event_get_modifier_state(event);
   }
 
+  int cx, cy;
+  canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+
   if (data->shape_mode) {
     canvas_set_cursor(data, data->draw_cursor);
   } else if (data->drawing_mode) {
@@ -491,9 +522,6 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     canvas_update_cursor(data, (int)x, (int)y);
   }
   if (data->shape_mode && data->current_shape) {
-    int cx, cy;
-    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
-
     int x1 = data->shape_start_x;
     int y1 = data->shape_start_y;
 
@@ -527,9 +555,6 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
   }
 
   if (data->drawing_mode && !data->shape_mode && data->current_drawing) {
-    int cx, cy;
-    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
-
     gboolean is_straight_line = (data->modifier_state & GDK_SHIFT_MASK) != 0;
 
     if (is_straight_line) {
@@ -599,34 +624,63 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
 
+    if (element->rotating) {
+      // Calculate element center
+      double center_x = element->x + element->width / 2.0;
+      double center_y = element->y + element->height / 2.0;
+
+      // Calculate angle from center to mouse position
+      // atan2 gives angle where 0 is pointing right, we need 0 to point up
+      // So we use atan2(dx, -dy) to rotate the coordinate system 90 degrees
+      double angle = atan2(cx - center_x, -(cy - center_y)) * 180.0 / M_PI;
+
+      // Normalize angle to 0-360 range
+      while (angle < 0) angle += 360.0;
+      while (angle >= 360.0) angle -= 360.0;
+
+      // Update rotation
+      element->rotation_degrees = angle;
+
+      gtk_widget_queue_draw(data->drawing_area);
+      continue;
+    }
+
     if (element->resizing) {
-      int dx = (int)x - element->resize_start_x;
-      int dy = (int)y - element->resize_start_y;
-      int new_x = element->x;
-      int new_y = element->y;
-      int new_width = element->width;
-      int new_height = element->height;
+      int dx = cx - element->resize_start_x;
+      int dy = cy - element->resize_start_y;
+
+      double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+      double cos_a = cos(angle_rad);
+      double sin_a = sin(angle_rad);
+
+      double rotated_dx = dx * cos_a - dy * sin_a;
+      double rotated_dy = dx * sin_a + dy * cos_a;
+
+      int new_x = element->orig_x;
+      int new_y = element->orig_y;
+      int new_width = element->orig_width;
+      int new_height = element->orig_height;
 
       switch (element->resize_edge) {
-      case 0:
-        new_x = element->orig_x + dx;
-        new_y = element->orig_y + dy;
-        new_width = element->orig_width - dx;
-        new_height = element->orig_height - dy;
+      case 0: // Top-left
+        new_width -= rotated_dx;
+        new_height -= rotated_dy;
+        new_x += rotated_dx * cos(-angle_rad) - rotated_dy * sin(-angle_rad);
+        new_y += rotated_dx * sin(-angle_rad) + rotated_dy * cos(-angle_rad);
         break;
-      case 1:
-        new_y = element->orig_y + dy;
-        new_width = element->orig_width + dx;
-        new_height = element->orig_height - dy;
+      case 1: // Top-right
+        new_width += rotated_dx;
+        new_height -= rotated_dy;
+        new_y += rotated_dx * sin(-angle_rad);
         break;
-      case 2:
-        new_width = element->orig_width + dx;
-        new_height = element->orig_height + dy;
+      case 2: // Bottom-right
+        new_width += rotated_dx;
+        new_height += rotated_dy;
         break;
-      case 3:
-        new_x = element->orig_x + dx;
-        new_width = element->orig_width - dx;
-        new_height = element->orig_height + dy;
+      case 3: // Bottom-left
+        new_width -= rotated_dx;
+        new_height += rotated_dy;
+        new_x += rotated_dx * cos(-angle_rad);
         break;
       }
 
@@ -644,8 +698,8 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     }
 
     if (element->dragging) {
-      int dx = (int)x - element->x - element->drag_offset_x;
-      int dy = (int)y - element->y - element->drag_offset_y;
+      int dx = cx - element->drag_offset_x - element->x;
+      int dy = cy - element->drag_offset_y - element->y;
 
       for (GList *sel = data->selected_elements; sel != NULL; sel = sel->next) {
         Element *selected_element = (Element*)sel->data;
@@ -665,8 +719,8 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
   }
 
   if (data->selecting) {
-    data->current_x = (int)x;
-    data->current_y = (int)y;
+    data->current_x = cx;
+    data->current_y = cy;
     gtk_widget_queue_draw(data->drawing_area);
   }
 }
@@ -896,6 +950,7 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
   }
 
   gboolean was_resized = FALSE;
+  gboolean was_rotated = FALSE;
   GList *visual_elements = canvas_get_visual_elements(data);
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
@@ -914,12 +969,28 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
         model_update_size(data->model, model_element, element->width, element->height);
       }
     }
+    if (element->rotating) {
+      was_rotated = TRUE;
+
+      // For rotate operations, update model and push undo action
+      ModelElement *model_element = model_get_by_visual(data->model, element);
+      if (model_element) {
+        // Push rotate undo action
+        undo_manager_push_rotate_action(data->undo_manager, model_element,
+                                        element->orig_rotation,
+                                        element->rotation_degrees);
+
+        // Update model rotation
+        model_update_rotation(data->model, model_element, element->rotation_degrees);
+      }
+    }
     element->dragging = FALSE;
     element->resizing = FALSE;
+    element->rotating = FALSE;
   }
 
-  // Re-create visual elements since some sizes may be changed due to resizing
-  if (was_resized) canvas_sync_with_model(data);
+  // Re-create visual elements since some properties may be changed due to resizing or rotation
+  if (was_resized || was_rotated) canvas_sync_with_model(data);
 
   gtk_widget_queue_draw(data->drawing_area);
 }
@@ -930,14 +1001,11 @@ void canvas_on_leave(GtkEventControllerMotion *controller, gpointer user_data) {
 }
 
 Element* canvas_pick_element(CanvasData *data, int x, int y) {
-  int cx, cy;
-  canvas_screen_to_canvas(data, x, y, &cx, &cy);
-
   Element *selected_element = NULL;
   int highest_z_index = -1;
 
   GList *visual_elements = canvas_get_visual_elements(data);
-  for (GList *l = visual_elements; l != NULL; l = l->next) {
+  for (GList *l = g_list_last(visual_elements); l != NULL; l = l->prev) {
     Element *element = (Element*)l->data;
 
     // Skip hidden elements from picking
@@ -946,8 +1014,20 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
       continue;
     }
 
-    if (cx >= element->x && cx <= element->x + element->width &&
-        cy >= element->y && cy <= element->y + element->height) {
+    double rotated_x = x;
+    double rotated_y = y;
+    if (element->rotation_degrees != 0.0) {
+        double center_x = element->x + element->width / 2.0;
+        double center_y = element->y + element->height / 2.0;
+        double dx = x - center_x;
+        double dy = y - center_y;
+        double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+        rotated_x = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+        rotated_y = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+    }
+
+    if (rotated_x >= element->x && rotated_x <= element->x + element->width &&
+        rotated_y >= element->y && rotated_y <= element->y + element->height) {
       if (element->z > highest_z_index) {
         selected_element = element;
         highest_z_index = element->z;
@@ -971,10 +1051,21 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
   int cx, cy;
   canvas_screen_to_canvas(data, x, y, &cx, &cy);
 
-  Element *element = canvas_pick_element(data, x, y);
+  if (data->selected_elements) {
+      GList *l;
+      for (l = data->selected_elements; l != NULL; l = l->next) {
+          Element *selected_element = (Element *)l->data;
+          if (element_pick_rotation_handle(selected_element, cx, cy)) {
+              canvas_set_cursor(data, gdk_cursor_new_from_name("crosshair", NULL));
+              return;
+          }
+      }
+  }
+
+  Element *element = canvas_pick_element(data, cx, cy);
 
   if (element) {
-    int rh = element_pick_resize_handle(element, x, y);
+    int rh = element_pick_resize_handle(element, cx, cy);
     if (rh >= 0) {
       switch (rh) {
       case 0: case 2: // Top-left, Bottom-right
@@ -987,7 +1078,7 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
       return;
     }
 
-    int cp = element_pick_connection_point(element, x, y);
+    int cp = element_pick_connection_point(element, cx, cy);
     if (cp >= 0) {
       // If we have an active connection and this is a different element, show completion cursor
       if (data->connection_start && element != data->connection_start) {
@@ -1616,7 +1707,9 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
   CanvasData *data = (CanvasData*)user_data;
 
   if (n_press == 1) {
-    Element *element = canvas_pick_element(data, (int)x, (int)y);
+    int cx, cy;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
+    Element *element = canvas_pick_element(data, cx, cy);
 
     if (element) {
       ModelElement *model_element = model_get_by_visual(data->model, element);
@@ -1995,6 +2088,12 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
   // Add Ctrl+D for toggling drawing mode
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_d) {
     canvas_toggle_drawing_mode(NULL, data);
+    return TRUE;
+  }
+
+  // Add Ctrl+L for shape library
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_l) {
+    canvas_show_shape_selection_dialog(NULL, data);
     return TRUE;
   }
 

@@ -5,8 +5,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Forward declaration
+static void space_element_get_connection_point(Element *element, int point, int *cx, int *cy);
+
 void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   SpaceElement *space_elem = (SpaceElement*)element;
+
+  // Save cairo state and apply rotation if needed
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
+  }
 
   // Draw rectangle with rounded corners
   double radius = 20.0; // Corner radius
@@ -59,22 +72,60 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   pango_cairo_show_layout(cr, layout);
 
   g_object_unref(layout);
+
+  // Restore cairo state
+  cairo_restore(cr);
+
+  // Draw connection points and rotation handle when selected
+  if (is_selected) {
+    for (int i = 0; i < 4; i++) {
+      int cx, cy;
+      space_element_get_connection_point(element, i, &cx, &cy);
+      cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
+      cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
+      cairo_fill(cr);
+    }
+    element_draw_rotation_handle(element, cr);
+  }
 }
 
-void space_element_get_connection_point(Element *element, int point, int *cx, int *cy) {
+static void space_element_get_connection_point(Element *element, int point, int *cx, int *cy) {
+  int unrotated_x, unrotated_y;
   // Same as note elements
   switch(point) {
-  case 0: *cx = element->x + element->width/2; *cy = element->y; break;
-  case 1: *cx = element->x + element->width; *cy = element->y + element->height/2; break;
-  case 2: *cx = element->x + element->width/2; *cy = element->y + element->height; break;
-  case 3: *cx = element->x; *cy = element->y + element->height/2; break;
+  case 0: unrotated_x = element->x + element->width/2; unrotated_y = element->y; break;
+  case 1: unrotated_x = element->x + element->width; unrotated_y = element->y + element->height/2; break;
+  case 2: unrotated_x = element->x + element->width/2; unrotated_y = element->y + element->height; break;
+  case 3: unrotated_x = element->x; unrotated_y = element->y + element->height/2; break;
+  }
+
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = unrotated_x - center_x;
+    double dy = unrotated_y - center_y;
+    double angle_rad = element->rotation_degrees * M_PI / 180.0;
+    *cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    *cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  } else {
+    *cx = unrotated_x;
+    *cy = unrotated_y;
   }
 }
 
 int space_element_pick_resize_handle(Element *element, int x, int y) {
-  // Convert screen coordinates to canvas coordinates
-  int canvas_x, canvas_y;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &canvas_x, &canvas_y);
+  // Apply inverse rotation to mouse coordinates if element is rotated
+  double rotated_cx = x;
+  double rotated_cy = y;
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = x - center_x;
+    double dy = y - center_y;
+    double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+    rotated_cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    rotated_cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  }
 
   int size = 8;
   struct { int px, py; } handles[4] = {
@@ -85,7 +136,7 @@ int space_element_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(canvas_x - handles[i].px) <= size && abs(canvas_y - handles[i].py) <= size) {
+    if (abs(rotated_cx - handles[i].px) <= size && abs(rotated_cy - handles[i].py) <= size) {
       return i;
     }
   }
@@ -93,14 +144,10 @@ int space_element_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int space_element_pick_connection_point(Element *element, int x, int y) {
-  // Convert screen coordinates to canvas coordinates
-  int canvas_x, canvas_y;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &canvas_x, &canvas_y);
-
   for (int i = 0; i < 4; i++) {
-    int cx, cy;
-    space_element_get_connection_point(element, i, &cx, &cy);
-    int dx = canvas_x - cx, dy = canvas_y - cy;
+    int px, py;
+    space_element_get_connection_point(element, i, &px, &py);
+    int dx = x - px, dy = y - py;
     if (dx * dx + dy * dy < 100) return i;
   }
   return -1;

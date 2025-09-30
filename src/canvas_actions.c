@@ -186,9 +186,9 @@ void canvas_on_add_text(GtkButton *button, gpointer user_data) {
     .a = 0.0,
   };
   ElementColor text_color = {
-    .r = 0.6,
-    .g = 0.6,
-    .b = 0.6,
+    .r = 0.9,
+    .g = 0.9,
+    .b = 0.9,
     .a = 1.0,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };

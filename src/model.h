@@ -116,6 +116,9 @@ struct _ModelElement {
   // For space elements
   gchar *target_space_uuid;
 
+  // Element rotation
+  gdouble rotation_degrees;  // Rotation angle in degrees (0-360)
+
   // Element description
   gchar *description;
   gchar *created_at;
@@ -166,6 +169,7 @@ int model_update_text_color(Model *model, ModelElement *element, double r, doubl
 int model_update_font(Model *model, ModelElement *element, const char *font_description);
 int model_update_position(Model *model, ModelElement *element, int x, int y, int z);
 int model_update_size(Model *model, ModelElement *element, int width, int height);
+int model_update_rotation(Model *model, ModelElement *element, double rotation_degrees);
 // This method slightly inconsistent with other update methods: it doesn't create ModelColor if it is NULL
 int model_update_color(Model *model, ModelElement *element, double r, double g, double b, double a);
 

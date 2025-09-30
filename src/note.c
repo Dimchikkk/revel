@@ -98,6 +98,17 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     note_update_text_view_position(note);
   }
 
+  // Save cairo state and apply rotation if needed
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    // Rotate around element center
+    double center_x = x + width / 2.0;
+    double center_y = y + height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
+  }
+
   // Create rounded rectangle path
   cairo_new_path(cr);
   cairo_move_to(cr, x + radius, y);
@@ -124,7 +135,10 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   cairo_set_line_width(cr, 1.5);
   cairo_stroke(cr);
 
-  // Draw connection points (only when selected)
+  // Restore cairo state before drawing selection UI
+  cairo_restore(cr);
+
+  // Draw connection points and rotation handle (only when selected)
   if (is_selected) {
     for (int i = 0; i < 4; i++) {
       int cx, cy;
@@ -133,6 +147,19 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
       cairo_fill(cr);
     }
+
+    // Draw rotation handle (not rotated with element)
+    element_draw_rotation_handle(element, cr);
+  }
+
+  // Save state again for text
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
   }
 
   // Draw text if not editing
@@ -176,20 +203,47 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
     g_object_unref(layout);
   }
+
+  // Restore cairo state
+  cairo_restore(cr);
 }
 
 void note_get_connection_point(Element *element, int point, int *cx, int *cy) {
+  int unrotated_x, unrotated_y;
   switch(point) {
-  case 0: *cx = element->x + element->width/2; *cy = element->y; break;
-  case 1: *cx = element->x + element->width; *cy = element->y + element->height/2; break;
-  case 2: *cx = element->x + element->width/2; *cy = element->y + element->height; break;
-  case 3: *cx = element->x; *cy = element->y + element->height/2; break;
+  case 0: unrotated_x = element->x + element->width/2; unrotated_y = element->y; break;
+  case 1: unrotated_x = element->x + element->width; unrotated_y = element->y + element->height/2; break;
+  case 2: unrotated_x = element->x + element->width/2; unrotated_y = element->y + element->height; break;
+  case 3: unrotated_x = element->x; unrotated_y = element->y + element->height/2; break;
+  }
+
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = unrotated_x - center_x;
+    double dy = unrotated_y - center_y;
+    double angle_rad = element->rotation_degrees * M_PI / 180.0;
+    *cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    *cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  } else {
+    *cx = unrotated_x;
+    *cy = unrotated_y;
   }
 }
 
 int note_pick_resize_handle(Element *element, int x, int y) {
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
+  // Apply inverse rotation to mouse coordinates if element is rotated
+  double rotated_cx = x;
+  double rotated_cy = y;
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = x - center_x;
+    double dy = y - center_y;
+    double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+    rotated_cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    rotated_cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  }
 
   int size = 8;
   struct { int px, py; } handles[4] = {
@@ -200,7 +254,7 @@ int note_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(cx - handles[i].px) <= size && abs(cy - handles[i].py) <= size) {
+    if (abs(rotated_cx - handles[i].px) <= size && abs(rotated_cy - handles[i].py) <= size) {
       return i;
     }
   }
@@ -208,13 +262,10 @@ int note_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int note_pick_connection_point(Element *element, int x, int y) {
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
-
   for (int i = 0; i < 4; i++) {
     int px, py;
     note_get_connection_point(element, i, &px, &py);
-    int dx = cx - px, dy = cy - py;
+    int dx = x - px, dy = y - py;
     if (dx * dx + dy * dy < 100) return i;
   }
   return -1;

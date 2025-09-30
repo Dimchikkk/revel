@@ -8,6 +8,16 @@ static void freehand_drawing_draw(Element *element, cairo_t *cr, gboolean is_sel
 
   if (drawing->points->len < 2) return;
 
+  // Save cairo state and apply rotation if needed
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
+  }
+
   cairo_set_source_rgba(cr, drawing->base.bg_r, drawing->base.bg_g,
                         drawing->base.bg_b, drawing->base.bg_a);
   cairo_set_line_width(cr, drawing->stroke_width);
@@ -25,12 +35,27 @@ static void freehand_drawing_draw(Element *element, cairo_t *cr, gboolean is_sel
 
   cairo_stroke(cr);
 
+  // Restore cairo state before drawing selection UI
+  cairo_restore(cr);
+
   if (is_selected) {
-    // Draw selection outline
+    // Draw selection outline (with rotation)
+    cairo_save(cr);
+    if (element->rotation_degrees != 0.0) {
+      double center_x = element->x + element->width / 2.0;
+      double center_y = element->y + element->height / 2.0;
+      cairo_translate(cr, center_x, center_y);
+      cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+      cairo_translate(cr, -center_x, -center_y);
+    }
     cairo_set_source_rgba(cr, 0.2, 0.6, 1.0, 0.3);
     cairo_set_line_width(cr, 2);
     cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_stroke(cr);
+    cairo_restore(cr);
+
+    // Draw rotation handle
+    element_draw_rotation_handle(element, cr);
   }
 }
 

@@ -11,6 +11,7 @@ typedef enum {
   ACTION_CREATE_ELEMENT,
   ACTION_MOVE_ELEMENT,
   ACTION_RESIZE_ELEMENT,
+  ACTION_ROTATE_ELEMENT,
   ACTION_EDIT_TEXT,
   ACTION_CHANGE_COLOR,
   ACTION_DELETE_ELEMENT,
@@ -28,6 +29,12 @@ typedef struct {
   int old_width, old_height;
   int new_width, new_height;
 } ResizeData;
+
+typedef struct {
+  ModelElement *element;
+  double old_rotation;
+  double new_rotation;
+} RotateData;
 
 typedef struct {
   ModelElement *element;
@@ -83,6 +90,8 @@ void undo_manager_push_move_action(UndoManager *manager, ModelElement *element,
 void undo_manager_push_resize_action(UndoManager *manager, ModelElement *element,
                                      int old_width, int old_height,
                                      int new_width, int new_height);
+void undo_manager_push_rotate_action(UndoManager *manager, ModelElement *element,
+                                     double old_rotation, double new_rotation);
 void undo_manager_push_text_action(UndoManager *manager, ModelElement *element,
                                    const char *old_text, const char *new_text);
 void undo_manager_push_color_action(UndoManager *manager, ModelElement *element,

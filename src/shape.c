@@ -158,6 +158,7 @@ static void apply_fill(Shape *shape, cairo_t *cr) {
 
 static void shape_get_connection_point(Element *element, int point, int *cx, int *cy) {
   Shape *shape = (Shape*)element;
+  int unrotated_x, unrotated_y;
 
   if (shape->has_line_points &&
       (shape->shape_type == SHAPE_LINE || shape->shape_type == SHAPE_ARROW)) {
@@ -170,46 +171,61 @@ static void shape_get_connection_point(Element *element, int point, int *cx, int
 
     switch (point) {
       case 0:
-        *cx = (int)round(start_x);
-        *cy = (int)round(start_y);
-        return;
-      case 1:
-        *cx = (int)round(end_x);
-        *cy = (int)round(end_y);
-        return;
-      case 2:
-        *cx = (int)round(mid_x);
-        *cy = (int)round(mid_y);
-        return;
-      case 3:
-        *cx = element->x + element->width / 2;
-        *cy = element->y + element->height / 2;
-        return;
-      default:
+        unrotated_x = (int)round(start_x);
+        unrotated_y = (int)round(start_y);
         break;
+      case 1:
+        unrotated_x = (int)round(end_x);
+        unrotated_y = (int)round(end_y);
+        break;
+      case 2:
+        unrotated_x = (int)round(mid_x);
+        unrotated_y = (int)round(mid_y);
+        break;
+      case 3:
+        unrotated_x = element->x + element->width / 2;
+        unrotated_y = element->y + element->height / 2;
+        break;
+      default:
+        unrotated_x = element->x + element->width / 2;
+        unrotated_y = element->y + element->height / 2;
+        break;
+    }
+  } else {
+    switch (point) {
+      case 0: // Top
+        unrotated_x = element->x + element->width / 2;
+        unrotated_y = element->y;
+        break;
+      case 1: // Right
+        unrotated_x = element->x + element->width;
+        unrotated_y = element->y + element->height / 2;
+        break;
+      case 2: // Bottom
+        unrotated_x = element->x + element->width / 2;
+        unrotated_y = element->y + element->height;
+        break;
+      case 3: // Left
+        unrotated_x = element->x;
+        unrotated_y = element->y + element->height / 2;
+        break;
+      default:
+        unrotated_x = element->x + element->width / 2;
+        unrotated_y = element->y + element->height / 2;
     }
   }
 
-  switch (point) {
-    case 0: // Top
-      *cx = element->x + element->width / 2;
-      *cy = element->y;
-      break;
-    case 1: // Right
-      *cx = element->x + element->width;
-      *cy = element->y + element->height / 2;
-      break;
-    case 2: // Bottom
-      *cx = element->x + element->width / 2;
-      *cy = element->y + element->height;
-      break;
-    case 3: // Left
-      *cx = element->x;
-      *cy = element->y + element->height / 2;
-      break;
-    default:
-      *cx = element->x + element->width / 2;
-      *cy = element->y + element->height / 2;
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = unrotated_x - center_x;
+    double dy = unrotated_y - center_y;
+    double angle_rad = element->rotation_degrees * M_PI / 180.0;
+    *cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    *cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  } else {
+    *cx = unrotated_x;
+    *cy = unrotated_y;
   }
 }
 
@@ -218,6 +234,16 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   if (shape->editing) {
     shape_update_text_view_position(shape);
+  }
+
+  // Save cairo state and apply rotation if needed
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
   }
 
   // Set stroke style (dashed, dotted, or solid)
@@ -481,15 +507,26 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       break;
   }
 
+  // Restore cairo state before drawing selection UI
+  cairo_restore(cr);
+
   if (is_selected) {
-    // Draw selection outline
+    // Draw selection outline (with rotation)
+    cairo_save(cr);
+    if (element->rotation_degrees != 0.0) {
+      double center_x = element->x + element->width / 2.0;
+      double center_y = element->y + element->height / 2.0;
+      cairo_translate(cr, center_x, center_y);
+      cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+      cairo_translate(cr, -center_x, -center_y);
+    }
     cairo_set_source_rgba(cr, 0.2, 0.6, 1.0, 0.3);
     cairo_set_line_width(cr, 2);
     cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_stroke(cr);
+    cairo_restore(cr);
 
-    // Draw connection points (only when selected)
-    cairo_save(cr);
+    // Draw connection points (with rotation applied)
     for (int i = 0; i < 4; i++) {
       int cx, cy;
       shape_get_connection_point(element, i, &cx, &cy);
@@ -501,7 +538,19 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_set_line_width(cr, 2);
       cairo_stroke(cr);
     }
-    cairo_restore(cr);
+
+    // Draw rotation handle (without rotation)
+    element_draw_rotation_handle(element, cr);
+  }
+
+  // Save state again for text
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
   }
 
   // Draw text if not editing and text exists
@@ -545,12 +594,25 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
     g_object_unref(layout);
   }
+
+  // Restore cairo state at end
+  cairo_restore(cr);
 }
 
 
 static int shape_pick_resize_handle(Element *element, int x, int y) {
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
+  // Apply inverse rotation to mouse coordinates if element is rotated
+  double rotated_cx = x;
+  double rotated_cy = y;
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = x - center_x;
+    double dy = y - center_y;
+    double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+    rotated_cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    rotated_cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  }
 
   int size = 8;
   struct { int px, py; } handles[4] = {
@@ -561,7 +623,7 @@ static int shape_pick_resize_handle(Element *element, int x, int y) {
   };
 
   for (int i = 0; i < 4; i++) {
-    if (abs(cx - handles[i].px) <= size && abs(cy - handles[i].py) <= size) {
+    if (abs(rotated_cx - handles[i].px) <= size && abs(rotated_cy - handles[i].py) <= size) {
       return i;
     }
   }
@@ -569,13 +631,10 @@ static int shape_pick_resize_handle(Element *element, int x, int y) {
 }
 
 static int shape_pick_connection_point(Element *element, int x, int y) {
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
-
   for (int i = 0; i < 4; i++) {
     int px, py;
     shape_get_connection_point(element, i, &px, &py);
-    int dx = cx - px, dy = cy - py;
+    int dx = x - px, dy = y - py;
     int dist_sq = dx * dx + dy * dy;
     if (dist_sq < 100) {
       return i;

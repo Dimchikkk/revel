@@ -320,6 +320,9 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
     }
   }
 
+  // Set rotation from config
+  element->rotation_degrees = config.rotation_degrees;
+
   g_hash_table_insert(model->elements, g_strdup(element->uuid), element);
 
   return element;
@@ -503,6 +506,33 @@ int model_update_size(Model *model, ModelElement *element, int width, int height
   if (element->size->width != width || element->size->height != height) {
     element->size->width = width;
     element->size->height = height;
+    if (element->state != MODEL_STATE_NEW) {
+      element->state = MODEL_STATE_UPDATED;
+    }
+    return 1;
+  }
+
+  return 0; // No change needed
+}
+
+int model_update_rotation(Model *model, ModelElement *element, double rotation_degrees) {
+  if (!model || !element) {
+    return 0;
+  }
+
+  // Normalize rotation to 0-360 range
+  while (rotation_degrees < 0) rotation_degrees += 360.0;
+  while (rotation_degrees >= 360.0) rotation_degrees -= 360.0;
+
+  // If rotation value changed, update it
+  if (element->rotation_degrees != rotation_degrees) {
+    element->rotation_degrees = rotation_degrees;
+
+    // Update visual element if it exists
+    if (element->visual_element) {
+      element->visual_element->rotation_degrees = rotation_degrees;
+    }
+
     if (element->state != MODEL_STATE_NEW) {
       element->state = MODEL_STATE_UPDATED;
     }

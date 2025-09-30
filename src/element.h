@@ -91,6 +91,7 @@ typedef struct {
   ElementColor bg_color;
   ElementPosition position;
   ElementSize size;
+  double rotation_degrees;
   ElementMedia media;
   ElementDrawing drawing;
   ElementConnection connection;
@@ -103,12 +104,16 @@ struct Element {
   ElementVTable *vtable;
   int x, y, z;
   int width, height;
+  double rotation_degrees;  // Rotation angle in degrees (0-360)
   gboolean dragging;
   int drag_offset_x, drag_offset_y;
   gboolean resizing;
   int resize_edge;
   int resize_start_x, resize_start_y;
   int orig_x, orig_y, orig_width, orig_height;
+  gboolean rotating;
+  double rotation_start_angle;
+  double orig_rotation;
   double bg_r, bg_g, bg_b, bg_a;
   CanvasData *canvas_data;
 
@@ -131,5 +136,10 @@ void element_bring_to_front(Element *element, int *next_z);
 
 // Utility function to get human-readable name for element types
 const char* element_get_type_name(ElementType type);
+
+// Rotation functions
+void element_get_rotation_handle_position(Element *element, int *hx, int *hy);
+int element_pick_rotation_handle(Element *element, int x, int y);
+void element_draw_rotation_handle(Element *element, cairo_t *cr);
 
 #endif

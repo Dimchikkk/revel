@@ -91,6 +91,16 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   // Update layout before drawing
   inline_text_update_layout(text);
 
+  // Save cairo state and apply rotation if needed
+  cairo_save(cr);
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    cairo_translate(cr, center_x, center_y);
+    cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+    cairo_translate(cr, -center_x, -center_y);
+  }
+
   // Draw background only if not editing and has background color
   if (!text->editing && element->bg_a > 0.1) {
     cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
@@ -113,9 +123,20 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_cairo_show_layout(cr, text->layout);
   }
 
+  // Restore cairo state before drawing selection UI
+  cairo_restore(cr);
 
   // Draw connection points when selected
   if (is_selected && !text->editing) {
+    cairo_save(cr);
+    if (element->rotation_degrees != 0.0) {
+      double center_x = element->x + element->width / 2.0;
+      double center_y = element->y + element->height / 2.0;
+      cairo_translate(cr, center_x, center_y);
+      cairo_rotate(cr, element->rotation_degrees * M_PI / 180.0);
+      cairo_translate(cr, -center_x, -center_y);
+    }
+
     for (int i = 0; i < 4; i++) {
       int cx, cy;
       inline_text_get_connection_point(element, i, &cx, &cy);
@@ -123,6 +144,10 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.6);
       cairo_fill(cr);
     }
+    cairo_restore(cr);
+
+    // Draw rotation handle (without rotation)
+    element_draw_rotation_handle(element, cr);
   }
 }
 

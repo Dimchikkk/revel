@@ -1,6 +1,5 @@
-- [new feature] allow rotation of elements
-- [new feature] expose position and bg_color to be clonable
-- [writing] write blog post presenting revel Part II
+- [improvement] expose position and bg_color to be clonable
+- [writing] write a blog post presenting revel part II
 - [improvement] add curve arrows with control points
 - [improvement] ability to set text alignment
 - [new feature] save images/videos to file via context menu

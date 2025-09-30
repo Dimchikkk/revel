@@ -120,23 +120,24 @@ int database_create_tables(sqlite3 *db) {
     "    size_id INTEGER NOT NULL,"
     "    text_id INTEGER,"
     "    bg_color_id INTEGER,"
-    "    from_element_uuid TEXT,"         // UUID of the source element for connections
-    "    to_element_uuid TEXT,"           // UUID of the target element for connections
-    "    from_point INTEGER,"             // For connections 0,1,2,3 (connection point location)
-    "    to_point INTEGER,"               // For connections 0,1,2,3 (connection point location)
-    "    target_space_uuid TEXT,"         // For space elements, UUID of the target space
-    "    image_id INTEGER,"               // Image note related
-    "    video_id INTEGER,"               // Video note related
-    "    drawing_points BLOB,"            // For freehand drawings: array of points
-    "    stroke_width INTEGER,"           // For freehand drawings and shapes: stroke width
-    "    shape_type INTEGER,"             // For shapes: type (circle, rectangle, triangle)
-    "    filled INTEGER,"                 // For shapes: whether shape is filled (boolean)
-    "    stroke_style INTEGER DEFAULT 0," // For shapes: stroke style (solid=0, dashed=1, dotted=2)
-    "    fill_style INTEGER DEFAULT 0,"   // For shapes: fill style (solid=0, hachure=1, cross-hatch=2)
-    "    stroke_color TEXT,"              // For shapes: stroke color in hex format (separate from bg_color)
-    "    connection_type INTEGER,"        // For connections: parallel, straight, curved
-    "    arrowhead_type INTEGER,"         // For connections: none, single, double
-    "    description TEXT,"               // Element description/comment
+    "    from_element_uuid TEXT,"            // UUID of the source element for connections
+    "    to_element_uuid TEXT,"              // UUID of the target element for connections
+    "    from_point INTEGER,"                // For connections 0,1,2,3 (connection point location)
+    "    to_point INTEGER,"                  // For connections 0,1,2,3 (connection point location)
+    "    target_space_uuid TEXT,"            // For space elements, UUID of the target space
+    "    image_id INTEGER,"                  // Image note related
+    "    video_id INTEGER,"                  // Video note related
+    "    drawing_points BLOB,"               // For freehand drawings: array of points
+    "    stroke_width INTEGER,"              // For freehand drawings and shapes: stroke width
+    "    shape_type INTEGER,"                // For shapes: type (circle, rectangle, triangle)
+    "    filled INTEGER,"                    // For shapes: whether shape is filled (boolean)
+    "    stroke_style INTEGER DEFAULT 0,"    // For shapes: stroke style (solid=0, dashed=1, dotted=2)
+    "    fill_style INTEGER DEFAULT 0,"      // For shapes: fill style (solid=0, hachure=1, cross-hatch=2)
+    "    stroke_color TEXT,"                 // For shapes: stroke color in hex format (separate from bg_color)
+    "    connection_type INTEGER,"           // For connections: parallel, straight, curved
+    "    arrowhead_type INTEGER,"            // For connections: none, single, double
+    "    rotation_degrees REAL DEFAULT 0.0," // Rotation angle in degrees (0-360)
+    "    description TEXT,"                  // Element description/comment
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -724,8 +725,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, description) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -817,6 +818,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   sqlite3_bind_int(stmt, param_index++, element->connection_type);
   // Bind arrowhead_type (for connections)
   sqlite3_bind_int(stmt, param_index++, element->arrowhead_type);
+  // Bind rotation_degrees
+  sqlite3_bind_double(stmt, param_index++, element->rotation_degrees);
   // Bind description
   if (element->description) {
     sqlite3_bind_text(stmt, param_index++, element->description, -1, SQLITE_STATIC);
@@ -838,7 +841,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, bg_color_id, "
     "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id, video_id, "
-    "drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, description, created_at "
+    "drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, created_at "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
 
@@ -966,6 +969,7 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
     }
     elem->connection_type = sqlite3_column_int(stmt, col++);
     elem->arrowhead_type = sqlite3_column_int(stmt, col++);
+    elem->rotation_degrees = sqlite3_column_double(stmt, col++);
 
     // Read description
     const char *description = (const char*)sqlite3_column_text(stmt, col++);
@@ -1040,7 +1044,7 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ?, "
     "space_uuid = ?, drawing_points = ?, stroke_width = ?, "
-    "shape_type = ?, filled = ?, stroke_style = ?, fill_style = ?, stroke_color = ?, connection_type = ?, arrowhead_type = ?, description = ? "
+    "shape_type = ?, filled = ?, stroke_style = ?, fill_style = ?, stroke_color = ?, connection_type = ?, arrowhead_type = ?, rotation_degrees = ?, description = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -1144,6 +1148,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   sqlite3_bind_int(stmt, param_index++, element->connection_type);
   // Bind arrowhead_type (for connections)
   sqlite3_bind_int(stmt, param_index++, element->arrowhead_type);
+  // Bind rotation_degrees
+  sqlite3_bind_double(stmt, param_index++, element->rotation_degrees);
   // Bind description
   if (element->description) {
     sqlite3_bind_text(stmt, param_index++, element->description, -1, SQLITE_STATIC);
@@ -1256,7 +1262,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
     "e.image_id, e.video_id, "
-    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.stroke_style, e.fill_style, e.stroke_color, e.connection_type, e.arrowhead_type, e.description, e.created_at "
+    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.stroke_style, e.fill_style, e.stroke_color, e.connection_type, e.arrowhead_type, e.rotation_degrees, e.description, e.created_at "
     "FROM elements e "
     "WHERE e.space_uuid = ?";
 
@@ -1293,6 +1299,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_STROKE_COLOR,
     COL_CONNECTION_TYPE,
     COL_ARROWHEAD_TYPE,
+    COL_ROTATION_DEGREES,
     COL_DESCRIPTION,
     COL_CREATED_AT,
   };
@@ -1472,6 +1479,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     }
     element->connection_type = sqlite3_column_int(stmt, COL_CONNECTION_TYPE);
     element->arrowhead_type = sqlite3_column_int(stmt, COL_ARROWHEAD_TYPE);
+    element->rotation_degrees = sqlite3_column_double(stmt, COL_ROTATION_DEGREES);
 
     // Read description
     const char *description = (const char*)sqlite3_column_text(stmt, COL_DESCRIPTION);

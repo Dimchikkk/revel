@@ -46,7 +46,7 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
     * Spiral search algorithm finds optimal placement
     * Collision detection prevents overlapping elements
     * Preserves manual placement for drag-and-drop and interactive drawing
-* **Flexible editing:** Resize, move and style all element types
+* **Flexible editing:** Resize, move, rotate, and style all element types
 * **Element descriptions:** Private comments/metadata with creation timestamps
 * **Background colors:** Customize appearance of any element
 * **Z-order control:** Layer elements with bring-to-front functionality

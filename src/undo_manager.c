@@ -84,6 +84,7 @@ static void free_action_data(Action *action) {
   switch (action->type) {
   case ACTION_MOVE_ELEMENT:
   case ACTION_RESIZE_ELEMENT:
+  case ACTION_ROTATE_ELEMENT:
   case ACTION_CHANGE_COLOR:
     // These are simple structs that can be freed directly
     g_free(action->data);
@@ -172,6 +173,20 @@ void undo_manager_push_resize_action(UndoManager *manager, ModelElement *element
 
   char *description = g_strdup_printf("Resized %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_RESIZE_ELEMENT, resize_data, description);
+  g_free(description);
+}
+
+void undo_manager_push_rotate_action(UndoManager *manager, ModelElement *element,
+                                     double old_rotation, double new_rotation) {
+  if (!manager || !element) return;
+
+  RotateData *rotate_data = g_new0(RotateData, 1);
+  rotate_data->element = element;
+  rotate_data->old_rotation = old_rotation;
+  rotate_data->new_rotation = new_rotation;
+
+  char *description = g_strdup_printf("Rotated %s", get_element_type_name_for_element(element));
+  undo_manager_push_action(manager, ACTION_ROTATE_ELEMENT, rotate_data, description);
   g_free(description);
 }
 
@@ -269,6 +284,13 @@ void undo_manager_push_action(UndoManager *manager, ActionType type, gpointer da
     log_data = copy;
     break;
   }
+  case ACTION_ROTATE_ELEMENT: {
+    RotateData *original = (RotateData*)data;
+    RotateData *copy = g_new0(RotateData, 1);
+    *copy = *original;
+    log_data = copy;
+    break;
+  }
   case ACTION_DELETE_ELEMENT: {
     DeleteData *original = (DeleteData*)data;
     DeleteData *copy = g_new0(DeleteData, 1);
@@ -325,6 +347,13 @@ void undo_manager_undo(UndoManager *manager) {
       model_update_size(manager->model, resize_data->element,
                         resize_data->old_width, resize_data->old_height);
     }
+    break;
+  }
+  case ACTION_ROTATE_ELEMENT: {
+    RotateData *rotate_data = (RotateData*)action->data;
+    // Restore old rotation in model
+    model_update_rotation(manager->model, rotate_data->element,
+                          rotate_data->old_rotation);
     break;
   }
   case ACTION_EDIT_TEXT: {
@@ -396,6 +425,13 @@ void undo_manager_redo(UndoManager *manager) {
       model_update_size(manager->model, resize_data->element,
                         resize_data->new_width, resize_data->new_height);
     }
+    break;
+  }
+  case ACTION_ROTATE_ELEMENT: {
+    RotateData *rotate_data = (RotateData*)action->data;
+    // Apply new rotation in model
+    model_update_rotation(manager->model, rotate_data->element,
+                          rotate_data->new_rotation);
     break;
   }
   case ACTION_EDIT_TEXT: {
@@ -690,6 +726,8 @@ static gboolean action_involves_element(Action *action, ModelElement *element) {
         return ((MoveData*)action->data)->element == element;
     case ACTION_RESIZE_ELEMENT:
         return ((ResizeData*)action->data)->element == element;
+    case ACTION_ROTATE_ELEMENT:
+        return ((RotateData*)action->data)->element == element;
     case ACTION_EDIT_TEXT:
         return ((TextData*)action->data)->element == element;
     case ACTION_CHANGE_COLOR:

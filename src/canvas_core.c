@@ -819,6 +819,11 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
     }
   }
 
+  // Set rotation from model
+  if (visual_element) {
+    visual_element->rotation_degrees = model_element->rotation_degrees;
+  }
+
   return visual_element;
 }
 
