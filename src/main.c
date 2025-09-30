@@ -49,9 +49,11 @@ static int on_command_line(GtkApplication *app, GApplicationCommandLine *command
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
   gtk_window_set_default_size(GTK_WINDOW(window), 1000, 700);
+  gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
+  gtk_widget_set_size_request(window, 200, 200);  // Set minimum window size
   gtk_window_set_title(GTK_WINDOW(window), "revel");
 
-  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_window_set_child(GTK_WINDOW(window), vbox);
 
   // Create toolbar revealer first
@@ -60,17 +62,45 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_revealer_set_transition_duration(GTK_REVEALER(toolbar_revealer), 300);
   gtk_revealer_set_reveal_child(GTK_REVEALER(toolbar_revealer), TRUE);
 
+  // Wrap toolbar in a scrolled window to allow horizontal scrolling
+  GtkWidget *toolbar_scroll = gtk_scrolled_window_new();
+  gtk_widget_set_name(toolbar_scroll, "toolbar-scroll");
+  gtk_widget_set_hexpand(toolbar_scroll, TRUE);
+  gtk_widget_set_halign(toolbar_scroll, GTK_ALIGN_FILL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(toolbar_scroll),
+                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_NEVER);
+  gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(toolbar_scroll), FALSE);
+  gtk_widget_set_vexpand(toolbar_scroll, FALSE);
+  gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(toolbar_scroll), FALSE);
+
   // Create main toolbar with improved styling
-  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  gtk_widget_set_margin_start(toolbar, 8);
-  gtk_widget_set_margin_end(toolbar, 8);
-  gtk_widget_set_margin_top(toolbar, 4);
-  gtk_widget_set_margin_bottom(toolbar, 4);
-  gtk_revealer_set_child(GTK_REVEALER(toolbar_revealer), toolbar);
+  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_widget_set_hexpand(toolbar, TRUE);
+  gtk_widget_set_halign(toolbar, GTK_ALIGN_FILL);
+  gtk_widget_set_margin_top(toolbar, 0);
+  gtk_widget_set_margin_bottom(toolbar, 0);
+  gtk_widget_set_margin_start(toolbar, 0);
+  gtk_widget_set_margin_end(toolbar, 0);
+
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(toolbar_scroll), toolbar);
+
+  GtkWidget *toolbar_background = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_name(toolbar_background, "toolbar-background");
+  gtk_widget_set_hexpand(toolbar_background, TRUE);
+  gtk_widget_set_halign(toolbar_background, GTK_ALIGN_FILL);
+  gtk_widget_set_margin_top(toolbar_background, 0);
+  gtk_widget_set_margin_bottom(toolbar_background, 0);
+  gtk_widget_set_margin_start(toolbar_background, 0);
+  gtk_widget_set_margin_end(toolbar_background, 0);
+
+  gtk_box_append(GTK_BOX(toolbar_background), toolbar_scroll);
+  gtk_revealer_set_child(GTK_REVEALER(toolbar_revealer), toolbar_background);
 
   // === CONTENT CREATION GROUP ===
-  GtkWidget *create_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  GtkWidget *create_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
   gtk_widget_add_css_class(create_group, "toolbar-group");
+  gtk_widget_set_margin_start(create_group, 0);
+  gtk_widget_set_margin_end(create_group, 4);
 
   // Paper Note button with icon
   GtkWidget *add_paper_btn = gtk_button_new();
@@ -120,13 +150,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   // Group separator
   GtkWidget *sep1 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-  gtk_widget_set_margin_start(sep1, 4);
-  gtk_widget_set_margin_end(sep1, 4);
+  gtk_widget_set_margin_start(sep1, 2);
+  gtk_widget_set_margin_end(sep1, 2);
   gtk_box_append(GTK_BOX(toolbar), sep1);
 
   // === NAVIGATION GROUP ===
-  GtkWidget *nav_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  GtkWidget *nav_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
   gtk_widget_add_css_class(nav_group, "toolbar-group");
+  gtk_widget_set_margin_start(nav_group, 4);
+  gtk_widget_set_margin_end(nav_group, 4);
 
   GtkWidget *back_btn = gtk_button_new();
   GtkWidget *back_icon = gtk_image_new_from_icon_name("go-previous");
@@ -150,13 +182,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   // Group separator
   GtkWidget *sep2 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-  gtk_widget_set_margin_start(sep2, 4);
-  gtk_widget_set_margin_end(sep2, 4);
+  gtk_widget_set_margin_start(sep2, 2);
+  gtk_widget_set_margin_end(sep2, 2);
   gtk_box_append(GTK_BOX(toolbar), sep2);
 
   // === DRAWING TOOLS GROUP ===
-  GtkWidget *draw_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  GtkWidget *draw_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
   gtk_widget_add_css_class(draw_group, "toolbar-group");
+  gtk_widget_set_margin_start(draw_group, 4);
+  gtk_widget_set_margin_end(draw_group, 4);
 
   // Drawing toggle button with icon
   GtkWidget *drawing_btn = gtk_toggle_button_new();
@@ -200,13 +234,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   // Group separator
   GtkWidget *sep3 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-  gtk_widget_set_margin_start(sep3, 4);
-  gtk_widget_set_margin_end(sep3, 4);
+  gtk_widget_set_margin_start(sep3, 2);
+  gtk_widget_set_margin_end(sep3, 2);
   gtk_box_append(GTK_BOX(toolbar), sep3);
 
   // === VIEW CONTROLS GROUP ===
-  GtkWidget *view_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  GtkWidget *view_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
   gtk_widget_add_css_class(view_group, "toolbar-group");
+  gtk_widget_set_margin_start(view_group, 4);
+  gtk_widget_set_margin_end(view_group, 4);
 
   // Zoom controls
   GtkWidget *zoom_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
@@ -244,13 +280,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   // Group separator
   GtkWidget *sep4 = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-  gtk_widget_set_margin_start(sep4, 4);
-  gtk_widget_set_margin_end(sep4, 4);
+  gtk_widget_set_margin_start(sep4, 2);
+  gtk_widget_set_margin_end(sep4, 2);
   gtk_box_append(GTK_BOX(toolbar), sep4);
 
   // === UTILITIES GROUP ===
-  GtkWidget *utils_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  GtkWidget *utils_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
   gtk_widget_add_css_class(utils_group, "toolbar-group");
+  gtk_widget_set_margin_start(utils_group, 4);
+  gtk_widget_set_margin_end(utils_group, 0);
 
   GtkWidget *log_btn = gtk_button_new();
   GtkWidget *log_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
@@ -394,19 +432,55 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     "   font-weight: normal;"
     "}"
     ".toolbar-group {"
-    "   background-color: rgba(255, 255, 255, 0.05);"
-    "   border-radius: 8px;"
-    "   padding: 4px;"
-    "   margin: 2px;"
-    "   border: 1px solid rgba(255, 255, 255, 0.1);"
+    "   background-color: rgba(255, 255, 255, 0.03);"
+    "   border-radius: 10px;"
+    "   padding: 2px 4px;"
+    "   margin: 0;"
+    "   border: 1px solid rgba(255, 255, 255, 0.08);"
+    "   box-shadow: inset 0 0 1px rgba(255, 255, 255, 0.05);"
     "}"
     ".toolbar-group button {"
-    "   border-radius: 6px;"
-    "   margin: 1px;"
-    "   padding: 6px 8px;"
+    "   border-radius: 7px;"
+    "   margin: 0 1px;"
+    "   padding: 3px 10px;"
+    "   min-height: 26px;"
+    "   background: rgba(255, 255, 255, 0.02);"
+    "   border: 1px solid transparent;"
+    "}"
+    ".toolbar-group button:checked,"
+    ".toolbar-group button:focus-visible {"
+    "   background-color: rgba(255, 255, 255, 0.12);"
+    "   border-color: rgba(255, 255, 255, 0.24);"
     "}"
     ".toolbar-group button:hover {"
-    "   background-color: rgba(255, 255, 255, 0.1);"
+    "   background-color: rgba(255, 255, 255, 0.12);"
+    "}"
+    ".toolbar-group button > * {"
+    "   margin-left: 2px;"
+    "   margin-right: 2px;"
+    "}"
+    "#toolbar-background {"
+    "   background: rgba(18, 18, 18, 0.92);"
+    "   padding: 8px 16px;"
+    "   border-radius: 0;"
+    "}"
+    "scrolledwindow#toolbar-scroll {"
+    "   background: transparent;"
+    "   padding: 0;"
+    "}"
+    "scrolledwindow#toolbar-scroll viewport {"
+    "   padding: 0;"
+    "}"
+    "scrolledwindow#toolbar-scroll scrollbar {"
+    "   opacity: 0;"
+    "   min-width: 0;"
+    "   min-height: 0;"
+    "}"
+    "scrolledwindow#toolbar-scroll undershoot,"
+    "scrolledwindow#toolbar-scroll overshoot {"
+    "   background: transparent;"
+    "   border: none;"
+    "   box-shadow: none;"
     "}";
 
   gtk_css_provider_load_from_data(provider, css, -1);
