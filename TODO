@@ -1,4 +1,3 @@
-- [improvement] expose position and bg_color to be clonable
 - [writing] write a blog post presenting revel part II
 - [improvement] add curve arrows with control points
 - [improvement] ability to set text alignment

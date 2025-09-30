@@ -406,6 +406,19 @@ static gboolean parse_int_value(const gchar *token, int *out_value) {
   return TRUE;
 }
 
+static gboolean parse_double_value(const gchar *token, double *out_value) {
+  if (!token || !out_value) return FALSE;
+
+  char *end_ptr = NULL;
+  double value = g_ascii_strtod(token, &end_ptr);
+  if (end_ptr == token || *end_ptr != '\0') {
+    return FALSE;
+  }
+
+  *out_value = value;
+  return TRUE;
+}
+
 // Custom tokenizer that handles quotes and parentheses
 static gchar** tokenize_line(const gchar *line, int *token_count) {
   GArray *tokens = g_array_new(FALSE, FALSE, sizeof(gchar*));
@@ -556,9 +569,22 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       gboolean expect_bg = FALSE;
       gboolean expect_text_color = FALSE;
       gboolean expect_font = FALSE;
+      double rotation_degrees = 0.0;
+      gboolean rotation_set = FALSE;
+      gboolean expect_rotation = FALSE;
 
       for (int t = 5; t < token_count; t++) {
         const gchar *token = tokens[t];
+
+        if (expect_rotation) {
+          if (!parse_double_value(token, &rotation_degrees)) {
+            g_print("Failed to parse rotation angle: %s\n", token);
+          } else {
+            rotation_set = TRUE;
+          }
+          expect_rotation = FALSE;
+          continue;
+        }
 
         if (expect_bg) {
           if (!parse_color_token(token, &bg_r, &bg_g, &bg_b, &bg_a)) {
@@ -652,6 +678,23 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             font_set = TRUE;
             continue;
           }
+        }
+
+        if (!rotation_set && g_strcmp0(token, "rotation") == 0) {
+          expect_rotation = TRUE;
+          continue;
+        }
+        if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (parse_double_value(value + 1, &rotation_degrees)) {
+              rotation_set = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse rotation angle: %s\n", token);
+          continue;
         }
 
         g_print("Warning: Unrecognized token in %s: %s\n", tokens[0], token);
@@ -704,6 +747,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       ModelElement *model_element = model_create_element(data->model, config);
 
       if (model_element) {
+        if (rotation_set && rotation_degrees != 0.0) {
+          model_element->rotation_degrees = rotation_degrees;
+        }
         model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         undo_manager_push_create_action(data->undo_manager, model_element);
@@ -748,9 +794,22 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       gboolean expect_bg = FALSE;
       gboolean expect_text_color = FALSE;
       gboolean expect_font = FALSE;
+      double rotation_degrees = 0.0;
+      gboolean rotation_set = FALSE;
+      gboolean expect_rotation = FALSE;
 
       for (int t = 5; t < token_count; t++) {
         const gchar *token = tokens[t];
+
+        if (expect_rotation) {
+          if (!parse_double_value(token, &rotation_degrees)) {
+            g_print("Failed to parse rotation angle: %s\n", token);
+          } else {
+            rotation_set = TRUE;
+          }
+          expect_rotation = FALSE;
+          continue;
+        }
 
         if (expect_bg) {
           if (!parse_color_token(token, &bg_r, &bg_g, &bg_b, &bg_a)) {
@@ -846,6 +905,23 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           }
         }
 
+        if (!rotation_set && g_strcmp0(token, "rotation") == 0) {
+          expect_rotation = TRUE;
+          continue;
+        }
+        if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (parse_double_value(value + 1, &rotation_degrees)) {
+              rotation_set = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse rotation angle: %s\n", token);
+          continue;
+        }
+
         g_print("Warning: Unrecognized token in text_create: %s\n", token);
       }
 
@@ -896,6 +972,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       ModelElement *model_element = model_create_element(data->model, config);
 
       if (model_element) {
+        if (rotation_set && rotation_degrees != 0.0) {
+          model_element->rotation_degrees = rotation_degrees;
+        }
         model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         undo_manager_push_create_action(data->undo_manager, model_element);
@@ -906,13 +985,34 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       g_free(font_override);
     }
     else if (g_strcmp0(tokens[0], "image_create") == 0 && token_count >= 5) {
-      // image_create ID PATH (x,y) (width,height)
+      // image_create ID PATH (x,y) (width,height) [rotation DEGREES]
       const gchar *id = tokens[1];
       const gchar *path = tokens[2];
       int x, y, width, height;
 
       if (parse_point(tokens[3], &x, &y) &&
           parse_point(tokens[4], &width, &height)) {
+
+        double rotation_degrees = 0.0;
+        gboolean rotation_set = FALSE;
+
+        for (int t = 5; t < token_count; t++) {
+          const gchar *token = tokens[t];
+          if (!rotation_set && g_strcmp0(token, "rotation") == 0 && (t + 1) < token_count) {
+            if (parse_double_value(tokens[t + 1], &rotation_degrees)) {
+              rotation_set = TRUE;
+              t++;
+            }
+          } else if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+            const gchar *value = strchr(token, '=');
+            if (!value) value = strchr(token, ':');
+            if (value && *(value + 1) != '\0') {
+              if (parse_double_value(value + 1, &rotation_degrees)) {
+                rotation_set = TRUE;
+              }
+            }
+          }
+        }
 
         // Load image from file
         GError *error = NULL;
@@ -974,6 +1074,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           ModelElement *model_element = model_create_element(data->model, config);
 
           if (model_element) {
+            if (rotation_set && rotation_degrees != 0.0) {
+              model_element->rotation_degrees = rotation_degrees;
+            }
             model_element->visual_element = create_visual_element(model_element, data);
             g_hash_table_insert(element_map, g_strdup(id), model_element);
             undo_manager_push_create_action(data->undo_manager, model_element);
@@ -984,13 +1087,34 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       }
     }
     else if (g_strcmp0(tokens[0], "video_create") == 0 && token_count >= 5) {
-      // video_create ID PATH (x,y) (width,height)
+      // video_create ID PATH (x,y) (width,height) [rotation DEGREES]
       const gchar *id = tokens[1];
       const gchar *path = tokens[2];
       int x, y, width, height;
 
       if (parse_point(tokens[3], &x, &y) &&
           parse_point(tokens[4], &width, &height)) {
+
+        double rotation_degrees = 0.0;
+        gboolean rotation_set = FALSE;
+
+        for (int t = 5; t < token_count; t++) {
+          const gchar *token = tokens[t];
+          if (!rotation_set && g_strcmp0(token, "rotation") == 0 && (t + 1) < token_count) {
+            if (parse_double_value(tokens[t + 1], &rotation_degrees)) {
+              rotation_set = TRUE;
+              t++;
+            }
+          } else if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+            const gchar *value = strchr(token, '=');
+            if (!value) value = strchr(token, ':');
+            if (value && *(value + 1) != '\0') {
+              if (parse_double_value(value + 1, &rotation_degrees)) {
+                rotation_set = TRUE;
+              }
+            }
+          }
+        }
 
         // Load video from file
         GError *error = NULL;
@@ -1102,6 +1226,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           ModelElement *model_element = model_create_element(data->model, config);
 
           if (model_element) {
+            if (rotation_set && rotation_degrees != 0.0) {
+              model_element->rotation_degrees = rotation_degrees;
+            }
             model_element->visual_element = create_visual_element(model_element, data);
             g_hash_table_insert(element_map, g_strdup(id), model_element);
             undo_manager_push_create_action(data->undo_manager, model_element);
@@ -1129,6 +1256,27 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
       if (parse_point(tokens[3], &x, &y) &&
           parse_point(tokens[4], &width, &height)) {
+
+        double rotation_degrees = 0.0;
+        gboolean rotation_set = FALSE;
+
+        for (int t = 5; t < token_count; t++) {
+          const gchar *token = tokens[t];
+          if (!rotation_set && g_strcmp0(token, "rotation") == 0 && (t + 1) < token_count) {
+            if (parse_double_value(tokens[t + 1], &rotation_degrees)) {
+              rotation_set = TRUE;
+              t++;
+            }
+          } else if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+            const gchar *value = strchr(token, '=');
+            if (!value) value = strchr(token, ':');
+            if (value && *(value + 1) != '\0') {
+              if (parse_double_value(value + 1, &rotation_degrees)) {
+                rotation_set = TRUE;
+              }
+            }
+          }
+        }
 
         ElementPosition position = { .x = x, .y = y, .z = data->next_z_index++ };
         ElementColor bg_color = { .r = 0.9, .g = 0.9, .b = 0.95, .a = 1.0 };
@@ -1175,6 +1323,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         ModelElement *model_element = model_create_element(data->model, config);
 
         if (model_element) {
+          if (rotation_set && rotation_degrees != 0.0) {
+            model_element->rotation_degrees = rotation_degrees;
+          }
           model_element->visual_element = create_visual_element(model_element, data);
           g_hash_table_insert(element_map, g_strdup(id), model_element);
           undo_manager_push_create_action(data->undo_manager, model_element);
@@ -1252,9 +1403,22 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       gboolean expect_filled = FALSE;
       gboolean expect_stroke_style = FALSE;
       gboolean expect_fill_style = FALSE;
+      double rotation_degrees = 0.0;
+      gboolean rotation_set = FALSE;
+      gboolean expect_rotation = FALSE;
 
       for (int t = 6; t < token_count; t++) {
         const gchar *token = tokens[t];
+
+        if (expect_rotation) {
+          if (!parse_double_value(token, &rotation_degrees)) {
+            g_print("Failed to parse rotation angle: %s\n", token);
+          } else {
+            rotation_set = TRUE;
+          }
+          expect_rotation = FALSE;
+          continue;
+        }
 
         if (expect_stroke_style) {
           if (!parse_stroke_style_value(token, &stroke_style_value)) {
@@ -1558,6 +1722,23 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (!rotation_set && g_strcmp0(token, "rotation") == 0) {
+          expect_rotation = TRUE;
+          continue;
+        }
+        if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (parse_double_value(value + 1, &rotation_degrees)) {
+              rotation_set = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse rotation angle: %s\n", token);
+          continue;
+        }
+
         g_print("Warning: Unrecognized token in shape_create: %s\n", token);
       }
 
@@ -1636,6 +1817,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       ModelElement *model_element = model_create_element(data->model, config);
 
       if (model_element) {
+        if (rotation_set && rotation_degrees != 0.0) {
+          model_element->rotation_degrees = rotation_degrees;
+        }
         model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         undo_manager_push_create_action(data->undo_manager, model_element);
@@ -1956,7 +2140,7 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
                                             element->text->font_description : default_font);
 
       g_string_append_printf(dsl,
-                             "%s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+                             "%s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) font %s text_color color(%.2f,%.2f,%.2f,%.2f)",
                              command,
                              element_id,
                              text_escaped,
@@ -1965,6 +2149,11 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
                              bg_r, bg_g, bg_b, bg_a,
                              font_str,
                              text_r, text_g, text_b, text_a);
+
+      if (element->rotation_degrees != 0.0) {
+        g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      g_string_append_c(dsl, '\n');
 
       g_free(text_escaped);
       g_free(pos_str);
@@ -1976,8 +2165,13 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       gchar *pos_str = g_strdup_printf("(%d,%d)", element->position->x, element->position->y);
       gchar *size_str = g_strdup_printf("(%d,%d)", element->size->width, element->size->height);
 
-      g_string_append_printf(dsl, "space_create %s %s %s %s\n",
+      g_string_append_printf(dsl, "space_create %s %s %s %s",
                              element_id, text_escaped, pos_str, size_str);
+
+      if (element->rotation_degrees != 0.0) {
+        g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      g_string_append_c(dsl, '\n');
 
       g_free(text_escaped);
       g_free(pos_str);
@@ -2059,9 +2253,15 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       }
 
       // Add font and text_color
-      g_string_append_printf(dsl, " font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+      g_string_append_printf(dsl, " font %s text_color color(%.2f,%.2f,%.2f,%.2f)",
                              font_str,
                              text_r, text_g, text_b, text_a);
+
+      // Add rotation if non-zero
+      if (element->rotation_degrees != 0.0) {
+        g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      g_string_append_c(dsl, '\n');
 
       g_free(text_escaped);
       g_free(pos_str);
@@ -2087,7 +2287,7 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
                                             element->text->font_description : "Ubuntu Mono 14");
 
       g_string_append_printf(dsl,
-                             "text_create %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) font %s text_color color(%.2f,%.2f,%.2f,%.2f)\n",
+                             "text_create %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) font %s text_color color(%.2f,%.2f,%.2f,%.2f)",
                              element_id,
                              text_escaped,
                              pos_str,
@@ -2095,6 +2295,11 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
                              bg_r, bg_g, bg_b, bg_a,
                              font_str,
                              text_r, text_g, text_b, text_a);
+
+      if (element->rotation_degrees != 0.0) {
+        g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      g_string_append_c(dsl, '\n');
 
       g_free(text_escaped);
       g_free(pos_str);
@@ -2133,12 +2338,17 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       }
 
       g_string_append_printf(dsl,
-                             "%s %s %s %s %s\n",
+                             "%s %s %s %s %s",
                              command,
                              element_id,
                              placeholder_path,
                              pos_str,
                              size_str);
+
+      if (element->rotation_degrees != 0.0) {
+        g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      g_string_append_c(dsl, '\n');
 
       g_free(pos_str);
       g_free(size_str);

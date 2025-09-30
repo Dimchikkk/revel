@@ -750,12 +750,9 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_restore(cr);
   }
 
-  // Restore cairo state before drawing selection UI
-  cairo_restore(cr);
-
-  // Draw resize handles and connection points (only when selected)
+  // Draw resize handles and connection points (only when selected) - BEFORE restoring rotation
   if (is_selected) {
-    // Draw resize handles at the corners of the actual image (without rotation)
+    // Draw resize handles at the corners of the actual image (with rotation)
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.8);
     cairo_set_line_width(cr, 2.0);
 
@@ -774,13 +771,35 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     // Draw connection points on the actual image borders (with rotation)
     for (int i = 0; i < 4; i++) {
       int cx, cy;
-      media_note_get_connection_point(element, i, &cx, &cy);
+      // Get unrotated connection point on image
+      int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
+      int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+      double scale_x = element->width / (double)pixbuf_width;
+      double scale_y = element->height / (double)pixbuf_height;
+      double scale = MIN(scale_x, scale_y);
+      int conn_draw_width = pixbuf_width * scale;
+      int conn_draw_height = pixbuf_height * scale;
+      int conn_draw_x = element->x + (element->width - conn_draw_width) / 2;
+      int conn_draw_y = element->y + (element->height - conn_draw_height) / 2;
+
+      switch(i) {
+      case 0: cx = conn_draw_x + conn_draw_width/2; cy = conn_draw_y; break;
+      case 1: cx = conn_draw_x + conn_draw_width; cy = conn_draw_y + conn_draw_height/2; break;
+      case 2: cx = conn_draw_x + conn_draw_width/2; cy = conn_draw_y + conn_draw_height; break;
+      case 3: cx = conn_draw_x; cy = conn_draw_y + conn_draw_height/2; break;
+      }
+
       cairo_arc(cr, cx, cy, 5, 0, 2 * G_PI);
       cairo_set_source_rgba(cr, 0.3, 0.3, 0.8, 0.3);
       cairo_fill(cr);
     }
+  }
 
-    // Draw rotation handle (without rotation)
+  // Restore cairo state after drawing selection UI with rotation
+  cairo_restore(cr);
+
+  // Draw rotation handle without rotation
+  if (is_selected) {
     element_draw_rotation_handle(element, cr);
   }
 }
@@ -837,31 +856,33 @@ void media_note_get_connection_point(Element *element, int point, int *cx, int *
 int media_note_pick_resize_handle(Element *element, int x, int y) {
   MediaNote *media_note = (MediaNote*)element;
 
-  // Apply inverse rotation to mouse coordinates if element is rotated
-  double rotated_cx = x;
-  double rotated_cy = y;
-  if (element->rotation_degrees != 0.0) {
-    double center_x = element->x + element->width / 2.0;
-    double center_y = element->y + element->height / 2.0;
-    double dx = x - center_x;
-    double dy = y - center_y;
-    double angle_rad = -element->rotation_degrees * M_PI / 180.0;
-    rotated_cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
-    rotated_cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
-  }
-
   if (!media_note->pixbuf) {
     // Fallback to element bounds if no pixbuf
     int size = 8;
-    int handles[4][2] = {
+    int unrotated_handles[4][2] = {
       {element->x, element->y},
       {element->x + element->width, element->y},
       {element->x + element->width, element->y + element->height},
       {element->x, element->y + element->height}
     };
 
+    // Apply rotation to handles if element is rotated
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+
     for (int i = 0; i < 4; i++) {
-      if (abs(rotated_cx - handles[i][0]) <= size && abs(rotated_cy - handles[i][1]) <= size) {
+      int handle_x = unrotated_handles[i][0];
+      int handle_y = unrotated_handles[i][1];
+
+      if (element->rotation_degrees != 0.0) {
+        double dx = handle_x - center_x;
+        double dy = handle_y - center_y;
+        double angle_rad = element->rotation_degrees * M_PI / 180.0;
+        handle_x = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+        handle_y = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+      }
+
+      if (abs(x - handle_x) <= size && abs(y - handle_y) <= size) {
         return i;
       }
     }
@@ -882,15 +903,30 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
   int draw_y = element->y + (element->height - draw_height) / 2;
 
   int size = 8;
-  int handles[4][2] = {
+  int unrotated_handles[4][2] = {
     {draw_x, draw_y},
     {draw_x + draw_width, draw_y},
     {draw_x + draw_width, draw_y + draw_height},
     {draw_x, draw_y + draw_height}
   };
 
+  // Rotate handles around element center if rotated
+  double center_x = element->x + element->width / 2.0;
+  double center_y = element->y + element->height / 2.0;
+
   for (int i = 0; i < 4; i++) {
-    if (abs(rotated_cx - handles[i][0]) <= size && abs(rotated_cy - handles[i][1]) <= size) {
+    int handle_x = unrotated_handles[i][0];
+    int handle_y = unrotated_handles[i][1];
+
+    if (element->rotation_degrees != 0.0) {
+      double dx = handle_x - center_x;
+      double dy = handle_y - center_y;
+      double angle_rad = element->rotation_degrees * M_PI / 180.0;
+      handle_x = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+      handle_y = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+    }
+
+    if (abs(x - handle_x) <= size && abs(y - handle_y) <= size) {
       return i;
     }
   }
