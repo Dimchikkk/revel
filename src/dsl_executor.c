@@ -11,6 +11,7 @@
 #include "dsl_executor.h"
 #include "shape.h"
 #include "canvas_drop.h"
+#include "paper_note.h"
 
 static gchar* unescape_text(const gchar *str) {
   if (!str) return g_strdup("");
@@ -455,7 +456,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double bg_a = 1.0;
 
       double text_r = 0.2, text_g = 0.2, text_b = 0.2, text_a = 1.0;
-      const gchar *default_font = is_paper ? "Ubuntu Mono 16" : "Ubuntu 16";
+      const gchar *default_font = is_paper ? PAPER_NOTE_DEFAULT_FONT : "Ubuntu 16";
       gchar *font_override = NULL;
 
       gboolean bg_set = FALSE;
@@ -850,7 +851,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           ElementText text = {
             .text = g_strdup(""),
             .text_color = text_color,
-            .font_description = g_strdup("Ubuntu Mono 16"),
+            .font_description = g_strdup(PAPER_NOTE_DEFAULT_FONT),
           };
           ElementShape shape = {
             .shape_type = -1,
@@ -975,7 +976,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           ElementText text = {
             .text = g_strdup(""),
             .text_color = text_color,
-            .font_description = g_strdup("Ubuntu Mono 16"),
+            .font_description = g_strdup(PAPER_NOTE_DEFAULT_FONT),
           };
           ElementShape shape = {
             .shape_type = -1,
@@ -1045,7 +1046,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         ElementText text_elem = {
           .text = clean_text,
           .text_color = text_color,
-          .font_description = "Ubuntu Mono 16",
+          .font_description = PAPER_NOTE_DEFAULT_FONT,
         };
         ElementShape shape = {
           .shape_type = -1,
@@ -1659,7 +1660,7 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       double text_a = (element->text) ? element->text->a : 1.0;
 
       const gchar *default_font = (element->type->type == ELEMENT_PAPER_NOTE) ?
-                                  "Ubuntu Mono 16" : "Ubuntu 16";
+                                  PAPER_NOTE_DEFAULT_FONT : "Ubuntu 16";
       gchar *font_str = escape_text_for_dsl(element->text && element->text->font_description ?
                                             element->text->font_description : default_font);
 

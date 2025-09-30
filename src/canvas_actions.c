@@ -59,7 +59,7 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
   ElementText text = {
     .text = "",
     .text_color = text_color,
-    .font_description = g_strdup("Ubuntu Mono 16"),
+    .font_description = g_strdup(PAPER_NOTE_DEFAULT_FONT),
   };
   ElementConfig config = {
     .type = ELEMENT_PAPER_NOTE,

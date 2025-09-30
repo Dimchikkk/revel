@@ -15,6 +15,9 @@ typedef struct {
   gboolean editing;
 } PaperNote;
 
+// Prefer a loose handwritten style; fall back through a few common fonts.
+#define PAPER_NOTE_DEFAULT_FONT "Caveat, Comic Neue, Comic Sans MS 17"
+
 PaperNote* paper_note_create(ElementPosition position,
                              ElementColor bg_color,
                              ElementSize size,
