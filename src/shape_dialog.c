@@ -7,13 +7,210 @@ typedef struct {
   GtkWidget *dialog;
   ShapeType selected_shape;
   gboolean filled;
+  GtkWidget *filled_toggle;
+  GtkWidget *outline_toggle;
+  GPtrArray *icon_widgets;
 } ShapeDialogData;
+
+static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
+
+typedef struct {
+  ShapeDialogData *dialog_data;
+  ShapeType shape_type;
+} ShapeIconData;
+
+static void shape_dialog_data_free(ShapeDialogData *data) {
+  if (!data) return;
+  if (data->icon_widgets) {
+    g_ptr_array_free(data->icon_widgets, TRUE);
+  }
+  g_free(data);
+}
+
+static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
+  ShapeIconData *icon_data = (ShapeIconData*)user_data;
+  if (!icon_data || !icon_data->dialog_data) return;
+
+  gboolean filled = icon_data->dialog_data->filled;
+
+  double inset = 6.0;
+  double stroke_width = 2.0;
+  double draw_width = width - inset * 2.0;
+  double draw_height = height - inset * 2.0;
+
+  cairo_set_line_width(cr, stroke_width);
+
+  // Fill background transparent
+  cairo_set_source_rgba(cr, 0, 0, 0, 0);
+  cairo_paint(cr);
+
+  switch (icon_data->shape_type) {
+  case SHAPE_CIRCLE: {
+    double radius = MIN(draw_width, draw_height) / 2.0;
+    cairo_arc(cr, width / 2.0, height / 2.0, radius, 0, 2 * G_PI);
+    break;
+  }
+  case SHAPE_RECTANGLE:
+    cairo_rectangle(cr, inset, inset, draw_width, draw_height);
+    break;
+  case SHAPE_TRIANGLE:
+    cairo_move_to(cr, width / 2.0, inset);
+    cairo_line_to(cr, width - inset, height - inset);
+    cairo_line_to(cr, inset, height - inset);
+    cairo_close_path(cr);
+    break;
+  case SHAPE_DIAMOND:
+    cairo_move_to(cr, width / 2.0, inset);
+    cairo_line_to(cr, width - inset, height / 2.0);
+    cairo_line_to(cr, width / 2.0, height - inset);
+    cairo_line_to(cr, inset, height / 2.0);
+    cairo_close_path(cr);
+    break;
+  case SHAPE_CYLINDER_VERTICAL: {
+    double center_x = width / 2.0;
+    double cylinder_width = draw_width;
+    double ellipse_height = MIN(draw_height * 0.25, cylinder_width * 0.55);
+    double half_ellipse = ellipse_height / 2.0;
+    double top_center = inset + half_ellipse;
+    double bottom_center = height - inset - half_ellipse;
+    double body_height = bottom_center - top_center;
+
+    if (filled) {
+      cairo_set_source_rgba(cr, 0.7, 0.7, 0.7, 1.0);
+      cairo_rectangle(cr, center_x - cylinder_width / 2.0, top_center, cylinder_width, body_height);
+      cairo_fill(cr);
+
+      cairo_save(cr);
+      cairo_translate(cr, center_x, top_center);
+      cairo_scale(cr, cylinder_width / 2.0, half_ellipse);
+      cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+      cairo_fill(cr);
+      cairo_restore(cr);
+
+      cairo_save(cr);
+      cairo_translate(cr, center_x, bottom_center);
+      cairo_scale(cr, cylinder_width / 2.0, half_ellipse);
+      cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+      cairo_fill(cr);
+      cairo_restore(cr);
+    }
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 2.0);
+
+    // Top ellipse outline
+    cairo_save(cr);
+    cairo_translate(cr, center_x, top_center);
+    cairo_scale(cr, cylinder_width / 2.0, half_ellipse);
+    cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+    cairo_restore(cr);
+    cairo_stroke(cr);
+
+    // Side lines
+    cairo_new_path(cr);
+    cairo_move_to(cr, center_x - cylinder_width / 2.0, top_center);
+    cairo_line_to(cr, center_x - cylinder_width / 2.0, bottom_center);
+    cairo_move_to(cr, center_x + cylinder_width / 2.0, top_center);
+    cairo_line_to(cr, center_x + cylinder_width / 2.0, bottom_center);
+    cairo_stroke(cr);
+
+    // Bottom ellipse outline
+    cairo_save(cr);
+    cairo_translate(cr, center_x, bottom_center);
+    cairo_scale(cr, cylinder_width / 2.0, half_ellipse);
+    cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+    cairo_restore(cr);
+    cairo_stroke(cr);
+    break;
+  }
+  case SHAPE_CYLINDER_HORIZONTAL: {
+    double center_y = height / 2.0;
+    double cylinder_height = draw_height;
+    double ellipse_width = MIN(draw_width * 0.25, cylinder_height * 0.55);
+    double half_ellipse = ellipse_width / 2.0;
+    double left_center = inset + half_ellipse;
+    double right_center = width - inset - half_ellipse;
+    double body_width = right_center - left_center;
+
+    if (filled) {
+      cairo_set_source_rgba(cr, 0.7, 0.7, 0.7, 1.0);
+      cairo_rectangle(cr, left_center, center_y - cylinder_height / 2.0, body_width, cylinder_height);
+      cairo_fill(cr);
+
+      cairo_save(cr);
+      cairo_translate(cr, left_center, center_y);
+      cairo_scale(cr, half_ellipse, cylinder_height / 2.0);
+      cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+      cairo_fill(cr);
+      cairo_restore(cr);
+
+      cairo_save(cr);
+      cairo_translate(cr, right_center, center_y);
+      cairo_scale(cr, half_ellipse, cylinder_height / 2.0);
+      cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+      cairo_fill(cr);
+      cairo_restore(cr);
+    }
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 2.0);
+
+    // Left ellipse outline
+    cairo_save(cr);
+    cairo_translate(cr, left_center, center_y);
+    cairo_scale(cr, half_ellipse, cylinder_height / 2.0);
+    cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+    cairo_restore(cr);
+    cairo_stroke(cr);
+
+    // Right ellipse outline
+    cairo_save(cr);
+    cairo_translate(cr, right_center, center_y);
+    cairo_scale(cr, half_ellipse, cylinder_height / 2.0);
+    cairo_arc(cr, 0, 0, 1.0, 0.0, 2 * G_PI);
+    cairo_restore(cr);
+    cairo_stroke(cr);
+
+    // Connecting lines
+    cairo_new_path(cr);
+    cairo_move_to(cr, left_center, center_y - cylinder_height / 2.0);
+    cairo_line_to(cr, right_center, center_y - cylinder_height / 2.0);
+    cairo_move_to(cr, right_center, center_y + cylinder_height / 2.0);
+    cairo_line_to(cr, left_center, center_y + cylinder_height / 2.0);
+    cairo_stroke(cr);
+    break;
+  }
+  }
+
+  if (icon_data->shape_type != SHAPE_CYLINDER_VERTICAL &&
+      icon_data->shape_type != SHAPE_CYLINDER_HORIZONTAL) {
+    if (filled) {
+      cairo_set_source_rgba(cr, 0.7, 0.7, 0.7, 1.0);
+      cairo_fill_preserve(cr);
+    }
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_stroke(cr);
+  }
+}
+
+static void queue_icon_redraws(ShapeDialogData *data) {
+  if (!data || !data->icon_widgets) return;
+  for (guint i = 0; i < data->icon_widgets->len; i++) {
+    GtkWidget *icon = g_ptr_array_index(data->icon_widgets, i);
+    if (GTK_IS_WIDGET(icon)) {
+      gtk_widget_queue_draw(icon);
+    }
+  }
+}
 
 static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   ShapeDialogData *data = (ShapeDialogData*)user_data;
 
   ShapeType shape_type = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "shape_type"));
   data->selected_shape = shape_type;
+
+  g_signal_handlers_disconnect_by_func(data->dialog, G_CALLBACK(on_dialog_response), data);
 
   // Close dialog and proceed with shape creation
   gtk_window_destroy(GTK_WINDOW(data->dialog));
@@ -30,12 +227,33 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   // Update cursor
   canvas_set_cursor(data->canvas_data, data->canvas_data->draw_cursor);
 
-  g_free(data);
+  shape_dialog_data_free(data);
 }
 
-static void on_filled_toggle(GtkToggleButton *toggle, gpointer user_data) {
+static void on_fill_mode_toggle(GtkToggleButton *toggle, gpointer user_data) {
   ShapeDialogData *data = (ShapeDialogData*)user_data;
-  data->filled = gtk_toggle_button_get_active(toggle);
+  gboolean should_fill = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(toggle), "shape_fill_mode"));
+  gboolean active = gtk_toggle_button_get_active(toggle);
+
+  if (!active) {
+    if (data->filled == should_fill) {
+      g_signal_handlers_block_by_func(toggle, on_fill_mode_toggle, data);
+      gtk_toggle_button_set_active(toggle, TRUE);
+      g_signal_handlers_unblock_by_func(toggle, on_fill_mode_toggle, data);
+    }
+    return;
+  }
+
+  data->filled = should_fill;
+
+  GtkToggleButton *other = GTK_TOGGLE_BUTTON(should_fill ? data->outline_toggle : data->filled_toggle);
+  if (other) {
+    g_signal_handlers_block_by_func(other, on_fill_mode_toggle, data);
+    gtk_toggle_button_set_active(other, FALSE);
+    g_signal_handlers_unblock_by_func(other, on_fill_mode_toggle, data);
+  }
+
+  queue_icon_redraws(data);
 }
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
@@ -43,8 +261,44 @@ static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer use
 
   if (response_id == GTK_RESPONSE_CANCEL || response_id == GTK_RESPONSE_DELETE_EVENT) {
     gtk_window_destroy(GTK_WINDOW(dialog));
-    g_free(data);
+    shape_dialog_data_free(data);
   }
+}
+
+static GtkWidget* create_shape_button(const char *label, ShapeType shape_type, ShapeDialogData *data) {
+  GtkWidget *button = gtk_button_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+  gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
+  gtk_widget_set_margin_start(box, 6);
+  gtk_widget_set_margin_end(box, 6);
+  gtk_widget_set_margin_top(box, 6);
+  gtk_widget_set_margin_bottom(box, 6);
+
+  GtkWidget *icon = gtk_drawing_area_new();
+  gtk_widget_set_size_request(icon, 56, 36);
+  ShapeIconData *icon_data = g_new0(ShapeIconData, 1);
+  icon_data->dialog_data = data;
+  icon_data->shape_type = shape_type;
+  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(icon), draw_shape_icon, icon_data, g_free);
+
+  if (!data->icon_widgets) {
+    data->icon_widgets = g_ptr_array_new();
+  }
+  g_ptr_array_add(data->icon_widgets, icon);
+
+  GtkWidget *label_widget = gtk_label_new(label);
+  gtk_widget_set_halign(label_widget, GTK_ALIGN_CENTER);
+
+  gtk_box_append(GTK_BOX(box), icon);
+  gtk_box_append(GTK_BOX(box), label_widget);
+
+  gtk_button_set_child(GTK_BUTTON(button), box);
+
+  g_object_set_data(G_OBJECT(button), "shape_type", GINT_TO_POINTER(shape_type));
+  g_signal_connect(button, "clicked", G_CALLBACK(on_shape_button_clicked), data);
+
+  return button;
 }
 
 void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
@@ -78,55 +332,50 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
   gtk_box_append(GTK_BOX(content_area), vbox);
 
-  // Create filled/stroke toggle
+  GtkWidget *fill_toggle_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_widget_set_halign(fill_toggle_box, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(vbox), fill_toggle_box);
+
+  GtkWidget *outline_toggle = gtk_toggle_button_new_with_label("Outline");
   GtkWidget *filled_toggle = gtk_toggle_button_new_with_label("Filled");
-  gtk_box_append(GTK_BOX(vbox), filled_toggle);
-  g_signal_connect(filled_toggle, "toggled", G_CALLBACK(on_filled_toggle), data);
 
-  // Create shape buttons container
-  GtkWidget *shapes_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-  gtk_widget_set_halign(shapes_box, GTK_ALIGN_CENTER);
-  gtk_box_append(GTK_BOX(vbox), shapes_box);
+  data->outline_toggle = outline_toggle;
+  data->filled_toggle = filled_toggle;
 
-  // Circle button
-  GtkWidget *circle_btn = gtk_button_new_with_label("Circle");
-  g_object_set_data(G_OBJECT(circle_btn), "shape_type", GINT_TO_POINTER(SHAPE_CIRCLE));
-  g_signal_connect(circle_btn, "clicked", G_CALLBACK(on_shape_button_clicked), data);
-  gtk_box_append(GTK_BOX(shapes_box), circle_btn);
+  g_object_set_data(G_OBJECT(outline_toggle), "shape_fill_mode", GINT_TO_POINTER(FALSE));
+  g_object_set_data(G_OBJECT(filled_toggle), "shape_fill_mode", GINT_TO_POINTER(TRUE));
 
-  // Rectangle button
-  GtkWidget *rectangle_btn = gtk_button_new_with_label("Rectangle");
-  g_object_set_data(G_OBJECT(rectangle_btn), "shape_type", GINT_TO_POINTER(SHAPE_RECTANGLE));
-  g_signal_connect(rectangle_btn, "clicked", G_CALLBACK(on_shape_button_clicked), data);
-  gtk_box_append(GTK_BOX(shapes_box), rectangle_btn);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(outline_toggle), TRUE);
 
-  // Triangle button
-  GtkWidget *triangle_btn = gtk_button_new_with_label("Triangle");
-  g_object_set_data(G_OBJECT(triangle_btn), "shape_type", GINT_TO_POINTER(SHAPE_TRIANGLE));
-  g_signal_connect(triangle_btn, "clicked", G_CALLBACK(on_shape_button_clicked), data);
-  gtk_box_append(GTK_BOX(shapes_box), triangle_btn);
+  gtk_box_append(GTK_BOX(fill_toggle_box), outline_toggle);
+  gtk_box_append(GTK_BOX(fill_toggle_box), filled_toggle);
 
-  // Create second row of shape buttons
-  GtkWidget *shapes_box2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-  gtk_widget_set_halign(shapes_box2, GTK_ALIGN_CENTER);
-  gtk_box_append(GTK_BOX(vbox), shapes_box2);
+  g_signal_connect(outline_toggle, "toggled", G_CALLBACK(on_fill_mode_toggle), data);
+  g_signal_connect(filled_toggle, "toggled", G_CALLBACK(on_fill_mode_toggle), data);
 
-  // Vertical Cylinder button
-  GtkWidget *vcylinder_btn = gtk_button_new_with_label("V-Cylinder");
-  g_object_set_data(G_OBJECT(vcylinder_btn), "shape_type", GINT_TO_POINTER(SHAPE_CYLINDER_VERTICAL));
-  g_signal_connect(vcylinder_btn, "clicked", G_CALLBACK(on_shape_button_clicked), data);
-  gtk_box_append(GTK_BOX(shapes_box2), vcylinder_btn);
+  GtkWidget *shapes_grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(shapes_grid), 10);
+  gtk_grid_set_column_spacing(GTK_GRID(shapes_grid), 12);
+  gtk_widget_set_halign(shapes_grid, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(vbox), shapes_grid);
 
-  // Horizontal Cylinder button
-  GtkWidget *hcylinder_btn = gtk_button_new_with_label("H-Cylinder");
-  g_object_set_data(G_OBJECT(hcylinder_btn), "shape_type", GINT_TO_POINTER(SHAPE_CYLINDER_HORIZONTAL));
-  g_signal_connect(hcylinder_btn, "clicked", G_CALLBACK(on_shape_button_clicked), data);
-  gtk_box_append(GTK_BOX(shapes_box2), hcylinder_btn);
+  GtkWidget *circle_btn = create_shape_button("Circle", SHAPE_CIRCLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), circle_btn, 0, 0, 1, 1);
 
-  GtkWidget *diamond_button = gtk_button_new_with_label("Diamond");
-  g_object_set_data(G_OBJECT(diamond_button), "shape_type", GINT_TO_POINTER(SHAPE_DIAMOND));
-  g_signal_connect(diamond_button, "clicked", G_CALLBACK(on_shape_button_clicked), data);
-  gtk_box_append(GTK_BOX(shapes_box2), diamond_button);
+  GtkWidget *rectangle_btn = create_shape_button("Rectangle", SHAPE_RECTANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), rectangle_btn, 1, 0, 1, 1);
+
+  GtkWidget *triangle_btn = create_shape_button("Triangle", SHAPE_TRIANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), triangle_btn, 2, 0, 1, 1);
+
+  GtkWidget *vcylinder_btn = create_shape_button("V-Cylinder", SHAPE_CYLINDER_VERTICAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), vcylinder_btn, 0, 1, 1, 1);
+
+  GtkWidget *hcylinder_btn = create_shape_button("H-Cylinder", SHAPE_CYLINDER_HORIZONTAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), hcylinder_btn, 1, 1, 1, 1);
+
+  GtkWidget *diamond_button = create_shape_button("Diamond", SHAPE_DIAMOND, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), diamond_button, 2, 1, 1, 1);
 
 
   // Add Cancel button
