@@ -1,5 +1,3 @@
-- [new feature] add shadow to paper note
-- [new feature] add rounded rectangle shape, line and arrow (line and arrow should draw from start point to end so angle is possible)
 - [new feature] allow changing stroke style (dotted, dashed, solid), allow having filled style (hachure, cross-hatch, solid)
 - [new feature] allow rotation of elements
 - [writing] write blog post presenting revel Part II

@@ -137,6 +137,48 @@ static gboolean parse_point(const gchar *str, int *x, int *y) {
   return TRUE;
 }
 
+static gboolean parse_float_point(const gchar *str, double *x, double *y) {
+  if (str[0] != '(') return FALSE;
+
+  gchar *copy = g_strdup(str);
+  gchar *comma = strchr(copy, ',');
+  if (!comma) {
+    g_free(copy);
+    return FALSE;
+  }
+
+  *comma = '\0';
+
+  gchar *end_ptr;
+  double parsed_x = g_ascii_strtod(copy + 1, &end_ptr);
+  if (*end_ptr != '\0') {
+    g_free(copy);
+    return FALSE;
+  }
+
+  gchar *y_str = comma + 1;
+  while (isspace(*y_str)) y_str++;
+
+  gchar *close_paren = strchr(y_str, ')');
+  if (!close_paren) {
+    g_free(copy);
+    return FALSE;
+  }
+  *close_paren = '\0';
+
+  double parsed_y = g_ascii_strtod(y_str, &end_ptr);
+  if (*end_ptr != '\0') {
+    g_free(copy);
+    return FALSE;
+  }
+
+  g_free(copy);
+
+  *x = CLAMP(parsed_x, 0.0, 1.0);
+  *y = CLAMP(parsed_y, 0.0, 1.0);
+  return TRUE;
+}
+
 // Helper function to parse shape type string
 static gboolean parse_shape_type(const gchar *str, int *shape_type) {
   if (g_strcmp0(str, "circle") == 0) {
@@ -156,6 +198,18 @@ static gboolean parse_shape_type(const gchar *str, int *shape_type) {
     return TRUE;
   } else if (g_strcmp0(str, "cylinder_horizontal") == 0 || g_strcmp0(str, "hcylinder") == 0) {
     *shape_type = SHAPE_CYLINDER_HORIZONTAL;
+    return TRUE;
+  } else if (g_strcmp0(str, "rounded_rectangle") == 0 ||
+             g_strcmp0(str, "rounded-rectangle") == 0 ||
+             g_strcmp0(str, "roundedrect") == 0 ||
+             g_strcmp0(str, "roundrect") == 0) {
+    *shape_type = SHAPE_ROUNDED_RECTANGLE;
+    return TRUE;
+  } else if (g_strcmp0(str, "line") == 0) {
+    *shape_type = SHAPE_LINE;
+    return TRUE;
+  } else if (g_strcmp0(str, "arrow") == 0) {
+    *shape_type = SHAPE_ARROW;
     return TRUE;
   }
   return FALSE;
@@ -1126,6 +1180,12 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       gboolean font_set = FALSE;
       gboolean stroke_set = FALSE;
       gboolean filled_set = FALSE;
+      gboolean expect_line_start = FALSE;
+      gboolean expect_line_end = FALSE;
+      double line_start_u = 0.0, line_start_v = 0.0;
+      double line_end_u = 1.0, line_end_v = 1.0;
+      gboolean line_start_defined = FALSE;
+      gboolean line_end_defined = FALSE;
 
       gboolean expect_bg = FALSE;
       gboolean expect_text_color = FALSE;
@@ -1193,6 +1253,32 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             expect_filled = FALSE;
             // Fall through to allow this token to be processed further
           }
+        }
+
+        if (expect_line_start && (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW)) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse line start point: %s\n", token);
+          } else {
+            line_start_u = fx;
+            line_start_v = fy;
+            line_start_defined = TRUE;
+          }
+          expect_line_start = FALSE;
+          continue;
+        }
+
+        if (expect_line_end && (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW)) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse line end point: %s\n", token);
+          } else {
+            line_end_u = fx;
+            line_end_v = fy;
+            line_end_defined = TRUE;
+          }
+          expect_line_end = FALSE;
+          continue;
         }
 
         if (!bg_set && (g_strcmp0(token, "bg") == 0 || g_strcmp0(token, "background") == 0)) {
@@ -1302,7 +1388,59 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if ((shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) &&
+            (g_strcmp0(token, "line_from") == 0 || g_strcmp0(token, "line_start") == 0)) {
+          expect_line_start = TRUE;
+          continue;
+        }
+
+        if ((shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) &&
+            (g_strcmp0(token, "line_to") == 0 || g_strcmp0(token, "line_end") == 0)) {
+          expect_line_end = TRUE;
+          continue;
+        }
+
+        if ((shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) &&
+            (g_str_has_prefix(token, "line_from=") || g_str_has_prefix(token, "line_from:") ||
+             g_str_has_prefix(token, "line_start=") || g_str_has_prefix(token, "line_start:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            double fx, fy;
+            if (parse_float_point(value + 1, &fx, &fy)) {
+              line_start_u = fx;
+              line_start_v = fy;
+              line_start_defined = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse line start point: %s\n", token);
+          continue;
+        }
+
+        if ((shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) &&
+            (g_str_has_prefix(token, "line_to=") || g_str_has_prefix(token, "line_to:") ||
+             g_str_has_prefix(token, "line_end=") || g_str_has_prefix(token, "line_end:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            double fx, fy;
+            if (parse_float_point(value + 1, &fx, &fy)) {
+              line_end_u = fx;
+              line_end_v = fy;
+              line_end_defined = TRUE;
+              continue;
+            }
+          }
+          g_print("Failed to parse line end point: %s\n", token);
+          continue;
+        }
+
         g_print("Warning: Unrecognized token in shape_create: %s\n", token);
+      }
+
+      if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
+        filled = FALSE;
       }
 
       ElementPosition position = { .x = x, .y = y, .z = data->next_z_index++ };
@@ -1319,8 +1457,32 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       };
       ElementDrawing drawing = {
         .drawing_points = NULL,
-        .stroke_width = 0,
+        .stroke_width = stroke_width,
       };
+
+      GArray *line_points = NULL;
+      if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
+        if (!line_start_defined) {
+          line_start_u = 0.0;
+          line_start_v = 0.0;
+        }
+        if (!line_end_defined) {
+          line_end_u = 1.0;
+          line_end_v = 1.0;
+        }
+
+        line_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 2);
+
+        DrawingPoint start_point;
+        graphene_point_init(&start_point, (float)line_start_u, (float)line_start_v);
+        g_array_append_val(line_points, start_point);
+
+        DrawingPoint end_point;
+        graphene_point_init(&end_point, (float)line_end_u, (float)line_end_v);
+        g_array_append_val(line_points, end_point);
+
+        drawing.drawing_points = line_points;
+      }
 
       const gchar *font_to_use = font_override ? font_override : default_font;
       ElementText text_elem = {
@@ -1352,6 +1514,10 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         undo_manager_push_create_action(data->undo_manager, model_element);
+      }
+
+      if (line_points) {
+        g_array_free(line_points, TRUE);
       }
 
       g_free(text_elem.font_description);
@@ -1701,6 +1867,9 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
         case SHAPE_DIAMOND: shape_type_str = "diamond"; break;
         case SHAPE_CYLINDER_VERTICAL: shape_type_str = "vcylinder"; break;
         case SHAPE_CYLINDER_HORIZONTAL: shape_type_str = "hcylinder"; break;
+        case SHAPE_ROUNDED_RECTANGLE: shape_type_str = "rounded_rectangle"; break;
+        case SHAPE_LINE: shape_type_str = "line"; break;
+        case SHAPE_ARROW: shape_type_str = "arrow"; break;
       }
 
       gchar *text_escaped = escape_text_for_dsl(element->text ? element->text->text : "");

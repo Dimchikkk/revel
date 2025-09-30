@@ -9,7 +9,10 @@ typedef enum {
   SHAPE_TRIANGLE,
   SHAPE_CYLINDER_VERTICAL,
   SHAPE_CYLINDER_HORIZONTAL,
-  SHAPE_DIAMOND
+  SHAPE_DIAMOND,
+  SHAPE_ROUNDED_RECTANGLE,
+  SHAPE_LINE,
+  SHAPE_ARROW
 } ShapeType;
 
 typedef struct {
@@ -23,6 +26,11 @@ typedef struct {
   GtkWidget *scrolled_window;
   GtkWidget *text_view;
   gboolean editing;
+  gboolean has_line_points;
+  double line_start_u;
+  double line_start_v;
+  double line_end_u;
+  double line_end_v;
 } Shape;
 
 Shape* shape_create(ElementPosition position,
@@ -33,6 +41,7 @@ Shape* shape_create(ElementPosition position,
                    gboolean filled,
                    ElementText text,
                    ElementShape shape_config,
+                   const ElementDrawing *drawing_config,
                    CanvasData *data);
 void shape_free(Element *element);
 

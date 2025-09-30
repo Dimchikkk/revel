@@ -1,6 +1,7 @@
 #include "shape_dialog.h"
 #include "canvas_core.h"
 #include "shape.h"
+#include <math.h>
 
 typedef struct {
   CanvasData *canvas_data;
@@ -53,6 +54,21 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
   case SHAPE_RECTANGLE:
     cairo_rectangle(cr, inset, inset, draw_width, draw_height);
     break;
+  case SHAPE_ROUNDED_RECTANGLE: {
+    double radius = MIN(draw_width, draw_height) * 0.25;
+    double x = inset;
+    double y = inset;
+    double right = x + draw_width;
+    double bottom = y + draw_height;
+
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, right - radius, y + radius, radius, -G_PI_2, 0);
+    cairo_arc(cr, right - radius, bottom - radius, radius, 0, G_PI_2);
+    cairo_arc(cr, x + radius, bottom - radius, radius, G_PI_2, G_PI);
+    cairo_arc(cr, x + radius, y + radius, radius, G_PI, 3 * G_PI_2);
+    cairo_close_path(cr);
+    break;
+  }
   case SHAPE_TRIANGLE:
     cairo_move_to(cr, width / 2.0, inset);
     cairo_line_to(cr, width - inset, height - inset);
@@ -180,6 +196,40 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_stroke(cr);
     break;
   }
+  case SHAPE_LINE:
+  case SHAPE_ARROW: {
+    double start_x = inset;
+    double start_y = height - inset;
+    double end_x = width - inset;
+    double end_y = inset;
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to(cr, start_x, start_y);
+    cairo_line_to(cr, end_x, end_y);
+    cairo_stroke(cr);
+
+    if (icon_data->shape_type == SHAPE_ARROW) {
+      double angle = atan2(end_y - start_y, end_x - start_x);
+      double arrow_len = 12.0;
+      double arrow_angle = 160.0 * G_PI / 180.0; // 160 degrees
+
+      double back_x = end_x - arrow_len * cos(angle);
+      double back_y = end_y - arrow_len * sin(angle);
+
+      double left_x = back_x + arrow_len * cos(angle - arrow_angle);
+      double left_y = back_y + arrow_len * sin(angle - arrow_angle);
+      double right_x = back_x + arrow_len * cos(angle + arrow_angle);
+      double right_y = back_y + arrow_len * sin(angle + arrow_angle);
+
+      cairo_move_to(cr, end_x, end_y);
+      cairo_line_to(cr, left_x, left_y);
+      cairo_move_to(cr, end_x, end_y);
+      cairo_line_to(cr, right_x, right_y);
+      cairo_stroke(cr);
+    }
+    return;
+  }
   }
 
   if (icon_data->shape_type != SHAPE_CYLINDER_VERTICAL &&
@@ -219,7 +269,12 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   data->canvas_data->drawing_mode = FALSE;  // Ensure drawing mode is OFF
   data->canvas_data->shape_mode = TRUE;
   data->canvas_data->selected_shape_type = shape_type;
-  data->canvas_data->shape_filled = data->filled;
+  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
+    data->canvas_data->shape_filled = FALSE;
+    data->filled = FALSE;
+  } else {
+    data->canvas_data->shape_filled = data->filled;
+  }
 
   // Clear any existing drawing state to prevent interference
   data->canvas_data->current_drawing = NULL;
@@ -376,6 +431,15 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
 
   GtkWidget *diamond_button = create_shape_button("Diamond", SHAPE_DIAMOND, data);
   gtk_grid_attach(GTK_GRID(shapes_grid), diamond_button, 2, 1, 1, 1);
+
+  GtkWidget *rounded_rect_button = create_shape_button("Rounded Rect", SHAPE_ROUNDED_RECTANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), rounded_rect_button, 0, 2, 1, 1);
+
+  GtkWidget *line_button = create_shape_button("Line", SHAPE_LINE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), line_button, 1, 2, 1, 1);
+
+  GtkWidget *arrow_button = create_shape_button("Arrow", SHAPE_ARROW, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), arrow_button, 2, 2, 1, 1);
 
 
   // Add Cancel button

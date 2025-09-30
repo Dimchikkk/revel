@@ -703,7 +703,13 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .stroke_width = stroke_width,
         .filled = filled
       };
-      visual_element = (Element*)shape_create(position, size, shape_color, stroke_width, shape_type, filled, text, shape_config, data);
+      ElementDrawing drawing_config = {
+        .drawing_points = model_element->drawing_points,
+        .stroke_width = stroke_width,
+      };
+      visual_element = (Element*)shape_create(position, size, shape_color, stroke_width, shape_type, filled, text, shape_config,
+                                              model_element->drawing_points ? &drawing_config : NULL,
+                                              data);
     }
     break;
 
@@ -1007,4 +1013,3 @@ void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data) {
     gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
   }
 }
-

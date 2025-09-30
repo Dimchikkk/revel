@@ -5,6 +5,7 @@
 #include "model.h"
 #include "canvas_core.h"
 #include "undo_manager.h"
+#include <graphene.h>
 
 gboolean shape_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   Shape *shape = (Shape*)user_data;
@@ -43,6 +44,39 @@ static void shape_update_text_view_position(Shape *shape) {
 }
 
 static void shape_get_connection_point(Element *element, int point, int *cx, int *cy) {
+  Shape *shape = (Shape*)element;
+
+  if (shape->has_line_points &&
+      (shape->shape_type == SHAPE_LINE || shape->shape_type == SHAPE_ARROW)) {
+    double start_x = element->x + shape->line_start_u * element->width;
+    double start_y = element->y + shape->line_start_v * element->height;
+    double end_x = element->x + shape->line_end_u * element->width;
+    double end_y = element->y + shape->line_end_v * element->height;
+    double mid_x = (start_x + end_x) / 2.0;
+    double mid_y = (start_y + end_y) / 2.0;
+
+    switch (point) {
+      case 0:
+        *cx = (int)round(start_x);
+        *cy = (int)round(start_y);
+        return;
+      case 1:
+        *cx = (int)round(end_x);
+        *cy = (int)round(end_y);
+        return;
+      case 2:
+        *cx = (int)round(mid_x);
+        *cy = (int)round(mid_y);
+        return;
+      case 3:
+        *cx = element->x + element->width / 2;
+        *cy = element->y + element->height / 2;
+        return;
+      default:
+        break;
+    }
+  }
+
   switch (point) {
     case 0: // Top
       *cx = element->x + element->width / 2;
@@ -98,6 +132,31 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     case SHAPE_RECTANGLE:
       {
         cairo_rectangle(cr, element->x, element->y, element->width, element->height);
+
+        if (shape->filled) {
+          cairo_fill_preserve(cr);
+        }
+        cairo_stroke(cr);
+      }
+      break;
+    case SHAPE_ROUNDED_RECTANGLE:
+      {
+        double radius = MIN(element->width, element->height) * 0.2;
+        if (radius < 8.0) radius = 8.0;
+        double x = element->x;
+        double y = element->y;
+        double width = element->width;
+        double height = element->height;
+
+        double right = x + width;
+        double bottom = y + height;
+
+        cairo_new_sub_path(cr);
+        cairo_arc(cr, right - radius, y + radius, radius, -G_PI_2, 0);
+        cairo_arc(cr, right - radius, bottom - radius, radius, 0, G_PI_2);
+        cairo_arc(cr, x + radius, bottom - radius, radius, G_PI_2, G_PI);
+        cairo_arc(cr, x + radius, y + radius, radius, G_PI, 3 * G_PI_2);
+        cairo_close_path(cr);
 
         if (shape->filled) {
           cairo_fill_preserve(cr);
@@ -232,6 +291,49 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
           cairo_fill_preserve(cr);
         }
         cairo_stroke(cr);
+      }
+      break;
+    case SHAPE_LINE:
+    case SHAPE_ARROW:
+      {
+        double width = MAX(element->width, 1);
+        double height = MAX(element->height, 1);
+        double start_u = shape->has_line_points ? shape->line_start_u : 0.0;
+        double start_v = shape->has_line_points ? shape->line_start_v : 0.0;
+        double end_u = shape->has_line_points ? shape->line_end_u : 1.0;
+        double end_v = shape->has_line_points ? shape->line_end_v : 1.0;
+
+        double start_x = element->x + start_u * width;
+        double start_y = element->y + start_v * height;
+        double end_x = element->x + end_u * width;
+        double end_y = element->y + end_v * height;
+
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+        cairo_move_to(cr, start_x, start_y);
+        cairo_line_to(cr, end_x, end_y);
+        cairo_stroke(cr);
+
+        if (shape->shape_type == SHAPE_ARROW) {
+          double angle = atan2(end_y - start_y, end_x - start_x);
+          double arrow_length = MAX(shape->stroke_width * 3.0, 12.0);
+          double arrow_angle = 160.0 * G_PI / 180.0; // 160 degrees
+
+          double back_x = end_x - arrow_length * cos(angle);
+          double back_y = end_y - arrow_length * sin(angle);
+
+          double left_x = back_x + arrow_length * cos(angle - arrow_angle);
+          double left_y = back_y + arrow_length * sin(angle - arrow_angle);
+          double right_x = back_x + arrow_length * cos(angle + arrow_angle);
+          double right_y = back_y + arrow_length * sin(angle + arrow_angle);
+
+          cairo_move_to(cr, end_x, end_y);
+          cairo_line_to(cr, left_x, left_y);
+          cairo_move_to(cr, end_x, end_y);
+          cairo_line_to(cr, right_x, right_y);
+          cairo_stroke(cr);
+        }
       }
       break;
   }
@@ -481,6 +583,7 @@ Shape* shape_create(ElementPosition position,
                    gboolean filled,
                    ElementText text,
                    ElementShape shape_config,
+                   const ElementDrawing *drawing_config,
                    CanvasData *data) {
   Shape *shape = g_new0(Shape, 1);
 
@@ -510,6 +613,20 @@ Shape* shape_create(ElementPosition position,
   shape->text_view = NULL;
   shape->scrolled_window = NULL;
   shape->editing = FALSE;
+  shape->has_line_points = FALSE;
+  shape->line_start_u = 0.0;
+  shape->line_start_v = 0.0;
+  shape->line_end_u = 1.0;
+  shape->line_end_v = 1.0;
+
+  if (drawing_config && drawing_config->drawing_points && drawing_config->drawing_points->len >= 2) {
+    DrawingPoint *points = (DrawingPoint*)drawing_config->drawing_points->data;
+    shape->line_start_u = points[0].x;
+    shape->line_start_v = points[0].y;
+    shape->line_end_u = points[1].x;
+    shape->line_end_v = points[1].y;
+    shape->has_line_points = TRUE;
+  }
 
   return shape;
 }

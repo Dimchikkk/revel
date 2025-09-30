@@ -19,7 +19,7 @@
 #include "freehand_drawing.h"
 #include "shape.h"
 #include "font_dialog.h"
-#include "shape.h"
+#include <graphene.h>
 
 typedef struct {
   const char *shortcut;
@@ -148,7 +148,9 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       data->current_shape = shape_create(position, size, data->drawing_color,
                                          data->drawing_stroke_width,
                                          data->selected_shape_type,
-                                         data->shape_filled, text, shape_config, data);
+                                         data->shape_filled, text, shape_config,
+                                         NULL,
+                                         data);
       data->shape_start_x = cx;
       data->shape_start_y = cy;
     }
@@ -490,6 +492,26 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     data->current_shape->base.width = MAX(ABS(cx - x1), 10);
     data->current_shape->base.height = MAX(ABS(cy - y1), 10);
 
+    Shape *shape = data->current_shape;
+    if ((shape->shape_type == SHAPE_LINE || shape->shape_type == SHAPE_ARROW)) {
+      double width = MAX(data->current_shape->base.width, 1);
+      double height = MAX(data->current_shape->base.height, 1);
+
+      double start_x = (double)data->shape_start_x;
+      double start_y = (double)data->shape_start_y;
+      double end_x = (double)cx;
+      double end_y = (double)cy;
+
+      double base_x = data->current_shape->base.x;
+      double base_y = data->current_shape->base.y;
+
+      shape->line_start_u = CLAMP((start_x - base_x) / width, 0.0, 1.0);
+      shape->line_start_v = CLAMP((start_y - base_y) / height, 0.0, 1.0);
+      shape->line_end_u = CLAMP((end_x - base_x) / width, 0.0, 1.0);
+      shape->line_end_v = CLAMP((end_y - base_y) / height, 0.0, 1.0);
+      shape->has_line_points = TRUE;
+    }
+
     gtk_widget_queue_draw(data->drawing_area);
     return;
   }
@@ -675,12 +697,34 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
     config.shape.shape_type = shape->shape_type;
     config.shape.stroke_width = shape->stroke_width;
     config.shape.filled = shape->filled;
+    ElementDrawing drawing = { .drawing_points = NULL, .stroke_width = shape->stroke_width };
+
+    GArray *line_points = NULL;
+    if ((shape->shape_type == SHAPE_LINE || shape->shape_type == SHAPE_ARROW) && shape->has_line_points) {
+      line_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 2);
+
+      DrawingPoint start_point;
+      graphene_point_init(&start_point, (float)shape->line_start_u, (float)shape->line_start_v);
+      g_array_append_val(line_points, start_point);
+
+      DrawingPoint end_point;
+      graphene_point_init(&end_point, (float)shape->line_end_u, (float)shape->line_end_v);
+      g_array_append_val(line_points, end_point);
+
+      drawing.drawing_points = line_points;
+    }
+
+    config.drawing = drawing;
 
     ModelElement *model_element = model_create_element(data->model, config);
 
     if (model_element) {
       model_element->visual_element = create_visual_element(model_element, data);
       undo_manager_push_create_action(data->undo_manager, model_element);
+    }
+
+    if (line_points) {
+      g_array_free(line_points, TRUE);
     }
 
     // Clear current shape and exit shape mode
