@@ -211,6 +211,9 @@ static gboolean parse_shape_type(const gchar *str, int *shape_type) {
   } else if (g_strcmp0(str, "arrow") == 0) {
     *shape_type = SHAPE_ARROW;
     return TRUE;
+  } else if (g_strcmp0(str, "bezier") == 0 || g_strcmp0(str, "curve") == 0) {
+    *shape_type = SHAPE_BEZIER;
+    return TRUE;
   }
   return FALSE;
 }
@@ -572,6 +575,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double rotation_degrees = 0.0;
       gboolean rotation_set = FALSE;
       gboolean expect_rotation = FALSE;
+      gchar *alignment = NULL;
+      gboolean alignment_set = FALSE;
+      gboolean expect_alignment = FALSE;
 
       for (int t = 5; t < token_count; t++) {
         const gchar *token = tokens[t];
@@ -697,6 +703,30 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (expect_alignment) {
+          alignment = g_strdup(token);
+          alignment_set = TRUE;
+          expect_alignment = FALSE;
+          continue;
+        }
+
+        if (!alignment_set && (g_strcmp0(token, "align") == 0 || g_strcmp0(token, "alignment") == 0)) {
+          expect_alignment = TRUE;
+          continue;
+        }
+        if (!alignment_set && (g_str_has_prefix(token, "align=") || g_str_has_prefix(token, "alignment=") ||
+                               g_str_has_prefix(token, "align:") || g_str_has_prefix(token, "alignment:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            alignment = g_strdup(value + 1);
+            alignment_set = TRUE;
+            continue;
+          }
+          g_print("Failed to parse alignment: %s\n", token);
+          continue;
+        }
+
         g_print("Warning: Unrecognized token in %s: %s\n", tokens[0], token);
       }
 
@@ -722,6 +752,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .text = clean_text,
         .text_color = text_color,
         .font_description = g_strdup(font_to_use),
+        .alignment = alignment,
       };
       ElementShape shape = {
         .shape_type = -1,
@@ -758,6 +789,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       g_free(note_text.font_description);
       g_free(clean_text);
       g_free(font_override);
+      // Note: alignment is owned by note_text, don't free here
     }
     else if (g_strcmp0(tokens[0], "text_create") == 0 && token_count >= 5) {
       // text_create ID "Text" (x,y) (width,height)
@@ -797,6 +829,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double rotation_degrees = 0.0;
       gboolean rotation_set = FALSE;
       gboolean expect_rotation = FALSE;
+      gchar *alignment = NULL;
+      gboolean alignment_set = FALSE;
+      gboolean expect_alignment = FALSE;
 
       for (int t = 5; t < token_count; t++) {
         const gchar *token = tokens[t];
@@ -922,6 +957,30 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (expect_alignment) {
+          alignment = g_strdup(token);
+          alignment_set = TRUE;
+          expect_alignment = FALSE;
+          continue;
+        }
+
+        if (!alignment_set && (g_strcmp0(token, "align") == 0 || g_strcmp0(token, "alignment") == 0)) {
+          expect_alignment = TRUE;
+          continue;
+        }
+        if (!alignment_set && (g_str_has_prefix(token, "align=") || g_str_has_prefix(token, "alignment=") ||
+                               g_str_has_prefix(token, "align:") || g_str_has_prefix(token, "alignment:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            alignment = g_strdup(value + 1);
+            alignment_set = TRUE;
+            continue;
+          }
+          g_print("Failed to parse alignment: %s\n", token);
+          continue;
+        }
+
         g_print("Warning: Unrecognized token in text_create: %s\n", token);
       }
 
@@ -947,6 +1006,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .text = clean_text,
         .text_color = text_color,
         .font_description = g_strdup(font_to_use),
+        .alignment = alignment,
       };
       ElementShape shape = {
         .shape_type = -1,
@@ -983,6 +1043,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       g_free(inline_text.font_description);
       g_free(clean_text);
       g_free(font_override);
+      // Note: alignment is owned by inline_text, don't free here
     }
     else if (g_strcmp0(tokens[0], "image_create") == 0 && token_count >= 5) {
       // image_create ID PATH (x,y) (width,height) [rotation DEGREES]
@@ -1406,6 +1467,19 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double rotation_degrees = 0.0;
       gboolean rotation_set = FALSE;
       gboolean expect_rotation = FALSE;
+      gchar *alignment = NULL;
+      gboolean alignment_set = FALSE;
+      gboolean expect_alignment = FALSE;
+
+      // Bezier curve support
+      gboolean expect_bezier_p0 = FALSE;
+      gboolean expect_bezier_p1 = FALSE;
+      gboolean expect_bezier_p2 = FALSE;
+      gboolean expect_bezier_p3 = FALSE;
+      double bezier_p0_u = 0.0, bezier_p0_v = 0.0;
+      double bezier_p1_u = 0.25, bezier_p1_v = 0.0;
+      double bezier_p2_u = 0.75, bezier_p2_v = 1.0;
+      double bezier_p3_u = 1.0, bezier_p3_v = 1.0;
 
       for (int t = 6; t < token_count; t++) {
         const gchar *token = tokens[t];
@@ -1739,6 +1813,160 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (expect_alignment) {
+          alignment = g_strdup(token);
+          alignment_set = TRUE;
+          expect_alignment = FALSE;
+          continue;
+        }
+
+        if (!alignment_set && (g_strcmp0(token, "align") == 0 || g_strcmp0(token, "alignment") == 0)) {
+          expect_alignment = TRUE;
+          continue;
+        }
+        if (!alignment_set && (g_str_has_prefix(token, "align=") || g_str_has_prefix(token, "alignment=") ||
+                               g_str_has_prefix(token, "align:") || g_str_has_prefix(token, "alignment:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            alignment = g_strdup(value + 1);
+            alignment_set = TRUE;
+            continue;
+          }
+          g_print("Failed to parse alignment: %s\n", token);
+          continue;
+        }
+
+        // Bezier curve control points
+        if (expect_bezier_p0 && shape_type == SHAPE_BEZIER) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p0 point: %s\n", token);
+          } else {
+            bezier_p0_u = fx;
+            bezier_p0_v = fy;
+          }
+          expect_bezier_p0 = FALSE;
+          continue;
+        }
+
+        if (expect_bezier_p1 && shape_type == SHAPE_BEZIER) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p1 point: %s\n", token);
+          } else {
+            bezier_p1_u = fx;
+            bezier_p1_v = fy;
+          }
+          expect_bezier_p1 = FALSE;
+          continue;
+        }
+
+        if (expect_bezier_p2 && shape_type == SHAPE_BEZIER) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p2 point: %s\n", token);
+          } else {
+            bezier_p2_u = fx;
+            bezier_p2_v = fy;
+          }
+          expect_bezier_p2 = FALSE;
+          continue;
+        }
+
+        if (expect_bezier_p3 && shape_type == SHAPE_BEZIER) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p3 point: %s\n", token);
+          } else {
+            bezier_p3_u = fx;
+            bezier_p3_v = fy;
+          }
+          expect_bezier_p3 = FALSE;
+          continue;
+        }
+
+        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p0") == 0 || g_strcmp0(token, "bezier_p0") == 0)) {
+          expect_bezier_p0 = TRUE;
+          continue;
+        }
+        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p1") == 0 || g_strcmp0(token, "bezier_p1") == 0)) {
+          expect_bezier_p1 = TRUE;
+          continue;
+        }
+        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p2") == 0 || g_strcmp0(token, "bezier_p2") == 0)) {
+          expect_bezier_p2 = TRUE;
+          continue;
+        }
+        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p3") == 0 || g_strcmp0(token, "bezier_p3") == 0)) {
+          expect_bezier_p3 = TRUE;
+          continue;
+        }
+
+        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p0=") || g_str_has_prefix(token, "bezier_p0=") ||
+                                            g_str_has_prefix(token, "p0:") || g_str_has_prefix(token, "bezier_p0:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            double fx, fy;
+            if (parse_float_point(value + 1, &fx, &fy)) {
+              bezier_p0_u = fx;
+              bezier_p0_v = fy;
+              continue;
+            }
+          }
+          g_print("Failed to parse bezier p0 point: %s\n", token);
+          continue;
+        }
+
+        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p1=") || g_str_has_prefix(token, "bezier_p1=") ||
+                                            g_str_has_prefix(token, "p1:") || g_str_has_prefix(token, "bezier_p1:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            double fx, fy;
+            if (parse_float_point(value + 1, &fx, &fy)) {
+              bezier_p1_u = fx;
+              bezier_p1_v = fy;
+              continue;
+            }
+          }
+          g_print("Failed to parse bezier p1 point: %s\n", token);
+          continue;
+        }
+
+        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p2=") || g_str_has_prefix(token, "bezier_p2=") ||
+                                            g_str_has_prefix(token, "p2:") || g_str_has_prefix(token, "bezier_p2:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            double fx, fy;
+            if (parse_float_point(value + 1, &fx, &fy)) {
+              bezier_p2_u = fx;
+              bezier_p2_v = fy;
+              continue;
+            }
+          }
+          g_print("Failed to parse bezier p2 point: %s\n", token);
+          continue;
+        }
+
+        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p3=") || g_str_has_prefix(token, "bezier_p3=") ||
+                                            g_str_has_prefix(token, "p3:") || g_str_has_prefix(token, "bezier_p3:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            double fx, fy;
+            if (parse_float_point(value + 1, &fx, &fy)) {
+              bezier_p3_u = fx;
+              bezier_p3_v = fy;
+              continue;
+            }
+          }
+          g_print("Failed to parse bezier p3 point: %s\n", token);
+          continue;
+        }
+
         g_print("Warning: Unrecognized token in shape_create: %s\n", token);
       }
 
@@ -1764,6 +1992,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       };
 
       GArray *line_points = NULL;
+      GArray *bezier_points = NULL;
       if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
         if (!line_start_defined) {
           line_start_u = 0.0;
@@ -1785,6 +2014,21 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         g_array_append_val(line_points, end_point);
 
         drawing.drawing_points = line_points;
+      } else if (shape_type == SHAPE_BEZIER) {
+        bezier_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 4);
+
+        DrawingPoint p0, p1, p2, p3;
+        graphene_point_init(&p0, (float)bezier_p0_u, (float)bezier_p0_v);
+        graphene_point_init(&p1, (float)bezier_p1_u, (float)bezier_p1_v);
+        graphene_point_init(&p2, (float)bezier_p2_u, (float)bezier_p2_v);
+        graphene_point_init(&p3, (float)bezier_p3_u, (float)bezier_p3_v);
+
+        g_array_append_val(bezier_points, p0);
+        g_array_append_val(bezier_points, p1);
+        g_array_append_val(bezier_points, p2);
+        g_array_append_val(bezier_points, p3);
+
+        drawing.drawing_points = bezier_points;
       }
 
       const gchar *font_to_use = font_override ? font_override : default_font;
@@ -1792,6 +2036,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         .text = clean_text,
         .text_color = text_color,
         .font_description = g_strdup(font_to_use),
+        .alignment = alignment,
       };
       ElementShape shape_elem = {
         .shape_type = shape_type,
@@ -1828,10 +2073,14 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       if (line_points) {
         g_array_free(line_points, TRUE);
       }
+      if (bezier_points) {
+        g_array_free(bezier_points, TRUE);
+      }
 
       g_free(text_elem.font_description);
       g_free(clean_text);
       g_free(font_override);
+      // Note: alignment is owned by text_elem, don't free here
     }
     else if (g_strcmp0(tokens[0], "connect") == 0 && token_count >= 3) {
       // connect FROM_ID TO_ID [TYPE] [ARROWHEAD] [color(...)|#RRGGBB[AA]]

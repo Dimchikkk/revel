@@ -2,9 +2,13 @@
 
 # DSL quick reference (each command is one line):
 #   canvas_background (bg_r,bg_g,bg_b,bg_a) SHOW_GRID (grid_r,grid_g,grid_b,grid_a)
-#   note_create|paper_note_create ID "Text" (x,y) (w,h) [bg <color>] [text_color <color>] [font "Font Name"] [rotation DEGREES]
-#   text_create ID "Text" (x,y) (w,h) [bg <color>] [text_color <color>] [font "Font Name"] [rotation DEGREES]
-#   shape_create ID TYPE "Text" (x,y) (w,h) [bg <color>] [stroke <width>] [stroke_color <color>] [filled <bool>] [fill_style solid|hachure|crosshatch] [font "Font Name"] [text_color <color>] [rotation DEGREES]
+#   note_create|paper_note_create ID "Text" (x,y) (w,h) [bg <color>] [text_color <color>] [font "Font Name"] [align ALIGNMENT] [rotation DEGREES]
+#   text_create ID "Text" (x,y) (w,h) [bg <color>] [text_color <color>] [font "Font Name"] [align ALIGNMENT] [rotation DEGREES]
+#   shape_create ID TYPE "Text" (x,y) (w,h) [bg <color>] [stroke <width>] [stroke_color <color>] [filled <bool>] [fill_style solid|hachure|crosshatch] [font "Font Name"] [text_color <color>] [align ALIGNMENT] [rotation DEGREES]
+#     • TYPE can be: circle, rectangle, triangle, diamond, vcylinder, hcylinder, roundedrect, line, arrow, bezier
+#     • ALIGNMENT can be: top-left, top-center, top-right, center, bottom-left, bottom-right
+#     • For bezier curves, add: [p0 (u,v)] [p1 (u,v)] [p2 (u,v)] [p3 (u,v)] where u,v are 0.0-1.0
+#     • For line/arrow shapes, add: [line_start (u,v)] [line_end (u,v)] where u,v are 0.0-1.0
 #   image_create ID /abs/path/to.png (x,y) (w,h) [rotation DEGREES]
 #   video_create ID /abs/path/to.mp4 (x,y) (w,h) [rotation DEGREES]
 #   space_create ID "Name" (x,y) (w,h) [rotation DEGREES]

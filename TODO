@@ -1,5 +1,4 @@
-- [improvement] DSL improvements: allow text alignment as optional property, support Bezier curves
-- [new feature] save images/videos to file via context menu
+- [new feature] save images/videos via context menu
 - [fix] support mp4 files without audio channel
 - [idea to explore] collaborative editing
 - [idea to explore] different type of spaces (e.g. task board space, music player space)
