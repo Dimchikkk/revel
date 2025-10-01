@@ -622,6 +622,11 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
     return;
   }
 
+  // Redraw to update guide lines when in drawing mode
+  if (data->drawing_mode && !data->shape_mode && !data->current_drawing) {
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+
   if (data->panning) {
     int dx = (int)x - data->pan_start_x;
     int dy = (int)y - data->pan_start_y;

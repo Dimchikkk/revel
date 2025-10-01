@@ -510,6 +510,38 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     element_draw((Element*)data->current_shape, cr, FALSE);
   }
 
+  // Draw guide lines in drawing mode
+  if (data->drawing_mode) {
+    int mouse_cx, mouse_cy;
+    canvas_screen_to_canvas(data, data->last_mouse_x, data->last_mouse_y, &mouse_cx, &mouse_cy);
+
+    // Calculate visible area in canvas coordinates
+    int start_x = (int)(-data->offset_x - 100);
+    int start_y = (int)(-data->offset_y - 100);
+    int end_x = (int)(-data->offset_x + width / data->zoom_scale + 100);
+    int end_y = (int)(-data->offset_y + height / data->zoom_scale + 100);
+
+    cairo_save(cr);
+
+    // Set dashed line pattern
+    double dashes[] = {10.0 / data->zoom_scale, 5.0 / data->zoom_scale};
+    cairo_set_dash(cr, dashes, 2, 0);
+    cairo_set_line_width(cr, 1.0 / data->zoom_scale);
+    cairo_set_source_rgba(cr, 0.6, 0.6, 0.6, 0.5); // Light gray with transparency
+
+    // Draw vertical guide line
+    cairo_move_to(cr, mouse_cx, start_y);
+    cairo_line_to(cr, mouse_cx, end_y);
+    cairo_stroke(cr);
+
+    // Draw horizontal guide line
+    cairo_move_to(cr, start_x, mouse_cy);
+    cairo_line_to(cr, end_x, mouse_cy);
+    cairo_stroke(cr);
+
+    cairo_restore(cr);
+  }
+
   if (data->selecting) {
     int start_cx, start_cy, current_cx, current_cy;
     canvas_screen_to_canvas(data, data->start_x, data->start_y, &start_cx, &start_cy);
