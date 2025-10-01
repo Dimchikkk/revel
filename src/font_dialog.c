@@ -165,7 +165,11 @@ static void update_visual_element(FontDialogData *data) {
     }
     break;
   }
-  case ELEMENT_INLINE_TEXT:
+  case ELEMENT_INLINE_TEXT: {
+    InlineText* el = (InlineText*)data->element;
+    update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    break;
+  }
   case ELEMENT_CONNECTION:
   case ELEMENT_FREEHAND_DRAWING:
     g_free(new_font_desc);
