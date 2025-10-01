@@ -1,3 +1,4 @@
+- [improvement] when inserting copied elements center them to cursor position
 - [new feature] save images/videos via context menu
 - [fix] support mp4 files without audio channel
 - [idea to explore] collaborative editing

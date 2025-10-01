@@ -1911,7 +1911,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
           g_menu_append(modify_section, "Change Text", "menu.change-text");
         }
 
-        // Only show "Change Background Color" if:
+        // Only show "Change Color" if:
         // - Not a shape, OR
         // - A shape that is filled AND not LINE/ARROW/BEZIER
         gboolean show_bg_color = TRUE;
@@ -1925,7 +1925,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
           }
         }
         if (show_bg_color) {
-          g_menu_append(modify_section, "Change Background Color", "menu.change-color");
+          g_menu_append(modify_section, "Change Color", "menu.change-color");
         }
 
         if (element->type == ELEMENT_SHAPE) {
