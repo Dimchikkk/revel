@@ -129,7 +129,7 @@ void clone_dialog_open(CanvasData *canvas_data, ModelElement *element) {
   gtk_box_append(GTK_BOX(content), GTK_WIDGET(dialog_data->position_check));
 
   // Color checkbox
-  dialog_data->color_check = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Clone by Color"));
+  dialog_data->color_check = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Clone by Background Color"));
   gtk_widget_set_sensitive(GTK_WIDGET(dialog_data->color_check), element->bg_color != NULL);
   gtk_widget_set_margin_bottom(GTK_WIDGET(dialog_data->color_check), 8);
   gtk_box_append(GTK_BOX(content), GTK_WIDGET(dialog_data->color_check));

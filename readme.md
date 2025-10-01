@@ -55,6 +55,8 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
     * **Fork:** Create independent copies
     * **Clone by text:** Share text content across elements
     * **Clone by size:** Share dimensions across elements
+    * **Clone by position** Multiple elements move together
+    * **Clone by color** Color changes propagate across clones
 
 ### Advanced Features
 * **Comprehensive undo/redo:** Track all actions with detailed history log
