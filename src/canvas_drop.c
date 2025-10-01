@@ -274,6 +274,7 @@ static void create_media_note_from_pixbuf(CanvasData *data, GdkPixbuf *pixbuf,
       .text = g_strdup(filename),
       .text_color = text_color,
       .font_description = g_strdup("Ubuntu Mono 12"),
+      .alignment = g_strdup("bottom-right"),
     };
     ElementConfig config = {
       .type = ELEMENT_MEDIA_FILE,
@@ -523,6 +524,7 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
                 .text = filename,
                 .text_color = text_color,
                 .font_description = g_strdup("Ubuntu Mono 12"),
+                .alignment = g_strdup("bottom-right"),
               };
               ElementConfig config = {
                 .type = ELEMENT_MEDIA_FILE,

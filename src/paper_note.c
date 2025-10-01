@@ -44,6 +44,7 @@ PaperNote* paper_note_create(ElementPosition position,
   note->text_b = text.text_color.b;
   note->text_a = text.text_color.a;
   note->font_description = g_strdup(text.font_description);
+  note->alignment = g_strdup(text.alignment ? text.alignment : "top-left");
   return note;
 }
 
@@ -152,20 +153,41 @@ void paper_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_layout_set_text(layout, note->text, -1);
     pango_layout_set_width(layout, (element->width - 10) * PANGO_SCALE);
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
+    pango_layout_set_alignment(layout, element_get_pango_alignment(note->alignment));
 
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
     cairo_set_source_rgba(cr, note->text_r, note->text_g, note->text_b, note->text_a);
 
+    int padding = 5;
+    int text_x = element->x + padding;
+    int text_y;
+
+    // Calculate vertical position based on alignment
+    VerticalAlign valign = element_get_vertical_alignment(note->alignment);
+    switch (valign) {
+    case VALIGN_TOP:
+      text_y = element->y + padding;
+      break;
+    case VALIGN_BOTTOM:
+      text_y = element->y + element->height - padding - text_height;
+      if (text_y < element->y + padding) text_y = element->y + padding;
+      break;
+    case VALIGN_CENTER:
+    default:
+      text_y = element->y + (element->height - text_height) / 2;
+      if (text_y < element->y + padding) text_y = element->y + padding;
+      break;
+    }
+
     if (text_height <= element->height - 10) {
-      cairo_move_to(cr, element->x + 5, element->y + 5);
+      cairo_move_to(cr, text_x, text_y);
       pango_cairo_show_layout(cr, layout);
     } else {
       pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
       pango_layout_set_height(layout, (element->height - 10) * PANGO_SCALE);
-      cairo_move_to(cr, element->x + 5, element->y + 5);
+      cairo_move_to(cr, text_x, text_y);
       pango_cairo_show_layout(cr, layout);
     }
 
@@ -367,6 +389,7 @@ void paper_note_free(Element *element) {
   PaperNote *note = (PaperNote*)element;
   if (note->text) g_free(note->text);
   if (note->font_description) g_free(note->font_description);
+  if (note->alignment) g_free(note->alignment);
   if (note->scrolled_window && GTK_IS_WIDGET(note->scrolled_window) &&
       gtk_widget_get_parent(note->scrolled_window)) {
     gtk_widget_unparent(note->scrolled_window);

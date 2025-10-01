@@ -36,6 +36,7 @@ int database_create_text_ref(sqlite3 *db,
                              const char *text,
                              double r, double g, double b, double a,
                              const char *font_description,
+                             const char *alignment,
                              int *text_id);
 int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text);
 int database_update_text_ref(sqlite3 *db, ModelText *text);

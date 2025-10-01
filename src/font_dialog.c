@@ -21,8 +21,10 @@ typedef struct {
   GtkWidget *bold_check;
   GtkWidget *italic_check;
   GtkWidget *color_button;
+  GtkWidget *alignment_combo;
   char *original_font_desc;
   double original_r, original_g, original_b, original_a;
+  char *original_alignment;
 } FontDialogData;
 
 char* get_font_family_from_desc(const char *font_desc) {
@@ -76,6 +78,9 @@ static void font_dialog_data_free(FontDialogData *data) {
   if (data->element_uuid) {
     g_free(data->element_uuid);
   }
+  if (data->original_alignment) {
+    g_free(data->original_alignment);
+  }
   g_free(data);
 }
 
@@ -105,38 +110,62 @@ static void update_visual_element(FontDialogData *data) {
   GdkRGBA new_color;
   gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &new_color);
 
+  // Get selected alignment (if alignment combo exists)
+  const char *new_alignment = NULL;
+  if (data->alignment_combo) {
+    guint alignment_index = gtk_drop_down_get_selected(GTK_DROP_DOWN(data->alignment_combo));
+    const char *alignment_values[] = {"top-left", "top-center", "top-right", "center", "bottom-left", "bottom-right"};
+    new_alignment = alignment_values[alignment_index];
+  }
+
   // Update visual element immediately
   switch (data->element->type) {
   case ELEMENT_NOTE: {
     Note* el = (Note*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    if (new_alignment) {
+      g_free(el->alignment);
+      el->alignment = g_strdup(new_alignment);
+    }
     break;
   }
   case ELEMENT_PAPER_NOTE: {
     PaperNote* el = (PaperNote*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    if (new_alignment) {
+      g_free(el->alignment);
+      el->alignment = g_strdup(new_alignment);
+    }
     break;
   }
   case ELEMENT_SPACE: {
     SpaceElement* el = (SpaceElement*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    if (new_alignment) {
+      g_free(el->alignment);
+      el->alignment = g_strdup(new_alignment);
+    }
     break;
   }
   case ELEMENT_MEDIA_FILE: {
     MediaNote* el = (MediaNote*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    if (new_alignment) {
+      g_free(el->alignment);
+      el->alignment = g_strdup(new_alignment);
+    }
     break;
   }
   case ELEMENT_SHAPE: {
     Shape* el = (Shape*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    if (new_alignment) {
+      g_free(el->alignment);
+      el->alignment = g_strdup(new_alignment);
+    }
     break;
   }
-  case ELEMENT_INLINE_TEXT: {
-    InlineText* el = (InlineText*)data->element;
-    update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
-    break;
-  }
+  case ELEMENT_INLINE_TEXT:
   case ELEMENT_CONNECTION:
   case ELEMENT_FREEHAND_DRAWING:
     g_free(new_font_desc);
@@ -169,6 +198,14 @@ static void apply_font_changes(FontDialogData *data) {
   model_update_text_color(model, model_element, new_color.red, new_color.green, new_color.blue, new_color.alpha);
   model_update_font(model, model_element, new_font_desc);
 
+  // Get selected alignment (if alignment combo exists)
+  if (data->alignment_combo) {
+    guint alignment_index = gtk_drop_down_get_selected(GTK_DROP_DOWN(data->alignment_combo));
+    const char *alignment_values[] = {"top-left", "top-center", "top-right", "center", "bottom-left", "bottom-right"};
+    const char *new_alignment = alignment_values[alignment_index];
+    model_update_text_alignment(model, model_element, new_alignment);
+  }
+
   canvas_sync_with_model(data->element->canvas_data);
   gtk_widget_queue_draw(data->element->canvas_data->drawing_area);
 
@@ -190,30 +227,40 @@ static void revert_visual_changes(FontDialogData *data) {
     Note* el = (Note*)data->element;
     update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
                          &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    g_free(el->alignment);
+    el->alignment = g_strdup(data->original_alignment);
     break;
   }
   case ELEMENT_PAPER_NOTE: {
     PaperNote* el = (PaperNote*)data->element;
     update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
                          &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    g_free(el->alignment);
+    el->alignment = g_strdup(data->original_alignment);
     break;
   }
   case ELEMENT_SPACE: {
     SpaceElement* el = (SpaceElement*)data->element;
     update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
                          &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    g_free(el->alignment);
+    el->alignment = g_strdup(data->original_alignment);
     break;
   }
   case ELEMENT_MEDIA_FILE: {
     MediaNote* el = (MediaNote*)data->element;
     update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
                          &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    g_free(el->alignment);
+    el->alignment = g_strdup(data->original_alignment);
     break;
   }
   case ELEMENT_SHAPE: {
     Shape* el = (Shape*)data->element;
     update_font_and_color(&el->font_description, g_strdup(data->original_font_desc),
                          &el->text_r, &el->text_g, &el->text_b, &el->text_a, &original_color);
+    g_free(el->alignment);
+    el->alignment = g_strdup(data->original_alignment);
     break;
   }
   case ELEMENT_INLINE_TEXT: {
@@ -259,6 +306,10 @@ static void copy_original_font_and_color(FontDialogData *data,
 
 static void on_font_selection_changed(GtkWidget *widget, FontDialogData *data) {
   update_visual_element(data); // Update visual element immediately on change
+}
+
+static void on_alignment_changed(GtkDropDown *dropdown, GParamSpec *pspec, FontDialogData *data) {
+  update_visual_element(data); // Update visual element immediately on alignment change
 }
 
 void font_dialog_open(CanvasData *canvas_data, Element *element) {
@@ -357,16 +408,26 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   int n_families;
   pango_font_map_list_families(font_map, &families, &n_families);
 
+  // Resolve which font Pango actually uses from the description
+  PangoFontDescription *resolved_desc = pango_font_description_from_string(data->original_font_desc);
+  PangoFont *resolved_font = pango_font_map_load_font(font_map, NULL, resolved_desc);
+  PangoFontDescription *actual_desc = pango_font_describe(resolved_font);
+  const char *resolved_family = pango_font_description_get_family(actual_desc);
+
   int current_index = 0;
   for (int i = 0; i < n_families; i++) {
     const char *family_name = pango_font_family_get_name(families[i]);
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(data->font_combo), family_name);
 
-    if (g_strcmp0(family_name, current_family) == 0) {
+    if (g_strcmp0(family_name, resolved_family) == 0) {
       current_index = i;
     }
   }
   gtk_combo_box_set_active(GTK_COMBO_BOX(data->font_combo), current_index);
+
+  pango_font_description_free(actual_desc);
+  g_object_unref(resolved_font);
+  pango_font_description_free(resolved_desc);
   g_free(families);
   g_free(current_family);
 
@@ -420,8 +481,67 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   gtk_grid_attach(GTK_GRID(color_grid), color_label, 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(color_grid), data->color_button, 1, 0, 1, 1);
 
+  // Alignment Selection Frame (not shown for inline text)
+  GtkWidget *alignment_frame = NULL;
+  if (element->type != ELEMENT_INLINE_TEXT) {
+    alignment_frame = gtk_frame_new("Alignment");
+    GtkWidget *alignment_grid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(alignment_grid), 12);
+    gtk_grid_set_row_spacing(GTK_GRID(alignment_grid), 12);
+    gtk_frame_set_child(GTK_FRAME(alignment_frame), alignment_grid);
+    gtk_widget_set_margin_top(alignment_grid, 12);
+    gtk_widget_set_margin_bottom(alignment_grid, 12);
+    gtk_widget_set_margin_start(alignment_grid, 12);
+    gtk_widget_set_margin_end(alignment_grid, 12);
+
+    GtkWidget *alignment_label = gtk_label_new("Text Alignment:");
+    gtk_widget_set_halign(alignment_label, GTK_ALIGN_START);
+    data->alignment_combo = gtk_drop_down_new_from_strings((const char *[]){
+      "Top-Left", "Top-Center", "Top-Right", "Center", "Bottom-Left", "Bottom-Right", NULL
+    });
+
+  // Get current alignment from element
+  const char *current_alignment = NULL;
+  if (element->type == ELEMENT_NOTE) {
+    Note *note = (Note*)element;
+    current_alignment = note->alignment;
+  } else if (element->type == ELEMENT_PAPER_NOTE) {
+    PaperNote *note = (PaperNote*)element;
+    current_alignment = note->alignment;
+  } else if (element->type == ELEMENT_SPACE) {
+    SpaceElement *space = (SpaceElement*)element;
+    current_alignment = space->alignment;
+  } else if (element->type == ELEMENT_MEDIA_FILE) {
+    MediaNote *media = (MediaNote*)element;
+    current_alignment = media->alignment;
+  } else if (element->type == ELEMENT_SHAPE) {
+    Shape *shape = (Shape*)element;
+    current_alignment = shape->alignment;
+  }
+
+    data->original_alignment = current_alignment ? g_strdup(current_alignment) : g_strdup("center");
+
+    // Set current selection
+    int selected_index = 3; // Default to "Center"
+    if (current_alignment) {
+      if (g_strcmp0(current_alignment, "top-left") == 0) selected_index = 0;
+      else if (g_strcmp0(current_alignment, "top-center") == 0) selected_index = 1;
+      else if (g_strcmp0(current_alignment, "top-right") == 0) selected_index = 2;
+      else if (g_strcmp0(current_alignment, "center") == 0) selected_index = 3;
+      else if (g_strcmp0(current_alignment, "bottom-left") == 0) selected_index = 4;
+      else if (g_strcmp0(current_alignment, "bottom-right") == 0) selected_index = 5;
+    }
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(data->alignment_combo), selected_index);
+
+    gtk_grid_attach(GTK_GRID(alignment_grid), alignment_label, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(alignment_grid), data->alignment_combo, 1, 0, 1, 1);
+  }
+
   gtk_box_append(GTK_BOX(main_box), font_frame);
   gtk_box_append(GTK_BOX(main_box), color_frame);
+  if (alignment_frame) {
+    gtk_box_append(GTK_BOX(main_box), alignment_frame);
+  }
 
   g_signal_connect_data(data->font_combo, "changed",
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);
@@ -433,6 +553,10 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);
   g_signal_connect_data(data->color_button, "color-set",
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);
+  if (data->alignment_combo) {
+    g_signal_connect_data(data->alignment_combo, "notify::selected",
+                         G_CALLBACK(on_alignment_changed), data, NULL, 0);
+  }
 
   g_signal_connect(data->dialog, "response", G_CALLBACK(on_font_dialog_response), data);
 

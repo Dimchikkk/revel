@@ -39,8 +39,8 @@ int database_create_tables(sqlite3 *db) {
     "    parent_uuid TEXT,"       // UUID of parent space
     "    is_current BOOLEAN DEFAULT 0,"
     "    background_color TEXT DEFAULT '#181818',"  // Background color in hex format
-    "    grid_enabled BOOLEAN DEFAULT 0,"           // Whether grid is enabled
-    "    grid_color TEXT DEFAULT '#CCCCCC',"        // Grid color in hex format
+    "    grid_enabled BOOLEAN DEFAULT 1,"           // Whether grid is enabled
+    "    grid_color TEXT DEFAULT '#999999',"        // Grid color in hex format
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (parent_uuid) REFERENCES spaces(uuid)"
     ");"
@@ -89,6 +89,7 @@ int database_create_tables(sqlite3 *db) {
     "    text_b REAL NOT NULL DEFAULT 0.1,"
     "    text_a REAL NOT NULL DEFAULT 1.0,"
     "    font_description TEXT DEFAULT 'Ubuntu Mono Bold 16',"
+    "    alignment TEXT DEFAULT 'center',"  // 'center', 'lefttop', 'left', 'right'
     "    ref_count INTEGER DEFAULT 1,"
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"
@@ -286,8 +287,9 @@ int database_create_text_ref(sqlite3 *db,
                              const char *text,
                              double text_r, double text_g, double text_b, double text_a,
                              const char *font_description,
+                             const char *alignment,
                              int *text_id) {
-  const char *sql = "INSERT INTO text_refs (text, text_r, text_g, text_b, text_a, font_description) VALUES (?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO text_refs (text, text_r, text_g, text_b, text_a, font_description, alignment) VALUES (?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -301,6 +303,7 @@ int database_create_text_ref(sqlite3 *db,
   sqlite3_bind_double(stmt, 4, text_b);
   sqlite3_bind_double(stmt, 5, text_a);
   sqlite3_bind_text(stmt, 6, font_description, -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 7, alignment, -1, SQLITE_STATIC);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create text: %s\n", sqlite3_errmsg(db));
@@ -322,7 +325,7 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
     return 0; // Error - invalid input
   }
 
-  const char *sql = "SELECT text, text_r, text_g, text_b, text_a, font_description, ref_count FROM text_refs WHERE id = ?";
+  const char *sql = "SELECT text, text_r, text_g, text_b, text_a, font_description, alignment, ref_count FROM text_refs WHERE id = ?";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -348,7 +351,14 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
       model_text->font_description = g_strdup("Ubuntu Mono Bold 12"); // Default
     }
 
-    model_text->ref_count = sqlite3_column_int(stmt, 6);
+    const char *alignment = (const char*)sqlite3_column_text(stmt, 6);
+    if (alignment) {
+      model_text->alignment = g_strdup(alignment);
+    } else {
+      model_text->alignment = NULL; // Let element type set its own default
+    }
+
+    model_text->ref_count = sqlite3_column_int(stmt, 7);
 
     *text = model_text;
     sqlite3_finalize(stmt);
@@ -666,7 +676,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
       if (!database_create_text_ref(db, element->text->text,
                                    element->text->r, element->text->g,
                                    element->text->b, element->text->a,
-                                   element->text->font_description, &text_id)) return 0;
+                                   element->text->font_description,
+                                   element->text->alignment, &text_id)) return 0;
       element->text->id = text_id;
     } else {
       // Update existing text reference
@@ -1755,7 +1766,7 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
     return 0;
   }
 
-  const char *sql = "UPDATE text_refs SET text = ?, text_r = ?, text_g = ?, text_b = ?, text_a = ?, font_description = ?, ref_count = ? WHERE id = ?";
+  const char *sql = "UPDATE text_refs SET text = ?, text_r = ?, text_g = ?, text_b = ?, text_a = ?, font_description = ?, alignment = ?, ref_count = ? WHERE id = ?";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -1769,8 +1780,9 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
   sqlite3_bind_double(stmt, 4, text->b);
   sqlite3_bind_double(stmt, 5, text->a);
   sqlite3_bind_text(stmt, 6, text->font_description, -1, SQLITE_STATIC);
-  sqlite3_bind_int(stmt, 7, text->ref_count);
-  sqlite3_bind_int(stmt, 8, text->id);
+  sqlite3_bind_text(stmt, 7, text->alignment, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 8, text->ref_count);
+  sqlite3_bind_int(stmt, 9, text->id);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to update text: %s\n", sqlite3_errmsg(db));

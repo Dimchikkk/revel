@@ -133,3 +133,39 @@ void element_draw_rotation_handle(Element *element, cairo_t *cr) {
   cairo_set_line_width(cr, 1.5);
   cairo_stroke(cr);
 }
+
+const char* element_alignment_to_string(TextAlignment alignment) {
+  switch (alignment) {
+    case TEXT_ALIGN_TOP_LEFT: return "top-left";
+    case TEXT_ALIGN_TOP_CENTER: return "top-center";
+    case TEXT_ALIGN_TOP_RIGHT: return "top-right";
+    case TEXT_ALIGN_CENTER: return "center";
+    case TEXT_ALIGN_BOTTOM_LEFT: return "bottom-left";
+    case TEXT_ALIGN_BOTTOM_RIGHT: return "bottom-right";
+    default: return "center";
+  }
+}
+
+TextAlignment element_string_to_alignment(const char *alignment) {
+  if (!alignment) return TEXT_ALIGN_CENTER;
+  if (g_strcmp0(alignment, "top-left") == 0) return TEXT_ALIGN_TOP_LEFT;
+  if (g_strcmp0(alignment, "top-center") == 0) return TEXT_ALIGN_TOP_CENTER;
+  if (g_strcmp0(alignment, "top-right") == 0) return TEXT_ALIGN_TOP_RIGHT;
+  if (g_strcmp0(alignment, "bottom-left") == 0) return TEXT_ALIGN_BOTTOM_LEFT;
+  if (g_strcmp0(alignment, "bottom-right") == 0) return TEXT_ALIGN_BOTTOM_RIGHT;
+  return TEXT_ALIGN_CENTER;
+}
+
+PangoAlignment element_get_pango_alignment(const char *alignment) {
+  if (!alignment) return PANGO_ALIGN_CENTER;
+  if (g_str_has_suffix(alignment, "left")) return PANGO_ALIGN_LEFT;
+  if (g_str_has_suffix(alignment, "right")) return PANGO_ALIGN_RIGHT;
+  return PANGO_ALIGN_CENTER;
+}
+
+VerticalAlign element_get_vertical_alignment(const char *alignment) {
+  if (!alignment) return VALIGN_CENTER;
+  if (g_str_has_prefix(alignment, "top-")) return VALIGN_TOP;
+  if (g_str_has_prefix(alignment, "bottom-")) return VALIGN_BOTTOM;
+  return VALIGN_CENTER;
+}

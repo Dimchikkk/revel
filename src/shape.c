@@ -563,19 +563,38 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_layout_set_text(layout, shape->text, -1);
     pango_layout_set_width(layout, (element->width - 20) * PANGO_SCALE);
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+    pango_layout_set_alignment(layout, element_get_pango_alignment(shape->alignment));
 
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
     cairo_set_source_rgba(cr, shape->text_r, shape->text_g, shape->text_b, shape->text_a);
 
-    // Center text both horizontally and vertically with proper padding
+    // Position text based on alignment
     int padding = 10;
     int available_height = element->height - (2 * padding);
 
-    int text_x = element->x + padding;
-    int text_y = element->y + padding + (available_height - text_height) / 2;
+    // Calculate horizontal position based on alignment
+    int text_x;
+    PangoAlignment pango_align = element_get_pango_alignment(shape->alignment);
+    if (pango_align == PANGO_ALIGN_LEFT) {
+      text_x = element->x + padding;
+    } else if (pango_align == PANGO_ALIGN_RIGHT) {
+      text_x = element->x + padding;  // Same as left because we use pango_layout_set_width
+    } else {
+      text_x = element->x + padding;
+    }
+
+    // Calculate vertical position based on alignment
+    int text_y;
+    VerticalAlign valign = element_get_vertical_alignment(shape->alignment);
+    if (valign == VALIGN_TOP) {
+      text_y = element->y + padding;
+    } else if (valign == VALIGN_BOTTOM) {
+      text_y = element->y + element->height - padding - text_height;
+    } else {
+      text_y = element->y + padding + (available_height - text_height) / 2;
+    }
 
     // Ensure text doesn't go outside bounds
     if (text_y < element->y + padding) {
@@ -759,6 +778,7 @@ void shape_free(Element *element) {
   Shape *shape = (Shape*)element;
   if (shape->text) g_free(shape->text);
   if (shape->font_description) g_free(shape->font_description);
+  if (shape->alignment) g_free(shape->alignment);
   if (shape->scrolled_window && GTK_IS_WIDGET(shape->scrolled_window) &&
       gtk_widget_get_parent(shape->scrolled_window)) {
     gtk_widget_unparent(shape->scrolled_window);
@@ -818,6 +838,7 @@ Shape* shape_create(ElementPosition position,
   shape->text_b = text.text_color.b;
   shape->text_a = text.text_color.a;
   shape->font_description = g_strdup(text.font_description);
+  shape->alignment = g_strdup(text.alignment ? text.alignment : "center");
   shape->text_view = NULL;
   shape->scrolled_window = NULL;
   shape->editing = FALSE;

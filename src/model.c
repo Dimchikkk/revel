@@ -49,6 +49,7 @@ void model_text_free(ModelText *text) {
   if (!text) return;
   g_free(text->text);
   g_free(text->font_description);
+  g_free(text->alignment);
   g_free(text);
 }
 
@@ -229,6 +230,16 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
     model_text->b = config.text.text_color.b;
     model_text->a = config.text.text_color.a;
     model_text->ref_count = 1;
+
+    // Use alignment from config if provided, otherwise set default based on element type
+    if (config.text.alignment) {
+      model_text->alignment = g_strdup(config.text.alignment);
+    } else if (config.type == ELEMENT_PAPER_NOTE) {
+      model_text->alignment = g_strdup("top-left");
+    } else {
+      model_text->alignment = g_strdup("center");
+    }
+
     element->text = model_text;
   }
 
@@ -377,6 +388,14 @@ int model_update_text(Model *model, ModelElement *element, const char *text) {
     element->text = g_new0(ModelText, 1);
     element->text->text = g_strdup(text);
     element->text->ref_count = 1;
+
+    // Set default alignment based on element type
+    if (element->type && element->type->type == ELEMENT_PAPER_NOTE) {
+      element->text->alignment = g_strdup("top-left");
+    } else {
+      element->text->alignment = g_strdup("center");
+    }
+
     if (element->state != MODEL_STATE_NEW) {
       element->state = MODEL_STATE_UPDATED;
     }
@@ -429,6 +448,30 @@ int model_update_font(Model *model, ModelElement *element, const char *font_desc
       strcmp(element->text->font_description, font_description) != 0) {
     g_free(element->text->font_description);
     element->text->font_description = g_strdup(font_description);
+    if (element->state != MODEL_STATE_NEW) {
+      element->state = MODEL_STATE_UPDATED;
+    }
+    return 1;
+  }
+
+  return 0; // No change needed
+}
+
+int model_update_text_alignment(Model *model, ModelElement *element, const char *alignment) {
+  if (!model || !element || !alignment) {
+    return 0;
+  }
+
+  // If element has no text reference, cannot set alignment
+  if (!element->text) {
+    return 0;
+  }
+
+  // If alignment changed, update it
+  if (!element->text->alignment ||
+      strcmp(element->text->alignment, alignment) != 0) {
+    g_free(element->text->alignment);
+    element->text->alignment = g_strdup(alignment);
     if (element->state != MODEL_STATE_NEW) {
       element->state = MODEL_STATE_UPDATED;
     }
@@ -711,6 +754,7 @@ ModelElement* model_element_clone(Model *model, ModelElement *element, CloneFlag
   if ((flags & CLONE_FLAG_TEXT) && element->text && cloned_element->text) {
     g_free(cloned_element->text->text);
     g_free(cloned_element->text->font_description);
+    g_free(cloned_element->text->alignment);
     g_free(cloned_element->text);
 
     cloned_element->text = element->text;

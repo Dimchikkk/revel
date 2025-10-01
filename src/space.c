@@ -57,15 +57,30 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   // Set text width to fit within the rounded rectangle (with padding)
   pango_layout_set_width(layout, (width - 40) * PANGO_SCALE); // 20px padding on each side
-  pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
+  pango_layout_set_alignment(layout, element_get_pango_alignment(space_elem->alignment));
   pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
 
   int text_width, text_height;
   pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
-  // Center text within the element
-  double text_x = x + (width - text_width) / 2;
-  double text_y = y + (height - text_height) / 2;
+  int padding = 20;
+  double text_x = x + padding;
+  double text_y;
+
+  // Calculate vertical position based on alignment
+  VerticalAlign valign = element_get_vertical_alignment(space_elem->alignment);
+  switch (valign) {
+  case VALIGN_TOP:
+    text_y = y + padding;
+    break;
+  case VALIGN_BOTTOM:
+    text_y = y + height - padding - text_height;
+    break;
+  case VALIGN_CENTER:
+  default:
+    text_y = y + (height - text_height) / 2;
+    break;
+  }
 
   cairo_move_to(cr, text_x, text_y);
   cairo_set_source_rgba(cr, space_elem->text_r, space_elem->text_g, space_elem->text_b, space_elem->text_a);
@@ -170,6 +185,7 @@ void space_element_free(Element *element) {
   SpaceElement *space_elem = (SpaceElement*)element;
   g_free(space_elem->text);
   g_free(space_elem->font_description);
+  g_free(space_elem->alignment);
   g_free(space_elem);
 }
 
@@ -232,6 +248,7 @@ SpaceElement* space_element_create(ElementPosition position,
   space_elem->text_b = text.text_color.b;
   space_elem->text_a = text.text_color.a;
   space_elem->font_description = g_strdup(text.font_description);
+  space_elem->alignment = g_strdup(text.alignment ? text.alignment : "center");
 
   return space_elem;
 }

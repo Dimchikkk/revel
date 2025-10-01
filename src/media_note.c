@@ -188,7 +188,7 @@ MediaNote* media_note_create(ElementPosition position,
   media_note->text_b = text.text_color.b;
   media_note->text_a = text.text_color.a;
   media_note->font_description = g_strdup(text.font_description);
-
+  media_note->alignment = g_strdup(text.alignment ? text.alignment : "bottom-right");
 
   media_note->reset_video_data = FALSE;
 
@@ -727,13 +727,32 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     // Only draw if we have something to show
     if (display_text[0] != '\0') {
       pango_layout_set_text(layout, display_text, -1);
-      pango_layout_set_alignment(layout, PANGO_ALIGN_RIGHT);
+      pango_layout_set_alignment(layout, element_get_pango_alignment(media_note->alignment));
 
       int text_width, text_height;
       pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
-      int text_x = draw_x + draw_width - text_width - 8;
-      int text_y = draw_y + draw_height - text_height - 8;
+      // Calculate horizontal position based on alignment
+      int text_x;
+      PangoAlignment pango_align = element_get_pango_alignment(media_note->alignment);
+      if (pango_align == PANGO_ALIGN_LEFT) {
+        text_x = draw_x + 8;
+      } else if (pango_align == PANGO_ALIGN_RIGHT) {
+        text_x = draw_x + draw_width - text_width - 8;
+      } else {
+        text_x = draw_x + (draw_width - text_width) / 2;
+      }
+
+      // Calculate vertical position based on alignment
+      int text_y;
+      VerticalAlign valign = element_get_vertical_alignment(media_note->alignment);
+      if (valign == VALIGN_TOP) {
+        text_y = draw_y + 8;
+      } else if (valign == VALIGN_BOTTOM) {
+        text_y = draw_y + draw_height - text_height - 8;
+      } else {
+        text_y = draw_y + (draw_height - text_height) / 2;
+      }
 
       // Draw background rectangle for better text visibility
       cairo_set_source_rgba(cr, 0, 0, 0, 0.6);
@@ -948,6 +967,7 @@ void media_note_free(Element *element) {
   if (media_note->pixbuf) g_object_unref(media_note->pixbuf);
   if (media_note->text) g_free(media_note->text);
   if (media_note->font_description) g_free(media_note->font_description);
+  if (media_note->alignment) g_free(media_note->alignment);
 
   // Free video data
   if (media_note->video_data) {

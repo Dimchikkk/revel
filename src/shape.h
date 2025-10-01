@@ -38,6 +38,7 @@ typedef struct {
   char *text;
   double text_r, text_g, text_b, text_a;
   char* font_description;
+  char* alignment;
   GtkWidget *scrolled_window;
   GtkWidget *text_view;
   gboolean editing;

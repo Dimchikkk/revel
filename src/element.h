@@ -59,6 +59,7 @@ typedef struct {
   char* text;
   ElementColor text_color;
   char* font_description;
+  char* alignment;  // Supported values: "top-left", "top-center", "top-right", "center", "bottom-left", "bottom-right"
 } ElementText;
 
 typedef struct {
@@ -141,5 +142,28 @@ const char* element_get_type_name(ElementType type);
 void element_get_rotation_handle_position(Element *element, int *hx, int *hy);
 int element_pick_rotation_handle(Element *element, int x, int y);
 void element_draw_rotation_handle(Element *element, cairo_t *cr);
+
+// Text alignment
+// Supported alignment values: "top-left", "top-center", "top-right", "center", "bottom-left", "bottom-right"
+typedef enum {
+  TEXT_ALIGN_TOP_LEFT,
+  TEXT_ALIGN_TOP_CENTER,
+  TEXT_ALIGN_TOP_RIGHT,
+  TEXT_ALIGN_CENTER,
+  TEXT_ALIGN_BOTTOM_LEFT,
+  TEXT_ALIGN_BOTTOM_RIGHT
+} TextAlignment;
+
+// Text alignment utilities (for backward compatibility with string-based alignment)
+typedef enum {
+  VALIGN_TOP,
+  VALIGN_CENTER,
+  VALIGN_BOTTOM
+} VerticalAlign;
+
+PangoAlignment element_get_pango_alignment(const char *alignment);
+VerticalAlign element_get_vertical_alignment(const char *alignment);
+const char* element_alignment_to_string(TextAlignment alignment);
+TextAlignment element_string_to_alignment(const char *alignment);
 
 #endif

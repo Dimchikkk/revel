@@ -46,6 +46,7 @@ Note* note_create(ElementPosition position,
   note->text_b = text.text_color.b;
   note->text_a = text.text_color.a;
   note->font_description = g_strdup(text.font_description);
+  note->alignment = g_strdup(text.alignment ? text.alignment : "center");
 
   return note;
 }
@@ -172,23 +173,33 @@ void note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     pango_layout_set_text(layout, note->text, -1);
     pango_layout_set_width(layout, (element->width - 20) * PANGO_SCALE);
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+    pango_layout_set_alignment(layout, element_get_pango_alignment(note->alignment));
 
     int text_width, text_height;
     pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
     cairo_set_source_rgba(cr, note->text_r, note->text_g, note->text_b, note->text_a);
 
-    // Center text both horizontally and vertically with proper padding
     int padding = 10;
     int available_height = element->height - (2 * padding);
-
     int text_x = element->x + padding;
-    int text_y = element->y + padding + (available_height - text_height) / 2;
+    int text_y;
 
-    // Ensure text doesn't go outside bounds
-    if (text_y < element->y + padding) {
+    // Calculate vertical position based on alignment
+    VerticalAlign valign = element_get_vertical_alignment(note->alignment);
+    switch (valign) {
+    case VALIGN_TOP:
       text_y = element->y + padding;
+      break;
+    case VALIGN_BOTTOM:
+      text_y = element->y + element->height - padding - text_height;
+      if (text_y < element->y + padding) text_y = element->y + padding;
+      break;
+    case VALIGN_CENTER:
+    default:
+      text_y = element->y + padding + (available_height - text_height) / 2;
+      if (text_y < element->y + padding) text_y = element->y + padding;
+      break;
     }
 
     if (text_height <= available_height) {
@@ -385,6 +396,7 @@ void note_free(Element *element) {
   Note *note = (Note*)element;
   if (note->text) g_free(note->text);
   if (note->font_description) g_free(note->font_description);
+  if (note->alignment) g_free(note->alignment);
   if (note->scrolled_window && GTK_IS_WIDGET(note->scrolled_window) &&
       gtk_widget_get_parent(note->scrolled_window)) {
     gtk_widget_unparent(note->scrolled_window);
