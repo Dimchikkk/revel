@@ -41,4 +41,7 @@ void toggle_toolbar_auto_hide(CanvasData *data);
 void show_toolbar(CanvasData *data);
 void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data);
 
+// Notification popup
+void canvas_show_notification(CanvasData *data, const char *message);
+
 #endif

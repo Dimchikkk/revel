@@ -2111,6 +2111,83 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
 }
 
 void canvas_on_paste(GtkWidget *widget, CanvasData *data) {
+  // First check if we have copied elements to paste
+  if (data->copied_elements) {
+    // Save copied elements first (in case they're MODEL_STATE_NEW)
+    model_save_elements(data->model);
+
+    // Create a hash table to map old UUIDs to new UUIDs
+    GHashTable *uuid_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    GList *forked_elements = NULL;
+
+    // First pass: Fork all elements and build UUID mapping
+    for (GList *l = data->copied_elements; l != NULL; l = l->next) {
+      ModelElement *copied = (ModelElement*)l->data;
+      ModelElement *forked = model_element_fork(data->model, copied);
+
+      if (forked) {
+        // Update z-index to bring to front
+        int new_z = data->next_z_index++;
+        model_update_position(data->model, forked, forked->position->x, forked->position->y, new_z);
+
+        // Store UUID mapping
+        g_hash_table_insert(uuid_map, g_strdup(copied->uuid), g_strdup(forked->uuid));
+        forked_elements = g_list_append(forked_elements, forked);
+
+        // Add to undo manager
+        undo_manager_push_create_action(data->undo_manager, forked);
+      }
+    }
+
+    // Second pass: Update connections on newly forked elements to point to other copied elements
+    for (GList *l = forked_elements; l != NULL; l = l->next) {
+      ModelElement *element = (ModelElement*)l->data;
+      gboolean updated = FALSE;
+
+      // Check if from_element was also copied
+      if (element->from_element_uuid) {
+        char *new_from_uuid = g_hash_table_lookup(uuid_map, element->from_element_uuid);
+        if (new_from_uuid) {
+          g_free(element->from_element_uuid);
+          element->from_element_uuid = g_strdup(new_from_uuid);
+          updated = TRUE;
+        }
+      }
+
+      // Check if to_element was also copied
+      if (element->to_element_uuid) {
+        char *new_to_uuid = g_hash_table_lookup(uuid_map, element->to_element_uuid);
+        if (new_to_uuid) {
+          g_free(element->to_element_uuid);
+          element->to_element_uuid = g_strdup(new_to_uuid);
+          updated = TRUE;
+        }
+      }
+
+      // Mark for saving if updated
+      if (updated) {
+        element->state = MODEL_STATE_UPDATED;
+      }
+    }
+
+    // Save any updated connections
+    model_save_elements(data->model);
+
+    g_list_free(forked_elements);
+    g_hash_table_destroy(uuid_map);
+
+    int count = g_list_length(data->copied_elements);
+    char message[64];
+    snprintf(message, sizeof(message), "%d element%s pasted", count, count == 1 ? "" : "s");
+    canvas_show_notification(data, message);
+
+    // Sync with model to create visual elements
+    canvas_sync_with_model(data);
+    gtk_widget_queue_draw(data->drawing_area);
+    return;
+  }
+
+  // Otherwise, try to paste image from clipboard
   GdkClipboard *clipboard = gdk_display_get_clipboard(gdk_display_get_default());
 
   if (!clipboard) {
@@ -2144,6 +2221,32 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
 
   if (keyval == GDK_KEY_F1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) {
     canvas_show_shortcuts_dialog(data);
+    return TRUE;
+  }
+
+  // Add Ctrl+C for copying selected elements
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_c) {
+    if (data->selected_elements) {
+      // Clear previous copied elements (don't use g_list_free_full since we don't own the ModelElements)
+      if (data->copied_elements) {
+        g_list_free(data->copied_elements);
+        data->copied_elements = NULL;
+      }
+
+      // Copy all selected elements
+      for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        ModelElement *model_element = model_get_by_visual(data->model, element);
+        if (model_element) {
+          data->copied_elements = g_list_append(data->copied_elements, model_element);
+        }
+      }
+
+      int count = g_list_length(data->copied_elements);
+      char message[64];
+      snprintf(message, sizeof(message), "%d element%s copied", count, count == 1 ? "" : "s");
+      canvas_show_notification(data, message);
+    }
     return TRUE;
   }
 

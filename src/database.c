@@ -19,11 +19,6 @@ int database_init(sqlite3 **db, const char *filename) {
     return 0;
   }
 
-  if (!database_migrate(*db)) {
-    sqlite3_close(*db);
-    return 0;
-  }
-
   if (!database_init_default_namespace(*db)) {
     sqlite3_close(*db);
     return 0;
@@ -219,41 +214,6 @@ int database_create_tables(sqlite3 *db) {
     "END;";
 
   sqlite3_exec(db, fts_sql, NULL, NULL, NULL);
-
-  return 1;
-}
-
-int database_migrate(sqlite3 *db) {
-  char *err_msg = NULL;
-  sqlite3_stmt *stmt;
-
-  // Check if strikethrough column exists in text_refs table
-  const char *check_column_sql = "PRAGMA table_info(text_refs)";
-  if (sqlite3_prepare_v2(db, check_column_sql, -1, &stmt, NULL) != SQLITE_OK) {
-    fprintf(stderr, "Failed to check text_refs schema: %s\n", sqlite3_errmsg(db));
-    return 0;
-  }
-
-  int has_strikethrough = 0;
-  while (sqlite3_step(stmt) == SQLITE_ROW) {
-    const char *column_name = (const char*)sqlite3_column_text(stmt, 1);
-    if (g_strcmp0(column_name, "strikethrough") == 0) {
-      has_strikethrough = 1;
-      break;
-    }
-  }
-  sqlite3_finalize(stmt);
-
-  // Add strikethrough column if it doesn't exist
-  if (!has_strikethrough) {
-    const char *add_column_sql = "ALTER TABLE text_refs ADD COLUMN strikethrough BOOLEAN DEFAULT 0";
-    if (sqlite3_exec(db, add_column_sql, NULL, NULL, &err_msg) != SQLITE_OK) {
-      fprintf(stderr, "Failed to add strikethrough column: %s\n", err_msg);
-      sqlite3_free(err_msg);
-      return 0;
-    }
-    printf("Migration: Added strikethrough column to text_refs table\n");
-  }
 
   return 1;
 }

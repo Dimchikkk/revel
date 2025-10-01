@@ -1110,6 +1110,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             .text = g_strdup(""),
             .text_color = text_color,
             .font_description = g_strdup(PAPER_NOTE_DEFAULT_FONT),
+            .alignment = g_strdup("bottom-right"),
           };
           ElementShape shape = {
             .shape_type = -1,
@@ -1262,6 +1263,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             .text = g_strdup(""),
             .text_color = text_color,
             .font_description = g_strdup(PAPER_NOTE_DEFAULT_FONT),
+            .alignment = g_strdup("bottom-right"),
           };
           ElementShape shape = {
             .shape_type = -1,

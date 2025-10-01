@@ -98,6 +98,9 @@ struct _CanvasData {
   GtkWidget *tree_scrolled;
   gboolean tree_view_visible;
 
+  // Copy/paste management
+  GList *copied_elements;
+
   Model *model;
 };
 

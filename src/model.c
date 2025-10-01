@@ -277,17 +277,26 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
     element->image = model_image;
   }
 
-  if (config.media.type == MEDIA_TYPE_VIDEO && config.media.video_data && config.media.video_size > 0) {
+  if (config.media.type == MEDIA_TYPE_VIDEO && config.media.image_data && config.media.image_size > 0) {
     ModelVideo *model_video = g_new0(ModelVideo, 1);
     model_video->id = -1;
     model_video->thumbnail_data = g_malloc(config.media.image_size);
     memcpy(model_video->thumbnail_data, config.media.image_data, config.media.image_size);
     model_video->thumbnail_size = config.media.image_size;
-    model_video->video_data = g_malloc(config.media.video_size);
-    memcpy(model_video->video_data, config.media.video_data, config.media.video_size);
-    model_video->video_size = config.media.video_size;
+
+    // Video data might be NULL if not loaded yet (lazy loading)
+    if (config.media.video_data && config.media.video_size > 0) {
+      model_video->video_data = g_malloc(config.media.video_size);
+      memcpy(model_video->video_data, config.media.video_data, config.media.video_size);
+      model_video->video_size = config.media.video_size;
+      model_video->is_loaded = TRUE;
+    } else {
+      model_video->video_data = NULL;
+      model_video->video_size = 0;
+      model_video->is_loaded = FALSE;
+    }
+
     model_video->duration = config.media.duration;
-    model_video->is_loaded = TRUE;
     model_video->ref_count = 1;
     element->video = model_video;
   }
@@ -678,12 +687,13 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .b = element->bg_color->b,
     .a = element->bg_color->a,
   };
-  ElementColor text_color = {
-    .r = element->text->r,
-    .g = element->text->g,
-    .b = element->text->b,
-    .a = element->text->a,
-  };
+  ElementColor text_color = {0};
+  if (element->text) {
+    text_color.r = element->text->r;
+    text_color.g = element->text->g;
+    text_color.b = element->text->b;
+    text_color.a = element->text->a;
+  }
   ElementSize size = {
     .width = element->size->width,
     .height = element->size->height,
@@ -696,8 +706,10 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
   }
   ElementMedia media = {
     .type = media_type,
-    .image_data = element->image ? element->image->image_data : NULL,
-    .image_size = element->image ? element->image->image_size : 0,
+    .image_data = element->image ? element->image->image_data :
+                  (element->video ? element->video->thumbnail_data : NULL),
+    .image_size = element->image ? element->image->image_size :
+                  (element->video ? element->video->thumbnail_size : 0),
     .video_data = element->video ? element->video->video_data : NULL,
     .video_size = element->video ? element->video->video_size : 0,
     .duration = element->video ? element->video->duration : 0,
@@ -708,15 +720,24 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .to_element_uuid = element->to_element_uuid,
     .from_point = element->from_point,
     .to_point = element->to_point,
+    .connection_type = element->connection_type,
+    .arrowhead_type = element->arrowhead_type,
   };
+  // Copy drawing points if they exist (for LINE/ARROW/BEZIER shapes)
+  GArray *copied_drawing_points = NULL;
+  if (element->drawing_points && element->drawing_points->len > 0) {
+    copied_drawing_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), element->drawing_points->len);
+    g_array_append_vals(copied_drawing_points, element->drawing_points->data, element->drawing_points->len);
+  }
+
   ElementDrawing drawing = {
-    .drawing_points = NULL,
-    .stroke_width = 0,
+    .drawing_points = copied_drawing_points,
+    .stroke_width = element->stroke_width,
   };
   ElementText text = {
-    .text = element->text->text,
+    .text = element->text ? element->text->text : "",
     .text_color = text_color,
-    .font_description = element->text->font_description,
+    .font_description = element->text ? element->text->font_description : NULL,
   };
   ElementColor stroke_color = {0};
   if (element->stroke_color) {
@@ -748,6 +769,7 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .connection = connection,
     .text = text,
     .shape = shape,
+    .rotation_degrees = element->rotation_degrees,
   };
 
   return model_create_element(model, config);

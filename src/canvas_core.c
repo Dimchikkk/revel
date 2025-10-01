@@ -1140,3 +1140,48 @@ void on_zoom_entry_activate(GtkEntry *entry, gpointer user_data) {
     gtk_editable_set_text(GTK_EDITABLE(entry), zoom_text);
   }
 }
+
+static gboolean hide_notification(gpointer user_data) {
+  GtkWidget *label = GTK_WIDGET(user_data);
+  gtk_widget_set_visible(label, FALSE);
+  return G_SOURCE_REMOVE;
+}
+
+void canvas_show_notification(CanvasData *data, const char *message) {
+  if (!data || !data->overlay || !message) {
+    return;
+  }
+
+  // Create a label for the notification
+  GtkWidget *label = gtk_label_new(message);
+  gtk_widget_set_halign(label, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(label, GTK_ALIGN_START);
+  gtk_widget_set_margin_top(label, 20);
+
+  // Style the notification
+  gtk_widget_add_css_class(label, "notification");
+
+  // Add CSS for the notification style
+  GtkCssProvider *provider = gtk_css_provider_new();
+  const char *css =
+    ".notification { "
+    "  background-color: rgba(0, 0, 0, 0.8); "
+    "  color: white; "
+    "  padding: 12px 24px; "
+    "  border-radius: 6px; "
+    "  font-size: 14px; "
+    "  font-weight: bold; "
+    "}";
+  gtk_css_provider_load_from_data(provider, css, -1);
+  gtk_style_context_add_provider_for_display(
+    gdk_display_get_default(),
+    GTK_STYLE_PROVIDER(provider),
+    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(provider);
+
+  // Add to overlay
+  gtk_overlay_add_overlay(GTK_OVERLAY(data->overlay), label);
+
+  // Auto-hide after 1.5 seconds
+  g_timeout_add(1500, hide_notification, label);
+}

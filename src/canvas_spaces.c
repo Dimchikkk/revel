@@ -13,6 +13,12 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
 
   undo_manager_reset(data->undo_manager);
 
+  // Clear copied elements when switching spaces
+  if (data->copied_elements) {
+    g_list_free(data->copied_elements);
+    data->copied_elements = NULL;
+  }
+
   if (data->model->current_space_uuid) {
     g_free(data->model->current_space_uuid);
   }

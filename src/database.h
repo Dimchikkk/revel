@@ -10,7 +10,6 @@
 int database_init(sqlite3 **db, const char *filename);
 void database_close(sqlite3 *db);
 int database_create_tables(sqlite3 *db);
-int database_migrate(sqlite3 *db);
 int database_init_default_namespace(sqlite3 *db);
 
 // UUID helpers
