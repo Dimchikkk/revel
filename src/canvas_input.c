@@ -1899,12 +1899,28 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         GMenu *danger_section = g_menu_new();
 
         g_menu_append(modify_section, "Change Space", "menu.change-space");
-        g_menu_append(modify_section, "Change Color", "menu.change-color");
 
         if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE  ||
             element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE ||
             element->type == ELEMENT_SHAPE || element->type == ELEMENT_INLINE_TEXT) {
           g_menu_append(modify_section, "Change Text", "menu.change-text");
+        }
+
+        // Only show "Change Background Color" if:
+        // - Not a shape, OR
+        // - A shape that is filled AND not LINE/ARROW/BEZIER
+        gboolean show_bg_color = TRUE;
+        if (element->type == ELEMENT_SHAPE) {
+          Shape *shape = (Shape *)element;
+          if (!shape->filled ||
+              shape->shape_type == SHAPE_LINE ||
+              shape->shape_type == SHAPE_ARROW ||
+              shape->shape_type == SHAPE_BEZIER) {
+            show_bg_color = FALSE;
+          }
+        }
+        if (show_bg_color) {
+          g_menu_append(modify_section, "Change Background Color", "menu.change-color");
         }
 
         if (element->type == ELEMENT_SHAPE) {
