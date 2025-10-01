@@ -13,9 +13,20 @@ typedef struct {
   GtkWidget *stroke_combo;
   GtkWidget *fill_combo;
   GPtrArray *icon_widgets;
+  GtkWidget *circle_btn;
+  GtkWidget *rectangle_btn;
+  GtkWidget *triangle_btn;
+  GtkWidget *vcylinder_btn;
+  GtkWidget *hcylinder_btn;
+  GtkWidget *diamond_btn;
+  GtkWidget *rounded_rect_btn;
+  GtkWidget *line_btn;
+  GtkWidget *arrow_btn;
+  GtkWidget *bezier_btn;
 } ShapeDialogData;
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
+static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data);
 
 typedef struct {
   ShapeDialogData *dialog_data;
@@ -367,6 +378,57 @@ static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer use
   }
 }
 
+static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
+  ShapeDialogData *data = (ShapeDialogData*)user_data;
+
+  // Convert to lowercase for case-insensitive matching
+  guint lower_keyval = gdk_keyval_to_lower(keyval);
+
+  GtkWidget *button = NULL;
+
+  switch (lower_keyval) {
+    case GDK_KEY_c:
+      button = data->circle_btn;
+      break;
+    case GDK_KEY_r:
+      button = data->rectangle_btn;
+      break;
+    case GDK_KEY_t:
+      button = data->triangle_btn;
+      break;
+    case GDK_KEY_v:
+      button = data->vcylinder_btn;
+      break;
+    case GDK_KEY_h:
+      button = data->hcylinder_btn;
+      break;
+    case GDK_KEY_d:
+      button = data->diamond_btn;
+      break;
+    case GDK_KEY_o:
+      button = data->rounded_rect_btn;
+      break;
+    case GDK_KEY_l:
+      button = data->line_btn;
+      break;
+    case GDK_KEY_a:
+      button = data->arrow_btn;
+      break;
+    case GDK_KEY_b:
+      button = data->bezier_btn;
+      break;
+    default:
+      return FALSE; // Let other handlers process this key
+  }
+
+  if (button && GTK_IS_BUTTON(button)) {
+    g_signal_emit_by_name(button, "clicked");
+    return TRUE; // Key was handled
+  }
+
+  return FALSE;
+}
+
 static GtkWidget* create_shape_button(const char *label, ShapeType shape_type, ShapeDialogData *data) {
   GtkWidget *button = gtk_button_new();
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
@@ -518,41 +580,46 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   gtk_widget_set_halign(shapes_grid, GTK_ALIGN_CENTER);
   gtk_box_append(GTK_BOX(vbox), shapes_grid);
 
-  GtkWidget *circle_btn = create_shape_button("Circle", SHAPE_CIRCLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), circle_btn, 0, 0, 1, 1);
+  data->circle_btn = create_shape_button("Circle (C)", SHAPE_CIRCLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->circle_btn, 0, 0, 1, 1);
 
-  GtkWidget *rectangle_btn = create_shape_button("Rectangle", SHAPE_RECTANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), rectangle_btn, 1, 0, 1, 1);
+  data->rectangle_btn = create_shape_button("Rectangle (R)", SHAPE_RECTANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->rectangle_btn, 1, 0, 1, 1);
 
-  GtkWidget *triangle_btn = create_shape_button("Triangle", SHAPE_TRIANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), triangle_btn, 2, 0, 1, 1);
+  data->triangle_btn = create_shape_button("Triangle (T)", SHAPE_TRIANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->triangle_btn, 2, 0, 1, 1);
 
-  GtkWidget *vcylinder_btn = create_shape_button("V-Cylinder", SHAPE_CYLINDER_VERTICAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), vcylinder_btn, 0, 1, 1, 1);
+  data->vcylinder_btn = create_shape_button("V-Cylinder (V)", SHAPE_CYLINDER_VERTICAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->vcylinder_btn, 0, 1, 1, 1);
 
-  GtkWidget *hcylinder_btn = create_shape_button("H-Cylinder", SHAPE_CYLINDER_HORIZONTAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), hcylinder_btn, 1, 1, 1, 1);
+  data->hcylinder_btn = create_shape_button("H-Cylinder (H)", SHAPE_CYLINDER_HORIZONTAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->hcylinder_btn, 1, 1, 1, 1);
 
-  GtkWidget *diamond_button = create_shape_button("Diamond", SHAPE_DIAMOND, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), diamond_button, 2, 1, 1, 1);
+  data->diamond_btn = create_shape_button("Diamond (D)", SHAPE_DIAMOND, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->diamond_btn, 2, 1, 1, 1);
 
-  GtkWidget *rounded_rect_button = create_shape_button("Rounded Rect", SHAPE_ROUNDED_RECTANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), rounded_rect_button, 0, 2, 1, 1);
+  data->rounded_rect_btn = create_shape_button("Rounded Rect (O)", SHAPE_ROUNDED_RECTANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->rounded_rect_btn, 0, 2, 1, 1);
 
-  GtkWidget *line_button = create_shape_button("Line", SHAPE_LINE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), line_button, 1, 2, 1, 1);
+  data->line_btn = create_shape_button("Line (L)", SHAPE_LINE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->line_btn, 1, 2, 1, 1);
 
-  GtkWidget *arrow_button = create_shape_button("Arrow", SHAPE_ARROW, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), arrow_button, 2, 2, 1, 1);
+  data->arrow_btn = create_shape_button("Arrow (A)", SHAPE_ARROW, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->arrow_btn, 2, 2, 1, 1);
 
-  GtkWidget *bezier_button = create_shape_button("Bezier", SHAPE_BEZIER, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), bezier_button, 0, 3, 1, 1);
+  data->bezier_btn = create_shape_button("Bezier (B)", SHAPE_BEZIER, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 0, 3, 1, 1);
 
 
   // Add Cancel button
   gtk_dialog_add_button(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL);
 
   g_signal_connect(dialog, "response", G_CALLBACK(on_dialog_response), data);
+
+  // Add keyboard event controller
+  GtkEventController *key_controller = gtk_event_controller_key_new();
+  g_signal_connect(key_controller, "key-pressed", G_CALLBACK(on_key_pressed), data);
+  gtk_widget_add_controller(GTK_WIDGET(dialog), key_controller);
 
   gtk_window_present(GTK_WINDOW(dialog));
 }
