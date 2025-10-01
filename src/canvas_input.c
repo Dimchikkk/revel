@@ -300,6 +300,17 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 
     int cp = element_pick_connection_point(element, cx, cy);
     if (cp >= 0) {
+      // Special handling for bezier control point dragging
+      if (element->type == ELEMENT_SHAPE && canvas_is_element_selected(data, element)) {
+        Shape *shape = (Shape*)element;
+        if (shape->shape_type == SHAPE_BEZIER && shape->has_bezier_points) {
+          // Start dragging this control point instead of creating a connection
+          shape->dragging_control_point = TRUE;
+          shape->dragging_control_point_index = cp;
+          return;
+        }
+      }
+
       if (!data->connection_start) {
         data->connection_start = element;
         data->connection_start_point = cp;
@@ -549,6 +560,10 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
       shape->line_end_u = CLAMP((end_x - base_x) / width, 0.0, 1.0);
       shape->line_end_v = CLAMP((end_y - base_y) / height, 0.0, 1.0);
       shape->has_line_points = TRUE;
+    } else if (shape->shape_type == SHAPE_BEZIER) {
+      // Set bezier points with default S-curve shape
+      shape->has_bezier_points = TRUE;
+      // Keep default values already set in shape_create
     }
 
     gtk_widget_queue_draw(data->drawing_area);
@@ -698,6 +713,56 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
       return;
     }
 
+    // Handle bezier control point dragging
+    if (element->type == ELEMENT_SHAPE) {
+      Shape *shape = (Shape*)element;
+      if (shape->dragging_control_point && shape->shape_type == SHAPE_BEZIER) {
+        double width = MAX(element->width, 1);
+        double height = MAX(element->height, 1);
+
+        // Apply inverse rotation to mouse coordinates if element is rotated
+        double local_cx = cx;
+        double local_cy = cy;
+
+        if (element->rotation_degrees != 0.0) {
+          double center_x = element->x + element->width / 2.0;
+          double center_y = element->y + element->height / 2.0;
+          double dx = cx - center_x;
+          double dy = cy - center_y;
+          double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+          local_cx = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+          local_cy = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+        }
+
+        // Calculate normalized coordinates within the bounding box
+        double u = CLAMP((double)(local_cx - element->x) / width, 0.0, 1.0);
+        double v = CLAMP((double)(local_cy - element->y) / height, 0.0, 1.0);
+
+        // Update the appropriate control point
+        switch (shape->dragging_control_point_index) {
+          case 0:
+            shape->bezier_p0_u = u;
+            shape->bezier_p0_v = v;
+            break;
+          case 1:
+            shape->bezier_p1_u = u;
+            shape->bezier_p1_v = v;
+            break;
+          case 2:
+            shape->bezier_p2_u = u;
+            shape->bezier_p2_v = v;
+            break;
+          case 3:
+            shape->bezier_p3_u = u;
+            shape->bezier_p3_v = v;
+            break;
+        }
+
+        gtk_widget_queue_draw(data->drawing_area);
+        return;
+      }
+    }
+
     if (element->dragging) {
       int dx = cx - element->drag_offset_x - element->x;
       int dy = cy - element->drag_offset_y - element->y;
@@ -781,6 +846,26 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
       DrawingPoint end_point;
       graphene_point_init(&end_point, (float)shape->line_end_u, (float)shape->line_end_v);
       g_array_append_val(line_points, end_point);
+
+      drawing.drawing_points = line_points;
+    } else if (shape->shape_type == SHAPE_BEZIER && shape->has_bezier_points) {
+      line_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 4);
+
+      DrawingPoint p0;
+      graphene_point_init(&p0, (float)shape->bezier_p0_u, (float)shape->bezier_p0_v);
+      g_array_append_val(line_points, p0);
+
+      DrawingPoint p1;
+      graphene_point_init(&p1, (float)shape->bezier_p1_u, (float)shape->bezier_p1_v);
+      g_array_append_val(line_points, p1);
+
+      DrawingPoint p2;
+      graphene_point_init(&p2, (float)shape->bezier_p2_u, (float)shape->bezier_p2_v);
+      g_array_append_val(line_points, p2);
+
+      DrawingPoint p3;
+      graphene_point_init(&p3, (float)shape->bezier_p3_u, (float)shape->bezier_p3_v);
+      g_array_append_val(line_points, p3);
 
       drawing.drawing_points = line_points;
     }
@@ -988,6 +1073,44 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
         model_update_rotation(data->model, model_element, element->rotation_degrees);
       }
     }
+    // Handle bezier control point dragging completion
+    if (element->type == ELEMENT_SHAPE) {
+      Shape *shape = (Shape*)element;
+      if (shape->dragging_control_point && shape->shape_type == SHAPE_BEZIER) {
+        // Update the model with the new control points
+        ModelElement *model_element = model_get_by_visual(data->model, element);
+        if (model_element && shape->has_bezier_points) {
+          // Create a new drawing points array with 4 bezier control points
+          GArray *bezier_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 4);
+
+          DrawingPoint p0;
+          graphene_point_init(&p0, (float)shape->bezier_p0_u, (float)shape->bezier_p0_v);
+          g_array_append_val(bezier_points, p0);
+
+          DrawingPoint p1;
+          graphene_point_init(&p1, (float)shape->bezier_p1_u, (float)shape->bezier_p1_v);
+          g_array_append_val(bezier_points, p1);
+
+          DrawingPoint p2;
+          graphene_point_init(&p2, (float)shape->bezier_p2_u, (float)shape->bezier_p2_v);
+          g_array_append_val(bezier_points, p2);
+
+          DrawingPoint p3;
+          graphene_point_init(&p3, (float)shape->bezier_p3_u, (float)shape->bezier_p3_v);
+          g_array_append_val(bezier_points, p3);
+
+          // Update the model's drawing points
+          if (model_element->drawing_points) {
+            g_array_free(model_element->drawing_points, TRUE);
+          }
+          model_element->drawing_points = bezier_points;
+        }
+
+        shape->dragging_control_point = FALSE;
+        shape->dragging_control_point_index = -1;
+      }
+    }
+
     element->dragging = FALSE;
     element->resizing = FALSE;
     element->rotating = FALSE;

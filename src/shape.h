@@ -12,7 +12,8 @@ typedef enum {
   SHAPE_DIAMOND,
   SHAPE_ROUNDED_RECTANGLE,
   SHAPE_LINE,
-  SHAPE_ARROW
+  SHAPE_ARROW,
+  SHAPE_BEZIER
 } ShapeType;
 
 typedef enum {
@@ -47,6 +48,17 @@ typedef struct {
   double line_start_v;
   double line_end_u;
   double line_end_v;
+  gboolean has_bezier_points;
+  double bezier_p0_u;
+  double bezier_p0_v;
+  double bezier_p1_u;
+  double bezier_p1_v;
+  double bezier_p2_u;
+  double bezier_p2_v;
+  double bezier_p3_u;
+  double bezier_p3_v;
+  gboolean dragging_control_point;
+  int dragging_control_point_index;
 } Shape;
 
 Shape* shape_create(ElementPosition position,

@@ -25,11 +25,12 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * **Rich Notes:** Advanced text notes with full formatting capabilities
 * **Media Notes:** Container notes that can embed images and videos
 * **Shapes:** Geometric elements with extensive customization options
-    * **Types:** Circles, rectangles, rounded rectangles, triangles, diamonds, cylinders, arrows, and lines
+    * **Types:** Circles, rectangles, rounded rectangles, triangles, diamonds, cylinders, arrows, lines, and cubic bézier curves
     * **Stroke styles:** Solid, dashed, and dotted lines with configurable width
     * **Fill patterns:** Solid fills, hachure, and cross-hatch patterns
     * **Independent colors:** Separate fill and stroke color control
     * **Text labels:** Custom fonts and colors within shapes
+    * **Bézier editing:** Drag 4 control points (start, end, and 2 control points) to reshape curves
 * **Freehand Drawing:** Free-form pen tool with adjustable stroke width
 * **Images:** Direct clipboard paste and drag-and-drop support
 * **Videos:** MP4 video playback with thumbnail previews

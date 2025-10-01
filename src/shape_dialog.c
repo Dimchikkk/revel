@@ -232,6 +232,24 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     }
     return;
   }
+  case SHAPE_BEZIER: {
+    // Draw bezier curve
+    double p0_x = inset;
+    double p0_y = height / 2.0;
+    double p1_x = width * 0.33;
+    double p1_y = inset;
+    double p2_x = width * 0.67;
+    double p2_y = height - inset;
+    double p3_x = width - inset;
+    double p3_y = height / 2.0;
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to(cr, p0_x, p0_y);
+    cairo_curve_to(cr, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y);
+    cairo_stroke(cr);
+    return;
+  }
   }
 
   if (icon_data->shape_type != SHAPE_CYLINDER_VERTICAL &&
@@ -324,7 +342,7 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   data->canvas_data->shape_stroke_style = data->stroke_style;
   data->canvas_data->shape_fill_style = data->fill_style;
   data->canvas_data->selected_shape_type = shape_type;
-  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
+  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER) {
     data->canvas_data->shape_filled = FALSE;
     data->filled = FALSE;
   } else {
@@ -526,6 +544,9 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
 
   GtkWidget *arrow_button = create_shape_button("Arrow", SHAPE_ARROW, data);
   gtk_grid_attach(GTK_GRID(shapes_grid), arrow_button, 2, 2, 1, 1);
+
+  GtkWidget *bezier_button = create_shape_button("Bezier", SHAPE_BEZIER, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), bezier_button, 0, 3, 1, 1);
 
 
   // Add Cancel button

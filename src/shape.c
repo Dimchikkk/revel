@@ -160,7 +160,39 @@ static void shape_get_connection_point(Element *element, int point, int *cx, int
   Shape *shape = (Shape*)element;
   int unrotated_x, unrotated_y;
 
-  if (shape->has_line_points &&
+  if (shape->has_bezier_points && shape->shape_type == SHAPE_BEZIER) {
+    double p0_x = element->x + shape->bezier_p0_u * element->width;
+    double p0_y = element->y + shape->bezier_p0_v * element->height;
+    double p1_x = element->x + shape->bezier_p1_u * element->width;
+    double p1_y = element->y + shape->bezier_p1_v * element->height;
+    double p2_x = element->x + shape->bezier_p2_u * element->width;
+    double p2_y = element->y + shape->bezier_p2_v * element->height;
+    double p3_x = element->x + shape->bezier_p3_u * element->width;
+    double p3_y = element->y + shape->bezier_p3_v * element->height;
+
+    switch (point) {
+      case 0:
+        unrotated_x = (int)round(p0_x);
+        unrotated_y = (int)round(p0_y);
+        break;
+      case 1:
+        unrotated_x = (int)round(p1_x);
+        unrotated_y = (int)round(p1_y);
+        break;
+      case 2:
+        unrotated_x = (int)round(p2_x);
+        unrotated_y = (int)round(p2_y);
+        break;
+      case 3:
+        unrotated_x = (int)round(p3_x);
+        unrotated_y = (int)round(p3_y);
+        break;
+      default:
+        unrotated_x = element->x + element->width / 2;
+        unrotated_y = element->y + element->height / 2;
+        break;
+    }
+  } else if (shape->has_line_points &&
       (shape->shape_type == SHAPE_LINE || shape->shape_type == SHAPE_ARROW)) {
     double start_x = element->x + shape->line_start_u * element->width;
     double start_y = element->y + shape->line_start_v * element->height;
@@ -505,6 +537,40 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         }
       }
       break;
+    case SHAPE_BEZIER:
+      {
+        double width = MAX(element->width, 1);
+        double height = MAX(element->height, 1);
+
+        // Default control points if not set
+        double p0_u = shape->has_bezier_points ? shape->bezier_p0_u : 0.0;
+        double p0_v = shape->has_bezier_points ? shape->bezier_p0_v : 0.5;
+        double p1_u = shape->has_bezier_points ? shape->bezier_p1_u : 0.33;
+        double p1_v = shape->has_bezier_points ? shape->bezier_p1_v : 0.0;
+        double p2_u = shape->has_bezier_points ? shape->bezier_p2_u : 0.67;
+        double p2_v = shape->has_bezier_points ? shape->bezier_p2_v : 1.0;
+        double p3_u = shape->has_bezier_points ? shape->bezier_p3_u : 1.0;
+        double p3_v = shape->has_bezier_points ? shape->bezier_p3_v : 0.5;
+
+        double p0_x = element->x + p0_u * width;
+        double p0_y = element->y + p0_v * height;
+        double p1_x = element->x + p1_u * width;
+        double p1_y = element->y + p1_v * height;
+        double p2_x = element->x + p2_u * width;
+        double p2_y = element->y + p2_v * height;
+        double p3_x = element->x + p3_u * width;
+        double p3_y = element->y + p3_v * height;
+
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+
+        // Draw the bezier curve
+        cairo_move_to(cr, p0_x, p0_y);
+        cairo_curve_to(cr, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y);
+        cairo_stroke(cr);
+      }
+      break;
   }
 
   // Restore cairo state before drawing selection UI
@@ -525,6 +591,27 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_rectangle(cr, element->x, element->y, element->width, element->height);
     cairo_stroke(cr);
     cairo_restore(cr);
+
+    // Draw control lines for bezier curves
+    if (shape->shape_type == SHAPE_BEZIER && shape->has_bezier_points) {
+      int p0_cx, p0_cy, p1_cx, p1_cy, p2_cx, p2_cy, p3_cx, p3_cy;
+      shape_get_connection_point(element, 0, &p0_cx, &p0_cy);
+      shape_get_connection_point(element, 1, &p1_cx, &p1_cy);
+      shape_get_connection_point(element, 2, &p2_cx, &p2_cy);
+      shape_get_connection_point(element, 3, &p3_cx, &p3_cy);
+
+      // Draw control lines
+      cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5);
+      cairo_set_line_width(cr, 1);
+      double dashes[] = {5.0, 3.0};
+      cairo_set_dash(cr, dashes, 2, 0);
+      cairo_move_to(cr, p0_cx, p0_cy);
+      cairo_line_to(cr, p1_cx, p1_cy);
+      cairo_move_to(cr, p2_cx, p2_cy);
+      cairo_line_to(cr, p3_cx, p3_cy);
+      cairo_stroke(cr);
+      cairo_set_dash(cr, NULL, 0, 0);
+    }
 
     // Draw connection points (with rotation applied)
     for (int i = 0; i < 4; i++) {
@@ -847,14 +934,39 @@ Shape* shape_create(ElementPosition position,
   shape->line_start_v = 0.0;
   shape->line_end_u = 1.0;
   shape->line_end_v = 1.0;
+  shape->has_bezier_points = FALSE;
+  shape->bezier_p0_u = 0.0;
+  shape->bezier_p0_v = 0.5;
+  shape->bezier_p1_u = 0.33;
+  shape->bezier_p1_v = 0.0;
+  shape->bezier_p2_u = 0.67;
+  shape->bezier_p2_v = 1.0;
+  shape->bezier_p3_u = 1.0;
+  shape->bezier_p3_v = 0.5;
+  shape->dragging_control_point = FALSE;
+  shape->dragging_control_point_index = -1;
 
   if (drawing_config && drawing_config->drawing_points && drawing_config->drawing_points->len >= 2) {
     DrawingPoint *points = (DrawingPoint*)drawing_config->drawing_points->data;
-    shape->line_start_u = points[0].x;
-    shape->line_start_v = points[0].y;
-    shape->line_end_u = points[1].x;
-    shape->line_end_v = points[1].y;
-    shape->has_line_points = TRUE;
+    if (shape_type == SHAPE_BEZIER && drawing_config->drawing_points->len >= 4) {
+      // For bezier curves, we expect 4 points
+      shape->bezier_p0_u = points[0].x;
+      shape->bezier_p0_v = points[0].y;
+      shape->bezier_p1_u = points[1].x;
+      shape->bezier_p1_v = points[1].y;
+      shape->bezier_p2_u = points[2].x;
+      shape->bezier_p2_v = points[2].y;
+      shape->bezier_p3_u = points[3].x;
+      shape->bezier_p3_v = points[3].y;
+      shape->has_bezier_points = TRUE;
+    } else if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) {
+      // For lines and arrows, we expect 2 points
+      shape->line_start_u = points[0].x;
+      shape->line_start_v = points[0].y;
+      shape->line_end_u = points[1].x;
+      shape->line_end_v = points[1].y;
+      shape->has_line_points = TRUE;
+    }
   }
 
   return shape;
