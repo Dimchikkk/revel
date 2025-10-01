@@ -12,6 +12,7 @@ typedef struct {
   gchar *text;
   double text_r, text_g, text_b, text_a;
   char* font_description;
+  gboolean strikethrough;
   char* alignment;
 } SpaceElement;
 

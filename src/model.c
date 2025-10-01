@@ -481,6 +481,28 @@ int model_update_text_alignment(Model *model, ModelElement *element, const char 
   return 0; // No change needed
 }
 
+int model_update_strikethrough(Model *model, ModelElement *element, gboolean strikethrough) {
+  if (!model || !element) {
+    return 0;
+  }
+
+  // If element has no text reference, cannot set strikethrough
+  if (!element->text) {
+    return 0;
+  }
+
+  // If strikethrough changed, update it
+  if (element->text->strikethrough != strikethrough) {
+    element->text->strikethrough = strikethrough;
+    if (element->state != MODEL_STATE_NEW) {
+      element->state = MODEL_STATE_UPDATED;
+    }
+    return 1;
+  }
+
+  return 0; // No change needed
+}
+
 int model_update_color(Model *model, ModelElement *element, double r, double g, double b, double a) {
   if (!model || !element || !element->bg_color) return 0;
 

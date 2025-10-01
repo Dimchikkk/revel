@@ -10,6 +10,7 @@
 int database_init(sqlite3 **db, const char *filename);
 void database_close(sqlite3 *db);
 int database_create_tables(sqlite3 *db);
+int database_migrate(sqlite3 *db);
 int database_init_default_namespace(sqlite3 *db);
 
 // UUID helpers
@@ -36,6 +37,7 @@ int database_create_text_ref(sqlite3 *db,
                              const char *text,
                              double r, double g, double b, double a,
                              const char *font_description,
+                             gboolean strikethrough,
                              const char *alignment,
                              int *text_id);
 int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text);

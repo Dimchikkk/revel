@@ -50,6 +50,7 @@ struct _ModelText {
   gdouble b;
   gdouble a;
   gchar *font_description;
+  gboolean strikethrough;
   gchar *alignment;
   gint ref_count;
 };
@@ -177,6 +178,7 @@ int model_update_text(Model *model, ModelElement *element, const char *text);
 int model_update_text_color(Model *model, ModelElement *element, double r, double g, double b, double a);
 int model_update_font(Model *model, ModelElement *element, const char *font_description);
 int model_update_text_alignment(Model *model, ModelElement *element, const char *alignment);
+int model_update_strikethrough(Model *model, ModelElement *element, gboolean strikethrough);
 int model_update_position(Model *model, ModelElement *element, int x, int y, int z);
 int model_update_size(Model *model, ModelElement *element, int width, int height);
 int model_update_rotation(Model *model, ModelElement *element, double rotation_degrees);

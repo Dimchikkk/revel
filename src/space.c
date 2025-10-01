@@ -60,6 +60,15 @@ void space_element_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   pango_layout_set_alignment(layout, element_get_pango_alignment(space_elem->alignment));
   pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
 
+  // Apply strikethrough if enabled
+  if (space_elem->strikethrough) {
+    PangoAttrList *attrs = pango_attr_list_new();
+    PangoAttribute *strike_attr = pango_attr_strikethrough_new(TRUE);
+    pango_attr_list_insert(attrs, strike_attr);
+    pango_layout_set_attributes(layout, attrs);
+    pango_attr_list_unref(attrs);
+  }
+
   int text_width, text_height;
   pango_layout_get_pixel_size(layout, &text_width, &text_height);
 
@@ -248,6 +257,7 @@ SpaceElement* space_element_create(ElementPosition position,
   space_elem->text_b = text.text_color.b;
   space_elem->text_a = text.text_color.a;
   space_elem->font_description = g_strdup(text.font_description);
+  space_elem->strikethrough = text.strikethrough;
   space_elem->alignment = g_strdup(text.alignment ? text.alignment : "center");
 
   return space_elem;

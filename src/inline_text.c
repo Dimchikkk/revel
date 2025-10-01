@@ -48,6 +48,7 @@ InlineText* inline_text_create(ElementPosition position,
   inline_text->text_b = text.text_color.b;
   inline_text->text_a = text.text_color.a;
   inline_text->font_description = g_strdup(text.font_description ? text.font_description : "Ubuntu Mono 12");
+  inline_text->strikethrough = text.strikethrough;
 
   inline_text->layout = NULL;
   inline_text->text_view = NULL;
@@ -118,6 +119,15 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   // Draw text only when not editing (to avoid double text with TextView)
   if (text->layout && !text->editing) {
+    // Apply strikethrough if enabled
+    if (text->strikethrough) {
+      PangoAttrList *attrs = pango_attr_list_new();
+      PangoAttribute *strike_attr = pango_attr_strikethrough_new(TRUE);
+      pango_attr_list_insert(attrs, strike_attr);
+      pango_layout_set_attributes(text->layout, attrs);
+      pango_attr_list_unref(attrs);
+    }
+
     cairo_set_source_rgba(cr, text->text_r, text->text_g, text->text_b, text->text_a);
     cairo_move_to(cr, element->x + 8, element->y + 8);
     pango_cairo_show_layout(cr, text->layout);

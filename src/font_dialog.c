@@ -20,6 +20,7 @@ typedef struct {
   GtkWidget *size_spin;
   GtkWidget *bold_check;
   GtkWidget *italic_check;
+  GtkWidget *strikethrough_check;
   GtkWidget *color_button;
   GtkWidget *alignment_combo;
   char *original_font_desc;
@@ -57,13 +58,15 @@ gboolean is_font_italic(const char *font_desc) {
 }
 
 char* create_font_description_string(const char *family, int size,
-                                     gboolean bold, gboolean italic) {
+                                     gboolean bold, gboolean italic, gboolean strikethrough) {
   PangoFontDescription *desc = pango_font_description_new();
 
   pango_font_description_set_family(desc, family);
   pango_font_description_set_size(desc, size * PANGO_SCALE);
   pango_font_description_set_weight(desc, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
   pango_font_description_set_style(desc, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
+  // Note: strikethrough parameter is ignored here as it's not part of PangoFontDescription
+  // It must be stored separately in ModelText and applied as a Pango attribute during rendering
 
   char *result = pango_font_description_to_string(desc);
   pango_font_description_free(desc);
@@ -104,8 +107,9 @@ static void update_visual_element(FontDialogData *data) {
 
   gboolean bold = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->bold_check));
   gboolean italic = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->italic_check));
+  gboolean strikethrough = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->strikethrough_check));
 
-  char *new_font_desc = create_font_description_string(font_family, font_size, bold, italic);
+  char *new_font_desc = create_font_description_string(font_family, font_size, bold, italic, strikethrough);
 
   GdkRGBA new_color;
   gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &new_color);
@@ -123,6 +127,7 @@ static void update_visual_element(FontDialogData *data) {
   case ELEMENT_NOTE: {
     Note* el = (Note*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    el->strikethrough = strikethrough;
     if (new_alignment) {
       g_free(el->alignment);
       el->alignment = g_strdup(new_alignment);
@@ -132,6 +137,7 @@ static void update_visual_element(FontDialogData *data) {
   case ELEMENT_PAPER_NOTE: {
     PaperNote* el = (PaperNote*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    el->strikethrough = strikethrough;
     if (new_alignment) {
       g_free(el->alignment);
       el->alignment = g_strdup(new_alignment);
@@ -141,6 +147,7 @@ static void update_visual_element(FontDialogData *data) {
   case ELEMENT_SPACE: {
     SpaceElement* el = (SpaceElement*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    el->strikethrough = strikethrough;
     if (new_alignment) {
       g_free(el->alignment);
       el->alignment = g_strdup(new_alignment);
@@ -150,6 +157,7 @@ static void update_visual_element(FontDialogData *data) {
   case ELEMENT_MEDIA_FILE: {
     MediaNote* el = (MediaNote*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    el->strikethrough = strikethrough;
     if (new_alignment) {
       g_free(el->alignment);
       el->alignment = g_strdup(new_alignment);
@@ -159,6 +167,7 @@ static void update_visual_element(FontDialogData *data) {
   case ELEMENT_SHAPE: {
     Shape* el = (Shape*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    el->strikethrough = strikethrough;
     if (new_alignment) {
       g_free(el->alignment);
       el->alignment = g_strdup(new_alignment);
@@ -168,6 +177,7 @@ static void update_visual_element(FontDialogData *data) {
   case ELEMENT_INLINE_TEXT: {
     InlineText* el = (InlineText*)data->element;
     update_font_and_color(&el->font_description, new_font_desc, &el->text_r, &el->text_g, &el->text_b, &el->text_a, &new_color);
+    el->strikethrough = strikethrough;
     break;
   }
   case ELEMENT_CONNECTION:
@@ -189,8 +199,9 @@ static void apply_font_changes(FontDialogData *data) {
 
   gboolean bold = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->bold_check));
   gboolean italic = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->italic_check));
+  gboolean strikethrough = gtk_check_button_get_active(GTK_CHECK_BUTTON(data->strikethrough_check));
 
-  char *new_font_desc = create_font_description_string(font_family, font_size, bold, italic);
+  char *new_font_desc = create_font_description_string(font_family, font_size, bold, italic, strikethrough);
 
   GdkRGBA new_color;
   gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(data->color_button), &new_color);
@@ -201,6 +212,7 @@ static void apply_font_changes(FontDialogData *data) {
   // Update model (persistent storage)
   model_update_text_color(model, model_element, new_color.red, new_color.green, new_color.blue, new_color.alpha);
   model_update_font(model, model_element, new_font_desc);
+  model_update_strikethrough(model, model_element, strikethrough);
 
   // Get selected alignment (if alignment combo exists)
   if (data->alignment_combo) {
@@ -387,6 +399,11 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   gboolean current_bold = is_font_bold(data->original_font_desc);
   gboolean current_italic = is_font_italic(data->original_font_desc);
 
+  // Get strikethrough from ModelElement (not from font description)
+  Model* model = element->canvas_data->model;
+  ModelElement* model_element = model_get_by_visual(model, element);
+  gboolean current_strikethrough = (model_element && model_element->text) ? model_element->text->strikethrough : FALSE;
+
   // Font Selection Frame
   GtkWidget *font_frame = gtk_frame_new("Font");
   gtk_widget_set_margin_bottom(font_frame, 10);
@@ -445,11 +462,14 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   GtkWidget *style_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
   data->bold_check = gtk_check_button_new_with_label("Bold");
   data->italic_check = gtk_check_button_new_with_label("Italic");
+  data->strikethrough_check = gtk_check_button_new_with_label("Strikethrough");
   gtk_check_button_set_active(GTK_CHECK_BUTTON(data->bold_check), current_bold);
   gtk_check_button_set_active(GTK_CHECK_BUTTON(data->italic_check), current_italic);
+  gtk_check_button_set_active(GTK_CHECK_BUTTON(data->strikethrough_check), current_strikethrough);
 
   gtk_box_append(GTK_BOX(style_box), data->bold_check);
   gtk_box_append(GTK_BOX(style_box), data->italic_check);
+  gtk_box_append(GTK_BOX(style_box), data->strikethrough_check);
 
   // Layout font grid
   gtk_grid_attach(GTK_GRID(font_grid), font_label, 0, 0, 1, 1);
@@ -554,6 +574,8 @@ void font_dialog_open(CanvasData *canvas_data, Element *element) {
   g_signal_connect_data(data->bold_check, "toggled",
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);
   g_signal_connect_data(data->italic_check, "toggled",
+                       G_CALLBACK(on_font_selection_changed), data, NULL, 0);
+  g_signal_connect_data(data->strikethrough_check, "toggled",
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);
   g_signal_connect_data(data->color_button, "color-set",
                        G_CALLBACK(on_font_selection_changed), data, NULL, 0);

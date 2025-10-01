@@ -12,6 +12,6 @@ int get_font_size_from_desc(const char *font_desc);
 gboolean is_font_bold(const char *font_desc);
 gboolean is_font_italic(const char *font_desc);
 char* create_font_description_string(const char *family, int size,
-                                   gboolean bold, gboolean italic);
+                                   gboolean bold, gboolean italic, gboolean strikethrough);
 
 #endif

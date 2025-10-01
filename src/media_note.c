@@ -188,6 +188,7 @@ MediaNote* media_note_create(ElementPosition position,
   media_note->text_b = text.text_color.b;
   media_note->text_a = text.text_color.a;
   media_note->font_description = g_strdup(text.font_description);
+  media_note->strikethrough = text.strikethrough;
   media_note->alignment = g_strdup(text.alignment ? text.alignment : "bottom-right");
 
   media_note->reset_video_data = FALSE;
@@ -728,6 +729,15 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     if (display_text[0] != '\0') {
       pango_layout_set_text(layout, display_text, -1);
       pango_layout_set_alignment(layout, element_get_pango_alignment(media_note->alignment));
+
+      // Apply strikethrough if enabled
+      if (media_note->strikethrough) {
+        PangoAttrList *attrs = pango_attr_list_new();
+        PangoAttribute *strike_attr = pango_attr_strikethrough_new(TRUE);
+        pango_attr_list_insert(attrs, strike_attr);
+        pango_layout_set_attributes(layout, attrs);
+        pango_attr_list_unref(attrs);
+      }
 
       int text_width, text_height;
       pango_layout_get_pixel_size(layout, &text_width, &text_height);

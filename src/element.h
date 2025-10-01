@@ -59,6 +59,7 @@ typedef struct {
   char* text;
   ElementColor text_color;
   char* font_description;
+  gboolean strikethrough;
   char* alignment;  // Supported values: "top-left", "top-center", "top-right", "center", "bottom-left", "bottom-right"
 } ElementText;
 

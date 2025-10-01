@@ -11,6 +11,7 @@ typedef struct {
   gboolean editing;
   double text_r, text_g, text_b, text_a;
   char *font_description;
+  gboolean strikethrough;
   PangoLayout *layout;  // Layout for measuring text
   int min_width;    // Minimum width for the element
 

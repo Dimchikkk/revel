@@ -19,6 +19,11 @@ int database_init(sqlite3 **db, const char *filename) {
     return 0;
   }
 
+  if (!database_migrate(*db)) {
+    sqlite3_close(*db);
+    return 0;
+  }
+
   if (!database_init_default_namespace(*db)) {
     sqlite3_close(*db);
     return 0;
@@ -89,6 +94,7 @@ int database_create_tables(sqlite3 *db) {
     "    text_b REAL NOT NULL DEFAULT 0.1,"
     "    text_a REAL NOT NULL DEFAULT 1.0,"
     "    font_description TEXT DEFAULT 'Ubuntu Mono Bold 16',"
+    "    strikethrough BOOLEAN DEFAULT 0,"
     "    alignment TEXT DEFAULT 'center',"  // 'center', 'lefttop', 'left', 'right'
     "    ref_count INTEGER DEFAULT 1,"
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
@@ -217,6 +223,41 @@ int database_create_tables(sqlite3 *db) {
   return 1;
 }
 
+int database_migrate(sqlite3 *db) {
+  char *err_msg = NULL;
+  sqlite3_stmt *stmt;
+
+  // Check if strikethrough column exists in text_refs table
+  const char *check_column_sql = "PRAGMA table_info(text_refs)";
+  if (sqlite3_prepare_v2(db, check_column_sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to check text_refs schema: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  int has_strikethrough = 0;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const char *column_name = (const char*)sqlite3_column_text(stmt, 1);
+    if (g_strcmp0(column_name, "strikethrough") == 0) {
+      has_strikethrough = 1;
+      break;
+    }
+  }
+  sqlite3_finalize(stmt);
+
+  // Add strikethrough column if it doesn't exist
+  if (!has_strikethrough) {
+    const char *add_column_sql = "ALTER TABLE text_refs ADD COLUMN strikethrough BOOLEAN DEFAULT 0";
+    if (sqlite3_exec(db, add_column_sql, NULL, NULL, &err_msg) != SQLITE_OK) {
+      fprintf(stderr, "Failed to add strikethrough column: %s\n", err_msg);
+      sqlite3_free(err_msg);
+      return 0;
+    }
+    printf("Migration: Added strikethrough column to text_refs table\n");
+  }
+
+  return 1;
+}
+
 int database_init_default_namespace(sqlite3 *db) {
   char *err_msg = NULL;
   sqlite3_stmt *stmt;
@@ -287,9 +328,10 @@ int database_create_text_ref(sqlite3 *db,
                              const char *text,
                              double text_r, double text_g, double text_b, double text_a,
                              const char *font_description,
+                             gboolean strikethrough,
                              const char *alignment,
                              int *text_id) {
-  const char *sql = "INSERT INTO text_refs (text, text_r, text_g, text_b, text_a, font_description, alignment) VALUES (?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO text_refs (text, text_r, text_g, text_b, text_a, font_description, strikethrough, alignment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -303,7 +345,8 @@ int database_create_text_ref(sqlite3 *db,
   sqlite3_bind_double(stmt, 4, text_b);
   sqlite3_bind_double(stmt, 5, text_a);
   sqlite3_bind_text(stmt, 6, font_description, -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 7, alignment, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 7, strikethrough ? 1 : 0);
+  sqlite3_bind_text(stmt, 8, alignment, -1, SQLITE_STATIC);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create text: %s\n", sqlite3_errmsg(db));
@@ -325,7 +368,7 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
     return 0; // Error - invalid input
   }
 
-  const char *sql = "SELECT text, text_r, text_g, text_b, text_a, font_description, alignment, ref_count FROM text_refs WHERE id = ?";
+  const char *sql = "SELECT text, text_r, text_g, text_b, text_a, font_description, strikethrough, alignment, ref_count FROM text_refs WHERE id = ?";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -351,14 +394,16 @@ int database_read_text_ref(sqlite3 *db, int text_id, ModelText **text) {
       model_text->font_description = g_strdup("Ubuntu Mono Bold 12"); // Default
     }
 
-    const char *alignment = (const char*)sqlite3_column_text(stmt, 6);
+    model_text->strikethrough = sqlite3_column_int(stmt, 6);
+
+    const char *alignment = (const char*)sqlite3_column_text(stmt, 7);
     if (alignment) {
       model_text->alignment = g_strdup(alignment);
     } else {
       model_text->alignment = NULL; // Let element type set its own default
     }
 
-    model_text->ref_count = sqlite3_column_int(stmt, 7);
+    model_text->ref_count = sqlite3_column_int(stmt, 8);
 
     *text = model_text;
     sqlite3_finalize(stmt);
@@ -677,6 +722,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
                                    element->text->r, element->text->g,
                                    element->text->b, element->text->a,
                                    element->text->font_description,
+                                   element->text->strikethrough,
                                    element->text->alignment, &text_id)) return 0;
       element->text->id = text_id;
     } else {
@@ -1766,7 +1812,7 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
     return 0;
   }
 
-  const char *sql = "UPDATE text_refs SET text = ?, text_r = ?, text_g = ?, text_b = ?, text_a = ?, font_description = ?, alignment = ?, ref_count = ? WHERE id = ?";
+  const char *sql = "UPDATE text_refs SET text = ?, text_r = ?, text_g = ?, text_b = ?, text_a = ?, font_description = ?, strikethrough = ?, alignment = ?, ref_count = ? WHERE id = ?";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -1780,9 +1826,10 @@ int database_update_text_ref(sqlite3 *db, ModelText *text) {
   sqlite3_bind_double(stmt, 4, text->b);
   sqlite3_bind_double(stmt, 5, text->a);
   sqlite3_bind_text(stmt, 6, text->font_description, -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 7, text->alignment, -1, SQLITE_STATIC);
-  sqlite3_bind_int(stmt, 8, text->ref_count);
-  sqlite3_bind_int(stmt, 9, text->id);
+  sqlite3_bind_int(stmt, 7, text->strikethrough ? 1 : 0);
+  sqlite3_bind_text(stmt, 8, text->alignment, -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 9, text->ref_count);
+  sqlite3_bind_int(stmt, 10, text->id);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to update text: %s\n", sqlite3_errmsg(db));

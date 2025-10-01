@@ -593,6 +593,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .text = model_element->text->text,
         .text_color = text_color,
         .font_description = model_element->text->font_description,
+        .strikethrough = model_element->text->strikethrough,
         .alignment = model_element->text->alignment,
       };
 
@@ -608,6 +609,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .text_color = text_color,
         .font_description = model_element->text->font_description,
         .alignment = model_element->text->alignment,
+        .strikethrough = model_element->text->strikethrough,
       };
 
 
@@ -623,6 +625,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .text_color = text_color,
         .font_description = model_element->text->font_description,
         .alignment = model_element->text->alignment,
+        .strikethrough = model_element->text->strikethrough,
       };
 
       visual_element = (Element*)space_element_create(position, bg_color, size, text, data);
@@ -698,6 +701,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .text_color = text_color,
         .font_description = model_element->text->font_description,
         .alignment = model_element->text->alignment,
+        .strikethrough = model_element->text->strikethrough,
       };
 
       visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
@@ -716,6 +720,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .text_color = text_color,
         .font_description = model_element->text->font_description,
         .alignment = model_element->text->alignment,
+        .strikethrough = model_element->text->strikethrough,
       };
       visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
     }
@@ -759,7 +764,8 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
           .a = model_element->text ? model_element->text->a : 1.0,
         },
         .font_description = model_element->text ? model_element->text->font_description : "Ubuntu Mono 12",
-        .alignment = model_element->text ? model_element->text->alignment : "center"
+        .alignment = model_element->text ? model_element->text->alignment : "center",
+        .strikethrough = model_element->text ? model_element->text->strikethrough : FALSE,
       };
       int stroke_width = model_element->stroke_width > 0 ? model_element->stroke_width : 3;
       ShapeType shape_type = model_element->shape_type >= 0 ? model_element->shape_type : SHAPE_CIRCLE;
@@ -803,6 +809,7 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
         .text_color = text_color,
         .font_description = model_element->text->font_description,
         .alignment = model_element->text->alignment,
+        .strikethrough = model_element->text->strikethrough,
       };
 
       visual_element = (Element*)inline_text_create(position, bg_color, size, text, data);

@@ -13,6 +13,7 @@ typedef struct {
   char *text;
   double text_r, text_g, text_b, text_a;
   char* font_description;
+  gboolean strikethrough;
   char* alignment;
   GtkWidget *text_view;
   gboolean editing;
