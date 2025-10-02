@@ -4,8 +4,8 @@
 #include <glib.h>
 #include "element.h"
 
-#define QUADTREE_MAX_ELEMENTS 16
-#define QUADTREE_MAX_DEPTH 8
+#define QUADTREE_MAX_ELEMENTS 64
+#define QUADTREE_MAX_DEPTH 16
 
 typedef struct _QuadTreeNode QuadTreeNode;
 
@@ -15,7 +15,7 @@ typedef struct {
 
 struct _QuadTreeNode {
     QuadTreeBounds bounds;
-    GList *elements;  // List of Element*
+    GPtrArray *elements;  // Array of Element*
     QuadTreeNode *children[4];  // NW, NE, SW, SE
     int depth;
 };
