@@ -914,6 +914,12 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
   // Set rotation from model
   if (visual_element) {
     visual_element->rotation_degrees = model_element->rotation_degrees;
+
+    // Add to quadtree immediately after creation, unless we're in the middle of
+    // loading a space (in which case canvas_rebuild_quadtree will be called)
+    if (data && data->quadtree && !data->is_loading_space) {
+      quadtree_insert(data->quadtree, visual_element);
+    }
   }
 
   return visual_element;

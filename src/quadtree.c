@@ -27,14 +27,61 @@ static void quadtree_node_free(QuadTreeNode *node) {
 }
 
 static gboolean bounds_intersects_element(QuadTreeBounds *bounds, Element *element) {
-    // Check if rotated element's bounding box intersects with bounds
-    double elem_right = element->x + element->width;
-    double elem_bottom = element->y + element->height;
+    // Calculate element's actual bounding box (accounting for rotation)
+    double elem_x = element->x;
+    double elem_y = element->y;
+    double elem_width = element->width;
+    double elem_height = element->height;
+
+    // If element is rotated, calculate the axis-aligned bounding box
+    if (element->rotation_degrees != 0.0) {
+        double cx = elem_x + elem_width / 2.0;
+        double cy = elem_y + elem_height / 2.0;
+        double angle = element->rotation_degrees * M_PI / 180.0;
+        double cos_a = cos(angle);
+        double sin_a = sin(angle);
+
+        // Get the four corners of the rotated rectangle
+        double corners_x[4], corners_y[4];
+        double half_w = elem_width / 2.0;
+        double half_h = elem_height / 2.0;
+
+        // Top-left
+        corners_x[0] = cx + (-half_w * cos_a - (-half_h) * sin_a);
+        corners_y[0] = cy + (-half_w * sin_a + (-half_h) * cos_a);
+        // Top-right
+        corners_x[1] = cx + (half_w * cos_a - (-half_h) * sin_a);
+        corners_y[1] = cy + (half_w * sin_a + (-half_h) * cos_a);
+        // Bottom-right
+        corners_x[2] = cx + (half_w * cos_a - half_h * sin_a);
+        corners_y[2] = cy + (half_w * sin_a + half_h * cos_a);
+        // Bottom-left
+        corners_x[3] = cx + (-half_w * cos_a - half_h * sin_a);
+        corners_y[3] = cy + (-half_w * sin_a + half_h * cos_a);
+
+        // Find axis-aligned bounding box
+        double min_x = corners_x[0], max_x = corners_x[0];
+        double min_y = corners_y[0], max_y = corners_y[0];
+        for (int i = 1; i < 4; i++) {
+            if (corners_x[i] < min_x) min_x = corners_x[i];
+            if (corners_x[i] > max_x) max_x = corners_x[i];
+            if (corners_y[i] < min_y) min_y = corners_y[i];
+            if (corners_y[i] > max_y) max_y = corners_y[i];
+        }
+
+        elem_x = min_x;
+        elem_y = min_y;
+        elem_width = max_x - min_x;
+        elem_height = max_y - min_y;
+    }
+
+    double elem_right = elem_x + elem_width;
+    double elem_bottom = elem_y + elem_height;
     double bounds_right = bounds->x + bounds->width;
     double bounds_bottom = bounds->y + bounds->height;
 
-    return !(element->x > bounds_right || elem_right < bounds->x ||
-             element->y > bounds_bottom || elem_bottom < bounds->y);
+    return !(elem_x > bounds_right || elem_right < bounds->x ||
+             elem_y > bounds_bottom || elem_bottom < bounds->y);
 }
 
 static gboolean bounds_contains_point(QuadTreeBounds *bounds, double x, double y) {
@@ -93,22 +140,6 @@ static void quadtree_node_insert(QuadTreeNode *node, Element *element) {
     }
 }
 
-static void quadtree_node_remove(QuadTreeNode *node, Element *element) {
-    if (!bounds_intersects_element(&node->bounds, element)) {
-        return;
-    }
-
-    // Remove from this node
-    node->elements = g_list_remove(node->elements, element);
-
-    // Remove from children
-    if (node->children[0] != NULL) {
-        for (int i = 0; i < 4; i++) {
-            quadtree_node_remove(node->children[i], element);
-        }
-    }
-}
-
 static void quadtree_node_query_point(QuadTreeNode *node, double x, double y, GList **results) {
     if (!bounds_contains_point(&node->bounds, x, y)) {
         return;
@@ -123,37 +154,6 @@ static void quadtree_node_query_point(QuadTreeNode *node, double x, double y, GL
     if (node->children[0] != NULL) {
         for (int i = 0; i < 4; i++) {
             quadtree_node_query_point(node->children[i], x, y, results);
-        }
-    }
-}
-
-static void quadtree_node_query_rect(QuadTreeNode *node, double x, double y,
-                                      double width, double height, GList **results) {
-    QuadTreeBounds query_bounds = {x, y, width, height};
-
-    // Check if node bounds intersect with query bounds
-    double node_right = node->bounds.x + node->bounds.width;
-    double node_bottom = node->bounds.y + node->bounds.height;
-    double query_right = x + width;
-    double query_bottom = y + height;
-
-    if (node->bounds.x > query_right || node_right < x ||
-        node->bounds.y > query_bottom || node_bottom < y) {
-        return;
-    }
-
-    // Add elements from this node
-    for (GList *l = node->elements; l != NULL; l = l->next) {
-        Element *elem = (Element*)l->data;
-        if (bounds_intersects_element(&query_bounds, elem)) {
-            *results = g_list_prepend(*results, elem);
-        }
-    }
-
-    // Query children
-    if (node->children[0] != NULL) {
-        for (int i = 0; i < 4; i++) {
-            quadtree_node_query_rect(node->children[i], x, y, width, height, results);
         }
     }
 }
@@ -173,11 +173,6 @@ void quadtree_free(QuadTree *tree) {
 void quadtree_insert(QuadTree *tree, Element *element) {
     if (!tree || !element) return;
     quadtree_node_insert(tree->root, element);
-}
-
-void quadtree_remove(QuadTree *tree, Element *element) {
-    if (!tree || !element) return;
-    quadtree_node_remove(tree->root, element);
 }
 
 void quadtree_clear(QuadTree *tree) {

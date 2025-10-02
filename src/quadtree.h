@@ -30,7 +30,6 @@ void quadtree_free(QuadTree *tree);
 
 // Operations
 void quadtree_insert(QuadTree *tree, Element *element);
-void quadtree_remove(QuadTree *tree, Element *element);
 void quadtree_clear(QuadTree *tree);
 
 // Query elements at a point (for picking)
