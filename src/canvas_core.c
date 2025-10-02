@@ -134,7 +134,9 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   // The quadtree will cover a 100000x100000 canvas centered at origin
   data->quadtree = quadtree_new(-50000, -50000, 100000, 100000);
 
-  if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
+  if (data->model != NULL && data->model->db != NULL) {
+    canvas_sync_with_model(data);
+  }
 
   return data;
 }
@@ -483,12 +485,16 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
 
-    // View frustum culling - skip elements outside viewport
-    if (element->x > visible_x + visible_width ||
-        element->y > visible_y + visible_height ||
-        element->x + element->width < visible_x ||
-        element->y + element->height < visible_y) {
-      continue;
+    // Don't cull connections - their bounds are updated during draw and curves extend beyond bounding box
+    if (element->type != ELEMENT_CONNECTION) {
+      // View frustum culling - skip elements completely outside viewport
+      // Note: using >= and <= to ensure partially visible elements are drawn
+      if (element->x >= visible_x + visible_width ||
+          element->y >= visible_y + visible_height ||
+          element->x + element->width <= visible_x ||
+          element->y + element->height <= visible_y) {
+        continue;
+      }
     }
 
     // Skip drawing hidden elements

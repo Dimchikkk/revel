@@ -681,6 +681,7 @@ SpaceTreeView *space_tree_view_new(CanvasData *canvas_data) {
   tree_view->suppress_selection_signal = FALSE;
   tree_view->is_rebuilding = FALSE;
   tree_view->idle_refresh_handle = 0;
+  tree_view->is_built = FALSE;  // Track if tree has been built
 
   // Create tree store with more columns
   tree_view->tree_store = gtk_tree_store_new(SPACE_TREE_N_COLUMNS,
@@ -729,8 +730,8 @@ SpaceTreeView *space_tree_view_new(CanvasData *canvas_data) {
   g_signal_connect(tree_view->tree_view, "row-collapsed",
                    G_CALLBACK(on_tree_row_collapsed), tree_view);
 
-  // Build initial tree
-  build_initial_tree(tree_view);
+  // Don't build initial tree - do it lazily when first opened
+  // build_initial_tree(tree_view);
 
   return tree_view;
 }

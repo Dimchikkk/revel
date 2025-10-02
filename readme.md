@@ -5,13 +5,14 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 ## Table of Contents
 
 * [Features](#features)
+* [Performance](#performance)
 * [Dependencies](#dependencies)
 * [To run on x86_64 GNU/Linux](#to-run-on-x86_64-gnulinux)
 * [Project layout](#project-layout)
 * [DSL example](#dsl-example)
 * [How to add app launcher](#how-to-add-app-launcher)
 
-## Features:
+## Features
 
 ### Core Architecture
 * **Single-file database:** All data stored in portable SQLite3 database file
@@ -85,6 +86,13 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 ### Keyboard Shortcuts
 
 Press `F1` inside the app to open an in-product reference with every shortcut.
+
+## Performance
+
+Built for extreme scalability - handles massive datasets with optimized viewport culling, lazy initialization, and efficient database queries.
+
+![Large-scale stress test](examples/media/125_000.jpg)
+(125_000 elements)
 
 ## Dependencies
 

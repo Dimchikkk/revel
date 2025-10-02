@@ -181,22 +181,21 @@ void quadtree_remove(QuadTree *tree, Element *element) {
 }
 
 void quadtree_clear(QuadTree *tree) {
-    if (!tree) return;
+    if (!tree || !tree->root) return;
+
+    // Save bounds before freeing the root
+    double x = tree->root->bounds.x;
+    double y = tree->root->bounds.y;
+    double width = tree->root->bounds.width;
+    double height = tree->root->bounds.height;
+
     quadtree_node_free(tree->root);
-    tree->root = quadtree_node_new(tree->root->bounds.x, tree->root->bounds.y,
-                                   tree->root->bounds.width, tree->root->bounds.height, 0);
+    tree->root = quadtree_node_new(x, y, width, height, 0);
 }
 
 GList* quadtree_query_point(QuadTree *tree, double x, double y) {
     if (!tree) return NULL;
     GList *results = NULL;
     quadtree_node_query_point(tree->root, x, y, &results);
-    return results;
-}
-
-GList* quadtree_query_rect(QuadTree *tree, double x, double y, double width, double height) {
-    if (!tree) return NULL;
-    GList *results = NULL;
-    quadtree_node_query_rect(tree->root, x, y, width, height, &results);
     return results;
 }

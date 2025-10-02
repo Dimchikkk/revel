@@ -36,7 +36,4 @@ void quadtree_clear(QuadTree *tree);
 // Query elements at a point (for picking)
 GList* quadtree_query_point(QuadTree *tree, double x, double y);
 
-// Query elements in a rectangle (for drawing)
-GList* quadtree_query_rect(QuadTree *tree, double x, double y, double width, double height);
-
 #endif

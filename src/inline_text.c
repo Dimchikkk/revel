@@ -176,13 +176,11 @@ int inline_text_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int inline_text_pick_connection_point(Element *element, int x, int y) {
-  int cx, cy;
-  canvas_screen_to_canvas(element->canvas_data, x, y, &cx, &cy);
-
+  // x, y are already in canvas coordinates - no conversion needed
   for (int i = 0; i < 8; i++) {
     int px, py;
     inline_text_get_connection_point(element, i, &px, &py);
-    int dx = cx - px, dy = cy - py;
+    int dx = x - px, dy = y - py;
     if (dx * dx + dy * dy < 64) return i; // 8 pixel radius
   }
   return -1;

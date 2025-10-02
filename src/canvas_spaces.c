@@ -13,6 +13,12 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
 
   undo_manager_reset(data->undo_manager);
 
+  // Clear selection when switching spaces to avoid stale pointers
+  if (data->selected_elements) {
+    g_list_free(data->selected_elements);
+    data->selected_elements = NULL;
+  }
+
   // Clear copied elements when switching spaces
   if (data->copied_elements) {
     g_list_free(data->copied_elements);
@@ -26,6 +32,11 @@ void switch_to_space(CanvasData *data, const gchar* space_uuid) {
 
   model_load_space_settings(data->model, space_uuid);
   model_load_space(data->model);
+
+  // Clear quadtree when switching spaces since elements are freed
+  if (data->quadtree) {
+    quadtree_clear(data->quadtree);
+  }
 
   // Set flag to enable animations for space loading
   data->is_loading_space = TRUE;
@@ -110,6 +121,7 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
 
         ModelElement *model_element = model_create_element(data->model, config);
         model_element->visual_element = create_visual_element(model_element, data);
+
         undo_manager_push_create_action(data->undo_manager, model_element);
         gtk_widget_queue_draw(data->drawing_area);
       } else {

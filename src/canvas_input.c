@@ -432,10 +432,10 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     }
 
     data->selecting = TRUE;
-    data->start_x = cx;
-    data->start_y = cy;
-    data->current_x = cx;
-    data->current_y = cy;
+    data->start_x = (int)x;
+    data->start_y = (int)y;
+    data->current_x = (int)x;
+    data->current_y = (int)y;
   }
 
   gtk_widget_queue_draw(data->drawing_area);
@@ -790,8 +790,8 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
   }
 
   if (data->selecting) {
-    data->current_x = cx;
-    data->current_y = cy;
+    data->current_x = (int)x;
+    data->current_y = (int)y;
     gtk_widget_queue_draw(data->drawing_area);
   }
 }

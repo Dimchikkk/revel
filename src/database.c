@@ -12,7 +12,12 @@ int database_init(sqlite3 **db, const char *filename) {
     return 0;
   }
 
+  // Performance optimizations for faster loading
   sqlite3_exec(*db, "PRAGMA foreign_keys = ON;", NULL, NULL, NULL);
+  sqlite3_exec(*db, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
+  sqlite3_exec(*db, "PRAGMA synchronous = NORMAL;", NULL, NULL, NULL);
+  sqlite3_exec(*db, "PRAGMA cache_size = -64000;", NULL, NULL, NULL);  // 64MB cache
+  sqlite3_exec(*db, "PRAGMA temp_store = MEMORY;", NULL, NULL, NULL);
 
   if (!database_create_tables(*db)) {
     sqlite3_close(*db);
@@ -1306,23 +1311,44 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
 }
 
 int database_load_space(sqlite3 *db, Model *model) {
+  // Use a read transaction for better performance when loading many elements
+  char *err_msg = NULL;
+  if (sqlite3_exec(db, "BEGIN DEFERRED TRANSACTION;", NULL, 0, &err_msg) != SQLITE_OK) {
+    fprintf(stderr, "Failed to begin read transaction: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    // Continue without transaction - it's just an optimization
+  }
+
+  // Use JOINs to load all data in one query - much faster for bulk loading
   const char *sql =
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
-    "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid,  "
+    "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid, "
     "e.image_id, e.video_id, "
-    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.stroke_style, e.fill_style, e.stroke_color, e.connection_type, e.arrowhead_type, e.rotation_degrees, e.description, e.created_at "
+    "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.stroke_style, e.fill_style, e.stroke_color, "
+    "e.connection_type, e.arrowhead_type, e.rotation_degrees, e.description, e.created_at, "
+    "t.type, t.ref_count, "
+    "p.x, p.y, p.z, p.ref_count, "
+    "s.width, s.height, s.ref_count, "
+    "txt.text, txt.text_r, txt.text_g, txt.text_b, txt.text_a, txt.font_description, txt.strikethrough, txt.alignment, txt.ref_count, "
+    "c.r, c.g, c.b, c.a, c.ref_count "
     "FROM elements e "
+    "LEFT JOIN element_type_refs t ON e.type_id = t.id "
+    "LEFT JOIN position_refs p ON e.position_id = p.id "
+    "LEFT JOIN size_refs s ON e.size_id = s.id "
+    "LEFT JOIN text_refs txt ON e.text_id = txt.id "
+    "LEFT JOIN color_refs c ON e.bg_color_id = c.id "
     "WHERE e.space_uuid = ?";
 
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
     fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    sqlite3_exec(db, "ROLLBACK;", NULL, 0, NULL);
     return 0;
   }
 
   sqlite3_bind_text(stmt, 1, model->current_space_uuid, -1, SQLITE_STATIC);
 
-  // Define column indices for better readability and maintainability
+  // Define column indices for JOINed query
   enum {
     COL_UUID = 0,
     COL_TYPE_ID,
@@ -1350,6 +1376,30 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_ROTATION_DEGREES,
     COL_DESCRIPTION,
     COL_CREATED_AT,
+    // JOINed data starts here
+    COL_TYPE_TYPE,
+    COL_TYPE_REF_COUNT,
+    COL_POS_X,
+    COL_POS_Y,
+    COL_POS_Z,
+    COL_POS_REF_COUNT,
+    COL_SIZE_WIDTH,
+    COL_SIZE_HEIGHT,
+    COL_SIZE_REF_COUNT,
+    COL_TEXT_TEXT,
+    COL_TEXT_R,
+    COL_TEXT_G,
+    COL_TEXT_B,
+    COL_TEXT_A,
+    COL_TEXT_FONT,
+    COL_TEXT_STRIKE,
+    COL_TEXT_ALIGN,
+    COL_TEXT_REF_COUNT,
+    COL_COLOR_R,
+    COL_COLOR_G,
+    COL_COLOR_B,
+    COL_COLOR_A,
+    COL_COLOR_REF_COUNT,
   };
 
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -1362,87 +1412,88 @@ int database_load_space(sqlite3 *db, Model *model) {
     // Set state to SAVED since we're loading from database
     element->state = MODEL_STATE_SAVED;
 
-    // Extract type (check if already loaded in model)
+    // Extract type directly from JOIN
     int type_id = sqlite3_column_int(stmt, COL_TYPE_ID);
     if (type_id > 0) {
       ModelType *type = g_hash_table_lookup(model->types, GINT_TO_POINTER(type_id));
       if (!type) {
-        // Not in cache, load from database
-        if (database_read_type_ref(db, type_id, &type)) {
-          g_hash_table_insert(model->types, GINT_TO_POINTER(type_id), type);
-        } else {
-          fprintf(stderr, "Failed to load type %d for element %s\n", type_id, uuid);
-          model_element_free(element);
-          continue;
-        }
+        type = g_new0(ModelType, 1);
+        type->id = type_id;
+        type->type = sqlite3_column_int(stmt, COL_TYPE_TYPE);
+        type->ref_count = sqlite3_column_int(stmt, COL_TYPE_REF_COUNT);
+        g_hash_table_insert(model->types, GINT_TO_POINTER(type_id), type);
       }
       element->type = type;
     }
 
-    // Extract position (check if already loaded in model)
+    // Extract position directly from JOIN
     int position_id = sqlite3_column_int(stmt, COL_POSITION_ID);
     if (position_id > 0) {
       ModelPosition *position = g_hash_table_lookup(model->positions, GINT_TO_POINTER(position_id));
       if (!position) {
-        // Not in cache, load from database
-        if (database_read_position_ref(db, position_id, &position)) {
-          g_hash_table_insert(model->positions, GINT_TO_POINTER(position_id), position);
-        } else {
-          fprintf(stderr, "Failed to load position %d for element %s\n", position_id, uuid);
-          model_element_free(element);
-          continue;
-        }
+        position = g_new0(ModelPosition, 1);
+        position->id = position_id;
+        position->x = sqlite3_column_int(stmt, COL_POS_X);
+        position->y = sqlite3_column_int(stmt, COL_POS_Y);
+        position->z = sqlite3_column_int(stmt, COL_POS_Z);
+        position->ref_count = sqlite3_column_int(stmt, COL_POS_REF_COUNT);
+        g_hash_table_insert(model->positions, GINT_TO_POINTER(position_id), position);
       }
       element->position = position;
     }
 
-    // Extract size (check if already loaded in model)
+    // Extract size directly from JOIN
     int size_id = sqlite3_column_int(stmt, COL_SIZE_ID);
     if (size_id > 0) {
       ModelSize *size = g_hash_table_lookup(model->sizes, GINT_TO_POINTER(size_id));
       if (!size) {
-        // Not in cache, load from database
-        if (database_read_size_ref(db, size_id, &size)) {
-          g_hash_table_insert(model->sizes, GINT_TO_POINTER(size_id), size);
-        } else {
-          fprintf(stderr, "Failed to load size %d for element %s\n", size_id, uuid);
-          model_element_free(element);
-          continue;
-        }
+        size = g_new0(ModelSize, 1);
+        size->id = size_id;
+        size->width = sqlite3_column_int(stmt, COL_SIZE_WIDTH);
+        size->height = sqlite3_column_int(stmt, COL_SIZE_HEIGHT);
+        size->ref_count = sqlite3_column_int(stmt, COL_SIZE_REF_COUNT);
+        g_hash_table_insert(model->sizes, GINT_TO_POINTER(size_id), size);
       }
       element->size = size;
     }
 
-    // Extract text (check if already loaded in model)
+    // Extract text directly from JOIN
     int text_id = sqlite3_column_int(stmt, COL_TEXT_ID);
     if (text_id > 0) {
       ModelText *text = g_hash_table_lookup(model->texts, GINT_TO_POINTER(text_id));
       if (!text) {
-        // Not in cache, load from database
-        if (database_read_text_ref(db, text_id, &text)) {
-          g_hash_table_insert(model->texts, GINT_TO_POINTER(text_id), text);
-        } else {
-          fprintf(stderr, "Failed to load text %d for element %s\n", text_id, uuid);
-          model_element_free(element);
-          continue;
-        }
+        text = g_new0(ModelText, 1);
+        text->id = text_id;
+        const char *text_str = (const char*)sqlite3_column_text(stmt, COL_TEXT_TEXT);
+        text->text = g_strdup(text_str ? text_str : "");
+        text->r = sqlite3_column_double(stmt, COL_TEXT_R);
+        text->g = sqlite3_column_double(stmt, COL_TEXT_G);
+        text->b = sqlite3_column_double(stmt, COL_TEXT_B);
+        text->a = sqlite3_column_double(stmt, COL_TEXT_A);
+        const char *font = (const char*)sqlite3_column_text(stmt, COL_TEXT_FONT);
+        text->font_description = g_strdup(font ? font : "Ubuntu Mono Bold 16");
+        text->strikethrough = sqlite3_column_int(stmt, COL_TEXT_STRIKE) ? TRUE : FALSE;
+        const char *align = (const char*)sqlite3_column_text(stmt, COL_TEXT_ALIGN);
+        text->alignment = g_strdup(align ? align : "center");
+        text->ref_count = sqlite3_column_int(stmt, COL_TEXT_REF_COUNT);
+        g_hash_table_insert(model->texts, GINT_TO_POINTER(text_id), text);
       }
       element->text = text;
     }
 
-    // Extract color (check if already loaded in model)
+    // Extract color directly from JOIN
     int bg_color_id = sqlite3_column_int(stmt, COL_COLOR_ID);
     if (bg_color_id > 0) {
       ModelColor *color = g_hash_table_lookup(model->colors, GINT_TO_POINTER(bg_color_id));
       if (!color) {
-        // Not in cache, load from database
-        if (database_read_color_ref(db, bg_color_id, &color)) {
-          g_hash_table_insert(model->colors, GINT_TO_POINTER(bg_color_id), color);
-        } else {
-          fprintf(stderr, "Failed to load color %d for element %s\n", bg_color_id, uuid);
-          model_element_free(element);
-          continue;
-        }
+        color = g_new0(ModelColor, 1);
+        color->id = bg_color_id;
+        color->r = sqlite3_column_double(stmt, COL_COLOR_R);
+        color->g = sqlite3_column_double(stmt, COL_COLOR_G);
+        color->b = sqlite3_column_double(stmt, COL_COLOR_B);
+        color->a = sqlite3_column_double(stmt, COL_COLOR_A);
+        color->ref_count = sqlite3_column_int(stmt, COL_COLOR_REF_COUNT);
+        g_hash_table_insert(model->colors, GINT_TO_POINTER(bg_color_id), color);
       }
       element->bg_color = color;
     }
@@ -1547,6 +1598,14 @@ int database_load_space(sqlite3 *db, Model *model) {
   }
 
   sqlite3_finalize(stmt);
+
+  // Commit the read transaction
+  if (sqlite3_exec(db, "COMMIT;", NULL, 0, &err_msg) != SQLITE_OK) {
+    fprintf(stderr, "Failed to commit read transaction: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    // Continue - data is already loaded
+  }
+
   return 1;
 }
 
@@ -1640,12 +1699,8 @@ int cleanup_database_references(sqlite3 *db) {
   int total_deleted = 0;
   char *err_msg = NULL;
 
-  // Use a single transaction for all cleanup operations
-  if (sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, &err_msg) != SQLITE_OK) {
-    fprintf(stderr, "Failed to begin transaction: %s\n", err_msg);
-    sqlite3_free(err_msg);
-    return 0;
-  }
+  // Note: This function is called from within an existing transaction
+  // (from model_save_elements), so we don't start our own transaction
 
   const char *tables[] = {
     "element_type_refs",
@@ -1671,14 +1726,6 @@ int cleanup_database_references(sqlite3 *db) {
     }
 
     total_deleted += sqlite3_changes(db);
-  }
-
-  // Commit the transaction
-  if (sqlite3_exec(db, "COMMIT", NULL, NULL, &err_msg) != SQLITE_OK) {
-    fprintf(stderr, "Failed to commit transaction: %s\n", err_msg);
-    sqlite3_free(err_msg);
-    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
-    return 0;
   }
 
   return total_deleted;

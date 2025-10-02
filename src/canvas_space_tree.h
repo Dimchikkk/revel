@@ -25,6 +25,7 @@ struct _SpaceTreeView {
   CanvasData *canvas_data;
   gboolean suppress_selection_signal;
   gboolean is_rebuilding;
+  gboolean is_built;  // Track if tree has been built (for lazy initialization)
   guint idle_refresh_handle;
 };
 
