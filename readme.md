@@ -91,8 +91,7 @@ Press `F1` inside the app to open an in-product reference with every shortcut.
 
 Built for extreme scalability - handles massive datasets with optimized viewport culling, lazy initialization, and efficient database queries.
 
-![Large-scale stress test](examples/media/125_000.jpg)
-(125_000 elements)
+![Stress testing](examples/media/10_000.jpg)
 
 ## Dependencies
 
