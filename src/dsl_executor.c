@@ -479,11 +479,27 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
     return;
   }
 
-  GHashTable *element_map = g_hash_table_new(g_str_hash, g_str_equal);
+  GHashTable *element_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   GList *connections = NULL;
+  GList *new_elements = NULL;
+  GList *connection_elements = NULL;
 
   gchar **lines = g_strsplit(script, "\n", 0);
+
+  // Count total lines for progress reporting
+  int total_lines = 0;
   for (int i = 0; lines[i] != NULL; i++) {
+    total_lines++;
+  }
+  g_print("DSL: Processing %d lines...\n", total_lines);
+
+  int progress_interval = total_lines / 10; // Report every 10%
+  if (progress_interval < 1000) progress_interval = 1000;
+
+  for (int i = 0; lines[i] != NULL; i++) {
+    if (i > 0 && i % progress_interval == 0) {
+      g_print("DSL: Processed %d/%d lines (%.1f%%)...\n", i, total_lines, (i * 100.0) / total_lines);
+    }
     gchar *line = trim_whitespace(lines[i]);
     if (line[0] == '#' || line[0] == '\0') {
       continue; // Skip comments and empty lines
@@ -787,9 +803,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         if (rotation_set && rotation_degrees != 0.0) {
           model_element->rotation_degrees = rotation_degrees;
         }
-        model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
-        undo_manager_push_create_action(data->undo_manager, model_element);
+        new_elements = g_list_prepend(new_elements, model_element);
       }
 
       g_free(note_text.font_description);
@@ -1041,9 +1056,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         if (rotation_set && rotation_degrees != 0.0) {
           model_element->rotation_degrees = rotation_degrees;
         }
-        model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
-        undo_manager_push_create_action(data->undo_manager, model_element);
+        new_elements = g_list_prepend(new_elements, model_element);
       }
 
       g_free(inline_text.font_description);
@@ -1145,9 +1159,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             if (rotation_set && rotation_degrees != 0.0) {
               model_element->rotation_degrees = rotation_degrees;
             }
-            model_element->visual_element = create_visual_element(model_element, data);
             g_hash_table_insert(element_map, g_strdup(id), model_element);
-            undo_manager_push_create_action(data->undo_manager, model_element);
+            new_elements = g_list_prepend(new_elements, model_element);
           }
         }
       } else {
@@ -1298,9 +1311,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             if (rotation_set && rotation_degrees != 0.0) {
               model_element->rotation_degrees = rotation_degrees;
             }
-            model_element->visual_element = create_visual_element(model_element, data);
             g_hash_table_insert(element_map, g_strdup(id), model_element);
-            undo_manager_push_create_action(data->undo_manager, model_element);
+            new_elements = g_list_prepend(new_elements, model_element);
           }
         }
       } else {
@@ -1395,9 +1407,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           if (rotation_set && rotation_degrees != 0.0) {
             model_element->rotation_degrees = rotation_degrees;
           }
-          model_element->visual_element = create_visual_element(model_element, data);
           g_hash_table_insert(element_map, g_strdup(id), model_element);
-          undo_manager_push_create_action(data->undo_manager, model_element);
+          new_elements = g_list_prepend(new_elements, model_element);
         }
       } else {
         g_print("Failed to parse parameters for space_create\n");
@@ -2068,14 +2079,12 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       };
 
       ModelElement *model_element = model_create_element(data->model, config);
-
       if (model_element) {
         if (rotation_set && rotation_degrees != 0.0) {
           model_element->rotation_degrees = rotation_degrees;
         }
-        model_element->visual_element = create_visual_element(model_element, data);
         g_hash_table_insert(element_map, g_strdup(id), model_element);
-        undo_manager_push_create_action(data->undo_manager, model_element);
+        new_elements = g_list_prepend(new_elements, model_element);
       }
 
       if (line_points) {
@@ -2176,6 +2185,28 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
     g_free(tokens);
   }
 
+  // Create visual elements for all collected elements (deferred rendering)
+  int element_count = g_list_length(new_elements);
+  g_print("DSL: Creating %d visual elements...\n", element_count);
+
+  int elem_idx = 0;
+  for (GList *l = new_elements; l != NULL; l = l->next) {
+    ModelElement *element = (ModelElement *)l->data;
+    if (element && !element->visual_element) {
+      element->visual_element = create_visual_element(element, data);
+    }
+    elem_idx++;
+    if (element_count > 10000 && elem_idx % 10000 == 0) {
+      g_print("DSL: Created %d/%d visuals (%.1f%%)...\n", elem_idx, element_count, (elem_idx * 100.0) / element_count);
+    }
+  }
+
+  // Push single batch undo action for all created elements
+  if (new_elements) {
+    g_print("DSL: Pushing batch undo for %d elements...\n", element_count);
+    undo_manager_push_create_action_batch(data->undo_manager, new_elements);
+  }
+
   // Process connections
   for (GList *l = connections; l != NULL; l = l->next) {
     ConnectionInfo *info = (ConnectionInfo *)l->data;
@@ -2236,8 +2267,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       ModelElement *model_conn = model_create_element(data->model, config);
 
       if (model_conn) {
-        model_conn->visual_element = create_visual_element(model_conn, data);
-        undo_manager_push_create_action(data->undo_manager, model_conn);
+        connection_elements = g_list_prepend(connection_elements, model_conn);
       }
     } else {
       g_print("Could not find elements for connection: %s -> %s\n", info->from_id, info->to_id);
@@ -2248,11 +2278,29 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
     g_free(info);
   }
 
-  g_list_free(connections);
+  // Create visual elements for connections
+  for (GList *l = connection_elements; l != NULL; l = l->next) {
+    ModelElement *element = (ModelElement *)l->data;
+    if (element && !element->visual_element) {
+      element->visual_element = create_visual_element(element, data);
+    }
+  }
+
+  // Push batch undo action for connections
+  if (connection_elements) {
+    undo_manager_push_create_action_batch(data->undo_manager, connection_elements);
+  }
+
+  // Clean up
   g_hash_table_destroy(element_map);
+  g_list_free_full(connections, g_free);
+  g_list_free(new_elements);
+  g_list_free(connection_elements);
   g_strfreev(lines);
 
-  canvas_sync_with_model(data);
+  g_print("DSL: Complete! Total elements: %d + %d connections\n",
+          element_count, g_list_length(connection_elements));
+
   gtk_widget_queue_draw(data->drawing_area);
 }
 

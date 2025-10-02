@@ -89,6 +89,14 @@ static void free_action_data(Action *action) {
     // These are simple structs that can be freed directly
     g_free(action->data);
     break;
+  case ACTION_CREATE_ELEMENT_BATCH: {
+    CreateDataBatch *batch_data = (CreateDataBatch*)action->data;
+    if (batch_data) {
+      g_list_free(batch_data->elements);
+      g_free(batch_data);
+    }
+    break;
+  }
   case ACTION_DELETE_ELEMENT: {
     DeleteData *delete_data = (DeleteData*)action->data;
     if (delete_data) {
@@ -307,6 +315,13 @@ void undo_manager_push_action(UndoManager *manager, ActionType type, gpointer da
     log_data = copy;
     break;
   }
+  case ACTION_CREATE_ELEMENT_BATCH: {
+    CreateDataBatch *original = (CreateDataBatch*)data;
+    CreateDataBatch *copy = g_new0(CreateDataBatch, 1);
+    copy->elements = g_list_copy(original->elements);
+    log_data = copy;
+    break;
+  }
   }
 
   Action *log_action = action_new(type, log_data, description);
@@ -394,6 +409,14 @@ void undo_manager_undo(UndoManager *manager) {
     create_data->element->state = MODEL_STATE_DELETED;
     break;
   }
+  case ACTION_CREATE_ELEMENT_BATCH: {
+    CreateDataBatch *batch_data = (CreateDataBatch*)action->data;
+    for (GList *l = batch_data->elements; l != NULL; l = l->next) {
+      ModelElement *element = (ModelElement*)l->data;
+      element->state = MODEL_STATE_DELETED;
+    }
+    break;
+  }
   }
 
   // Move from undo to redo stack
@@ -462,6 +485,14 @@ void undo_manager_redo(UndoManager *manager) {
     CreateData *create_data = (CreateData*)action->data;
     // For creation redo, restore the initial state
     create_data->element->state = create_data->initial_state;
+    break;
+  }
+  case ACTION_CREATE_ELEMENT_BATCH: {
+    CreateDataBatch *batch_data = (CreateDataBatch*)action->data;
+    for (GList *l = batch_data->elements; l != NULL; l = l->next) {
+      ModelElement *element = (ModelElement*)l->data;
+      element->state = MODEL_STATE_NEW; // Or some other appropriate state
+    }
     break;
   }
   }
@@ -646,6 +677,17 @@ void undo_manager_push_create_action(UndoManager *manager, ModelElement *element
 
   char *description = g_strdup_printf("Created %s", get_element_type_name_for_element(element));
   undo_manager_push_action(manager, ACTION_CREATE_ELEMENT, create_data, description);
+  g_free(description);
+}
+
+void undo_manager_push_create_action_batch(UndoManager *manager, GList *elements) {
+  if (!manager || !elements) return;
+
+  CreateDataBatch *batch_data = g_new0(CreateDataBatch, 1);
+  batch_data->elements = g_list_copy(elements);
+
+  char *description = g_strdup_printf("Created %d elements", g_list_length(elements));
+  undo_manager_push_action(manager, ACTION_CREATE_ELEMENT_BATCH, batch_data, description);
   g_free(description);
 }
 

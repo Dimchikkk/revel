@@ -101,6 +101,9 @@ typedef struct {
   ElementShape shape;
 } ElementConfig;
 
+// Forward declare ModelElement to avoid circular dependency
+typedef struct _ModelElement ModelElement;
+
 struct Element {
   ElementType type;
   ElementVTable *vtable;
@@ -123,6 +126,9 @@ struct Element {
   gboolean animating;
   gint64 animation_start_time;
   double animation_alpha;
+
+  // OPTIMIZATION: Reverse pointer to model element for O(1) lookups
+  ModelElement *model_element;
 };
 
 // Interface functions

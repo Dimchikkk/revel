@@ -12,6 +12,11 @@ void database_close(sqlite3 *db);
 int database_create_tables(sqlite3 *db);
 int database_init_default_namespace(sqlite3 *db);
 
+// Transaction management
+int database_begin_transaction(sqlite3 *db);
+int database_commit_transaction(sqlite3 *db);
+int database_rollback_transaction(sqlite3 *db);
+
 // UUID helpers
 void database_generate_uuid(char **uuid_str);
 int database_is_valid_uuid(const char *uuid_str);

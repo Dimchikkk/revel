@@ -1137,8 +1137,16 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
   Element *selected_element = NULL;
   int highest_z_index = -1;
 
-  GList *visual_elements = canvas_get_visual_elements(data);
-  for (GList *l = g_list_last(visual_elements); l != NULL; l = l->prev) {
+  // Use quadtree to query only nearby elements
+  GList *candidates = NULL;
+  if (data->quadtree) {
+    candidates = quadtree_query_point(data->quadtree, x, y);
+  } else {
+    // Fallback to full scan if quadtree not available
+    candidates = canvas_get_visual_elements(data);
+  }
+
+  for (GList *l = candidates; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
 
     // Skip hidden elements from picking
@@ -1167,6 +1175,12 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
       }
     }
   }
+
+  // Free the candidate list from quadtree query
+  if (data->quadtree && candidates) {
+    g_list_free(candidates);
+  }
+
   return selected_element;
 }
 

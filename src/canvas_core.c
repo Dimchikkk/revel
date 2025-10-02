@@ -123,10 +123,16 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
 
   // Initialize hidden elements tracking
   data->hidden_elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  // OPTIMIZATION: Initialize hidden children cache
+  data->hidden_children_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
   // Initialize animation timer
   data->animation_timer_id = 0;
   data->is_loading_space = FALSE;
+
+  // Initialize quadtree with a large canvas bounds
+  // The quadtree will cover a 100000x100000 canvas centered at origin
+  data->quadtree = quadtree_new(-50000, -50000, 100000, 100000);
 
   if (data->model != NULL && data->model->db != NULL) canvas_sync_with_model(data);
 
@@ -172,6 +178,9 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
     if (model_element->visual_element != NULL) {
       // Update existing visual element properties directly
       Element *visual_element = model_element->visual_element;
+
+      // OPTIMIZATION: Ensure reverse pointer is always set for existing elements
+      visual_element->model_element = model_element;
 
       // Update position if changed
       if (model_element->position) {
@@ -302,6 +311,7 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
       Element *visual_element = create_visual_element(model_element, data);
       if (visual_element) {
         model_element->visual_element = visual_element;
+        visual_element->model_element = model_element;  // OPTIMIZATION: Set reverse pointer
       }
     }
 
@@ -328,12 +338,17 @@ void canvas_data_free(CanvasData *data) {
 
   // Clean up hidden elements tracking
   if (data->hidden_elements) g_hash_table_destroy(data->hidden_elements);
+  // OPTIMIZATION: Clean up hidden children cache
+  if (data->hidden_children_cache) g_hash_table_destroy(data->hidden_children_cache);
 
   // Clean up animation timer
   if (data->animation_timer_id > 0) {
     g_source_remove(data->animation_timer_id);
     data->animation_timer_id = 0;
   }
+
+  // Clean up quadtree
+  if (data->quadtree) quadtree_free(data->quadtree);
 
   // Don't free the model here - it's freed in canvas_on_app_shutdown
 
@@ -455,19 +470,43 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     g_object_unref(layout);
   }
 
+  // Calculate visible area for culling FIRST
+  int visible_x = -data->offset_x;
+  int visible_y = -data->offset_y;
+  int visible_width = gtk_widget_get_width(data->drawing_area) / data->zoom_scale;
+  int visible_height = gtk_widget_get_height(data->drawing_area) / data->zoom_scale;
+
+  // OPTIMIZATION: Collect only visible elements first, then sort
   GList *visual_elements = canvas_get_visual_elements(data);
-  GList *sorted_elements = g_list_copy(visual_elements);
+  GList *visible_elements = NULL;
 
-  sorted_elements = g_list_sort(sorted_elements, compare_elements_by_z_index);
-
-  for (GList *l = sorted_elements; l != NULL; l = l->next) {
+  for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
 
-    // Skip drawing hidden elements
-    ModelElement *model_element = model_get_by_visual(data->model, element);
-    if (model_element && canvas_is_element_hidden(data, model_element->uuid)) {
+    // View frustum culling - skip elements outside viewport
+    if (element->x > visible_x + visible_width ||
+        element->y > visible_y + visible_height ||
+        element->x + element->width < visible_x ||
+        element->y + element->height < visible_y) {
       continue;
     }
+
+    // Skip drawing hidden elements
+    // OPTIMIZATION: Use cached reverse pointer instead of O(n) lookup
+    if (element->model_element && canvas_is_element_hidden(data, element->model_element->uuid)) {
+      continue;
+    }
+
+    // Add to visible elements list
+    visible_elements = g_list_prepend(visible_elements, element);
+  }
+
+  // Sort only the visible elements by z-index
+  visible_elements = g_list_sort(visible_elements, compare_elements_by_z_index);
+
+  // Draw visible elements
+  for (GList *l = visible_elements; l != NULL; l = l->next) {
+    Element *element = (Element*)l->data;
 
     // Apply animation alpha if element is animating
     if (element->animating) {
@@ -480,7 +519,8 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     }
 
     // Draw indicator if element has hidden children
-    if (model_element && canvas_has_hidden_children(data, model_element->uuid)) {
+    // OPTIMIZATION: Use cached reverse pointer instead of O(n) lookup
+    if (element->model_element && canvas_has_hidden_children(data, element->model_element->uuid)) {
       // Draw a small triangle indicator in the bottom-right corner
       double indicator_size = 8.0;
       double x = (element->x + element->width - indicator_size - 3) * data->zoom_scale + data->offset_x * data->zoom_scale;
@@ -497,7 +537,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     }
   }
 
-  g_list_free(sorted_elements);
+  g_list_free(visible_elements);
   g_list_free(visual_elements);
 
   // Draw current drawing in progress
@@ -891,10 +931,12 @@ GList* canvas_get_visual_elements(CanvasData *data) {
     // Only include elements that belong to the current space
     if (model_element->visual_element != NULL &&
         g_strcmp0(model_element->space_uuid, data->model->current_space_uuid) == 0) {
-      visual_elements = g_list_append(visual_elements, model_element->visual_element);
+      // Use prepend (O(1)) instead of append (O(n)) for massive performance gain
+      visual_elements = g_list_prepend(visual_elements, model_element->visual_element);
     }
   }
 
+  // Note: Order doesn't matter here as we sort by z-index later in draw function
   return visual_elements;
 }
 
@@ -951,6 +993,17 @@ static gboolean update_element_animations(gpointer user_data) {
   return G_SOURCE_CONTINUE;
 }
 
+void canvas_rebuild_quadtree(CanvasData *canvas_data) {
+  if (!canvas_data || !canvas_data->quadtree) return;
+
+  quadtree_clear(canvas_data->quadtree);
+  GList *visual_elements = canvas_get_visual_elements(canvas_data);
+  for (GList *l = visual_elements; l != NULL; l = l->next) {
+    Element *element = (Element*)l->data;
+    quadtree_insert(canvas_data->quadtree, element);
+  }
+}
+
 void canvas_sync_with_model(CanvasData *canvas_data) {
   if (!canvas_data || !canvas_data->model || !canvas_data->model->elements) {
     return;
@@ -959,6 +1012,9 @@ void canvas_sync_with_model(CanvasData *canvas_data) {
   GList *sorted_elements = sort_model_elements_for_serialization(canvas_data->model->elements);
   create_or_update_visual_elements(sorted_elements, canvas_data);
   g_list_free(sorted_elements);
+
+  // Rebuild quadtree with all visual elements
+  canvas_rebuild_quadtree(canvas_data);
 
   // Start animation timer if elements were loaded and we're not already animating
   if (g_hash_table_size(canvas_data->model->elements) > 0 && canvas_data->animation_timer_id == 0) {
@@ -989,6 +1045,8 @@ void canvas_hide_children(CanvasData *data, const char *parent_uuid) {
   if (!data || !parent_uuid || !data->hidden_elements || !data->model) return;
 
   GList *children = find_children_bfs(data->model, parent_uuid);
+  gboolean has_children = (children != NULL);
+
   for (GList *iter = children; iter != NULL; iter = iter->next) {
     ModelElement *element = (ModelElement*)iter->data;
     if (element && element->uuid) {
@@ -997,6 +1055,11 @@ void canvas_hide_children(CanvasData *data, const char *parent_uuid) {
     }
   }
   g_list_free(children);
+
+  // OPTIMIZATION: Update cache - mark parent as having hidden children
+  if (has_children) {
+    g_hash_table_insert(data->hidden_children_cache, g_strdup(parent_uuid), GINT_TO_POINTER(TRUE));
+  }
 }
 
 void canvas_show_children(CanvasData *data, const char *parent_uuid) {
@@ -1011,6 +1074,9 @@ void canvas_show_children(CanvasData *data, const char *parent_uuid) {
     }
   }
   g_list_free(children);
+
+  // OPTIMIZATION: Update cache - remove parent from having hidden children
+  g_hash_table_remove(data->hidden_children_cache, parent_uuid);
 }
 
 gboolean canvas_is_element_hidden(CanvasData *data, const char *element_uuid) {
@@ -1019,18 +1085,10 @@ gboolean canvas_is_element_hidden(CanvasData *data, const char *element_uuid) {
 }
 
 gboolean canvas_has_hidden_children(CanvasData *data, const char *parent_uuid) {
-  if (!data || !parent_uuid || !data->hidden_elements || !data->model) return FALSE;
+  if (!data || !parent_uuid || !data->hidden_children_cache) return FALSE;
 
-  GList *children = find_children_bfs(data->model, parent_uuid);
-  for (GList *iter = children; iter != NULL; iter = iter->next) {
-    ModelElement *element = (ModelElement*)iter->data;
-    if (element && element->uuid && g_hash_table_contains(data->hidden_elements, element->uuid)) {
-      g_list_free(children);
-      return TRUE;
-    }
-  }
-  g_list_free(children);
-  return FALSE;
+  // OPTIMIZATION: Use cached result instead of expensive BFS search
+  return g_hash_table_contains(data->hidden_children_cache, parent_uuid);
 }
 
 void canvas_toggle_space_name_visibility(GtkToggleButton *button, gpointer user_data) {

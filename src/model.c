@@ -837,9 +837,15 @@ int model_save_elements(Model *model) {
     return 0;
   }
 
+  if (!database_begin_transaction(model->db)) {
+    fprintf(stderr, "Failed to begin transaction\n");
+    return 0;
+  }
+
   database_set_current_space_uuid(model->db, model->current_space_uuid);
 
   int saved_count = 0;
+  int error_occurred = 0;
   GList *to_remove = NULL;
 
   // FIRST: Process DELETIONS with connections first order
@@ -947,6 +953,7 @@ int model_save_elements(Model *model) {
         saved_count++;
       } else {
         fprintf(stderr, "Failed to delete element %s from database\n", element->uuid);
+        error_occurred = 1;
       }
 
       if (db_element) {
@@ -1021,6 +1028,7 @@ int model_save_elements(Model *model) {
         saved_count++;
       } else {
         fprintf(stderr, "Failed to save element %s to database\n", element->uuid);
+        error_occurred = 1;
       }
     } else if (element->state == MODEL_STATE_UPDATED) {
       // Handle space element updates - set parent UUID
@@ -1036,6 +1044,7 @@ int model_save_elements(Model *model) {
         saved_count++;
       } else {
         fprintf(stderr, "Failed to update element %s in database\n", element->uuid);
+        error_occurred = 1;
       }
     }
 
@@ -1053,6 +1062,16 @@ int model_save_elements(Model *model) {
     iter_list = iter_list->next;
   }
   g_list_free(to_remove);
+
+  if (error_occurred) {
+    database_rollback_transaction(model->db);
+    return 0;
+  }
+
+  if (!database_commit_transaction(model->db)) {
+    fprintf(stderr, "Failed to commit transaction\n");
+    return 0;
+  }
 
   return saved_count;
 }

@@ -270,6 +270,37 @@ int database_init_default_namespace(sqlite3 *db) {
   return 1;
 }
 
+int database_begin_transaction(sqlite3 *db) {
+  char *err_msg = NULL;
+  if (sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, 0, &err_msg) != SQLITE_OK) {
+    fprintf(stderr, "SQL error: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    return 0;
+  }
+  return 1;
+}
+
+int database_commit_transaction(sqlite3 *db) {
+  char *err_msg = NULL;
+  if (sqlite3_exec(db, "COMMIT;", NULL, 0, &err_msg) != SQLITE_OK) {
+    fprintf(stderr, "SQL error: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    return 0;
+  }
+  return 1;
+}
+
+int database_rollback_transaction(sqlite3 *db) {
+  char *err_msg = NULL;
+  if (sqlite3_exec(db, "ROLLBACK;", NULL, 0, &err_msg) != SQLITE_OK) {
+    fprintf(stderr, "SQL error: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    return 0;
+  }
+  return 1;
+}
+
+
 void database_generate_uuid(char **uuid_str) {
   uuid_t uuid;
   uuid_generate(uuid);

@@ -9,6 +9,7 @@ typedef struct _UndoManager UndoManager;
 
 typedef enum {
   ACTION_CREATE_ELEMENT,
+  ACTION_CREATE_ELEMENT_BATCH,
   ACTION_MOVE_ELEMENT,
   ACTION_RESIZE_ELEMENT,
   ACTION_ROTATE_ELEMENT,
@@ -58,6 +59,11 @@ typedef struct {
   ModelState previous_state;
 } DeleteData;
 
+typedef struct {
+  GList *elements;
+} CreateDataBatch;
+
+
 typedef struct _Action {
   ActionType type;
   gpointer data;
@@ -84,6 +90,7 @@ void undo_manager_redo(UndoManager *manager);
 void undo_manager_reset(UndoManager *manager);
 
 void undo_manager_push_create_action(UndoManager *manager, ModelElement *element);
+void undo_manager_push_create_action_batch(UndoManager *manager, GList *elements);
 void undo_manager_push_move_action(UndoManager *manager, ModelElement *element,
                                    int old_x, int old_y,
                                    int new_x, int new_y);

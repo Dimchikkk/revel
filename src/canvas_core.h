@@ -20,6 +20,9 @@ GList *canvas_get_visual_elements(CanvasData *data);
 // visual elements from the sorted list. Useful for refreshing the canvas display.
 void canvas_sync_with_model(CanvasData *canvas_data);
 
+// Rebuild the spatial index (quadtree) with current visual elements
+void canvas_rebuild_quadtree(CanvasData *canvas_data);
+
 void canvas_screen_to_canvas(CanvasData *data, int screen_x, int screen_y,
                              int *canvas_x, int *canvas_y);
 void canvas_canvas_to_screen(CanvasData *data, int canvas_x, int canvas_y, int *screen_x, int *screen_y);

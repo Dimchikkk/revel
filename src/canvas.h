@@ -8,6 +8,7 @@
 #include "connection.h"
 #include "freehand_drawing.h"
 #include "shape.h"
+#include "quadtree.h"
 
 // Forward declare to avoid circular dependency
 typedef struct _SpaceTreeView SpaceTreeView;
@@ -78,6 +79,8 @@ struct _CanvasData {
 
   // Hidden elements tracking
   GHashTable *hidden_elements; // uuid string -> gboolean
+  // OPTIMIZATION: Cache which elements have hidden children for O(1) lookups
+  GHashTable *hidden_children_cache; // parent_uuid string -> gboolean
 
   // Toolbar management
   GtkWidget *toolbar;
@@ -100,6 +103,9 @@ struct _CanvasData {
 
   // Copy/paste management
   GList *copied_elements;
+
+  // Spatial index for fast element picking
+  QuadTree *quadtree;
 
   Model *model;
 };
