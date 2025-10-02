@@ -2020,8 +2020,6 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
 
   GdkTexture *texture = gdk_clipboard_read_texture_finish(clipboard, res, &error);
   if (!texture) {
-    g_print("No image in clipboard or failed: %s\n",
-            error ? error->message : "unknown");
     if (error) g_error_free(error);
     return;
   }
@@ -2110,11 +2108,129 @@ void on_clipboard_texture_ready(GObject *source_object, GAsyncResult *res, gpoin
   g_object_unref(texture);
 }
 
+void on_clipboard_text_ready(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+  CanvasData *data = (CanvasData *)user_data;
+  GError *error = NULL;
+  GdkClipboard *clipboard = GDK_CLIPBOARD(source_object);
+
+  char *text = gdk_clipboard_read_text_finish(clipboard, res, &error);
+  if (text && g_utf8_strlen(text, -1) > 0) {
+    // We have text! Create an inline text element at cursor position
+    // Get current pointer position
+    GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gtk_widget_get_root(data->drawing_area)));
+    GdkDevice *device = gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default()));
+    double pointer_x, pointer_y;
+    gdk_surface_get_device_position(surface, device, &pointer_x, &pointer_y, NULL);
+
+    // Convert mouse position to canvas coordinates
+    int canvas_x, canvas_y;
+    canvas_screen_to_canvas(data, (int)pointer_x, (int)pointer_y, &canvas_x, &canvas_y);
+
+    ElementSize size = {
+      .width = 100,
+      .height = 20,
+    };
+    ElementPosition position = {
+      .x = canvas_x - size.width / 2,  // Center horizontally at cursor
+      .y = canvas_y - size.height / 2,  // Center vertically at cursor
+      .z = data->next_z_index++,
+    };
+    ElementColor bg_color = {
+      .r = 0.0,
+      .g = 0.0,
+      .b = 0.0,
+      .a = 0.0,
+    };
+    ElementColor text_color = {
+      .r = 0.9,
+      .g = 0.9,
+      .b = 0.9,
+      .a = 1.0,
+    };
+    ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
+    ElementConnection connection = {
+      .from_element_uuid = NULL,
+      .to_element_uuid = NULL,
+      .from_point = -1,
+      .to_point = -1,
+    };
+    ElementDrawing drawing = {
+      .drawing_points = NULL,
+      .stroke_width = 0,
+    };
+    ElementText element_text = {
+      .text = g_strdup(text),
+      .text_color = text_color,
+      .font_description = g_strdup("Ubuntu Mono 14"),
+    };
+    ElementConfig config = {
+      .type = ELEMENT_INLINE_TEXT,
+      .bg_color = bg_color,
+      .position = position,
+      .size = size,
+      .media = media,
+      .drawing = drawing,
+      .connection = connection,
+      .text = element_text,
+    };
+
+    ModelElement *model_element = model_create_element(data->model, config);
+    model_element->visual_element = create_visual_element(model_element, data);
+    undo_manager_push_create_action(data->undo_manager, model_element);
+    gtk_widget_queue_draw(data->drawing_area);
+
+    g_free(text);
+    if (error) g_error_free(error);
+    return;
+  }
+
+  // No text, try image instead
+  if (error) g_error_free(error);
+  if (text) g_free(text);
+
+  gdk_clipboard_read_texture_async(
+                                   clipboard,
+                                   NULL,                     // GCancellable
+                                   on_clipboard_texture_ready, // Callback function
+                                   data                       // user_data
+                                   );
+}
+
 void canvas_on_paste(GtkWidget *widget, CanvasData *data) {
   // First check if we have copied elements to paste
   if (data->copied_elements) {
     // Save copied elements first (in case they're MODEL_STATE_NEW)
     model_save_elements(data->model);
+
+    // Get current pointer position
+    GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(gtk_widget_get_root(data->drawing_area)));
+    GdkDevice *device = gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default()));
+    double pointer_x, pointer_y;
+    gdk_surface_get_device_position(surface, device, &pointer_x, &pointer_y, NULL);
+
+    // Calculate bounding box of copied elements
+    int min_x = INT_MAX, min_y = INT_MAX, max_x = INT_MIN, max_y = INT_MIN;
+    for (GList *l = data->copied_elements; l != NULL; l = l->next) {
+      ModelElement *element = (ModelElement*)l->data;
+      if (element->position->x < min_x) min_x = element->position->x;
+      if (element->position->y < min_y) min_y = element->position->y;
+      int elem_max_x = element->position->x + (element->size ? element->size->width : 100);
+      int elem_max_y = element->position->y + (element->size ? element->size->height : 100);
+      if (elem_max_x > max_x) max_x = elem_max_x;
+      if (elem_max_y > max_y) max_y = elem_max_y;
+    }
+
+    // Calculate center of bounding box
+    int bbox_center_x = (min_x + max_x) / 2;
+    int bbox_center_y = (min_y + max_y) / 2;
+
+    // Convert mouse position to canvas coordinates
+    int canvas_mouse_x, canvas_mouse_y;
+    canvas_screen_to_canvas(data, (int)pointer_x, (int)pointer_y, &canvas_mouse_x, &canvas_mouse_y);
+
+    // Calculate offset to center at mouse position
+    int offset_x = canvas_mouse_x - bbox_center_x;
+    int offset_y = canvas_mouse_y - bbox_center_y;
 
     // Create a hash table to map old UUIDs to new UUIDs
     GHashTable *uuid_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -2126,9 +2242,11 @@ void canvas_on_paste(GtkWidget *widget, CanvasData *data) {
       ModelElement *forked = model_element_fork(data->model, copied);
 
       if (forked) {
-        // Update z-index to bring to front
+        // Apply offset and update z-index
+        int new_x = forked->position->x + offset_x;
+        int new_y = forked->position->y + offset_y;
         int new_z = data->next_z_index++;
-        model_update_position(data->model, forked, forked->position->x, forked->position->y, new_z);
+        model_update_position(data->model, forked, new_x, new_y, new_z);
 
         // Store UUID mapping
         g_hash_table_insert(uuid_map, g_strdup(copied->uuid), g_strdup(forked->uuid));
@@ -2187,21 +2305,20 @@ void canvas_on_paste(GtkWidget *widget, CanvasData *data) {
     return;
   }
 
-  // Otherwise, try to paste image from clipboard
+  // Otherwise, try to paste from system clipboard
   GdkClipboard *clipboard = gdk_display_get_clipboard(gdk_display_get_default());
 
   if (!clipboard) {
-    g_print("Failed to get clipboard\n");
     return;
   }
 
-  // Async read texture from clipboard
-  gdk_clipboard_read_texture_async(
-                                   clipboard,
-                                   NULL,                     // GCancellable
-                                   on_clipboard_texture_ready, // Callback function
-                                   data                       // user_data
-                                   );
+  // First try to read text from clipboard
+  gdk_clipboard_read_text_async(
+                                clipboard,
+                                NULL,                     // GCancellable
+                                on_clipboard_text_ready,  // Callback function
+                                data                       // user_data
+                                );
 }
 
 gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
