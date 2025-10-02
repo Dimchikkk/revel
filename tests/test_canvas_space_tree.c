@@ -229,6 +229,9 @@ static void test_tree_three_spaces_second_active(TestFixture *fixture, gconstpoi
   fixture->tree_view = space_tree_view_new(fixture->canvas_data);
   g_assert_nonnull(fixture->tree_view);
 
+  // Trigger tree building (now lazy-loaded)
+  space_tree_view_refresh(fixture->tree_view);
+
   GtkTreeModel *tree_model = GTK_TREE_MODEL(fixture->tree_view->tree_store);
   g_assert_nonnull(tree_model);
 
@@ -355,6 +358,9 @@ static void test_tree_collapse_active_space_with_child(TestFixture *fixture, gco
   fixture->tree_view = space_tree_view_new(fixture->canvas_data);
   g_assert_nonnull(fixture->tree_view);
 
+  // Trigger tree building (now lazy-loaded)
+  space_tree_view_refresh(fixture->tree_view);
+
   GtkTreeModel *tree_model = GTK_TREE_MODEL(fixture->tree_view->tree_store);
   g_assert_nonnull(tree_model);
 
@@ -438,6 +444,9 @@ static void test_tree_collapse_grandparent_of_active_space(TestFixture *fixture,
   fixture->tree_view = space_tree_view_new(fixture->canvas_data);
   g_assert_nonnull(fixture->tree_view);
 
+  // Trigger tree building (now lazy-loaded)
+  space_tree_view_refresh(fixture->tree_view);
+
   GtkTreeModel *tree_model = GTK_TREE_MODEL(fixture->tree_view->tree_store);
   g_assert_nonnull(tree_model);
 
@@ -490,6 +499,10 @@ static void test_tree_toggle_refresh_no_duplicates(TestFixture *fixture, gconstp
   g_assert_cmpint(model_save_elements(fixture->model), >=, 1);
 
   fixture->tree_view = space_tree_view_new(fixture->canvas_data);
+
+  // Trigger tree building (now lazy-loaded)
+  space_tree_view_refresh(fixture->tree_view);
+
   GtkTreeModel *tree_model = GTK_TREE_MODEL(fixture->tree_view->tree_store);
   g_assert_nonnull(tree_model);
 
