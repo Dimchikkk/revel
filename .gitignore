@@ -7,3 +7,4 @@ test_space_tree_runner
 test_undo_runner
 *.o
 .gdb_history
+ai_cube.dsl

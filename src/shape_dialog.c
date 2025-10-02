@@ -20,9 +20,11 @@ typedef struct {
   GtkWidget *hcylinder_btn;
   GtkWidget *diamond_btn;
   GtkWidget *rounded_rect_btn;
+  GtkWidget *trapezoid_btn;
   GtkWidget *line_btn;
   GtkWidget *arrow_btn;
   GtkWidget *bezier_btn;
+  GtkWidget *cube_btn;
 } ShapeDialogData;
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
@@ -95,6 +97,15 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_line_to(cr, inset, height / 2.0);
     cairo_close_path(cr);
     break;
+  case SHAPE_TRAPEZOID: {
+    double top_inset = draw_width * 0.2;
+    cairo_move_to(cr, inset + top_inset, inset);
+    cairo_line_to(cr, width - inset - top_inset, inset);
+    cairo_line_to(cr, width - inset, height - inset);
+    cairo_line_to(cr, inset, height - inset);
+    cairo_close_path(cr);
+    break;
+  }
   case SHAPE_CYLINDER_VERTICAL: {
     double center_x = width / 2.0;
     double cylinder_width = draw_width;
@@ -261,6 +272,24 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_stroke(cr);
     return;
   }
+  case SHAPE_CUBE: {
+    double offset = MIN(draw_width, draw_height) * 0.35;
+    // Front face
+    cairo_rectangle(cr, inset, inset + offset, draw_width - offset, draw_height - offset);
+    // Top face
+    cairo_move_to(cr, inset, inset + offset);
+    cairo_line_to(cr, inset + offset, inset);
+    cairo_line_to(cr, inset + draw_width, inset);
+    cairo_line_to(cr, inset + draw_width - offset, inset + offset);
+    cairo_close_path(cr);
+    // Side face
+    cairo_move_to(cr, inset + draw_width - offset, inset + offset);
+    cairo_line_to(cr, inset + draw_width, inset);
+    cairo_line_to(cr, inset + draw_width, inset + draw_height - offset);
+    cairo_line_to(cr, inset + draw_width - offset, inset + draw_height);
+    cairo_close_path(cr);
+    break;
+  }
   }
 
   if (icon_data->shape_type != SHAPE_CYLINDER_VERTICAL &&
@@ -408,6 +437,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
     case GDK_KEY_o:
       button = data->rounded_rect_btn;
       break;
+    case GDK_KEY_p:
+      button = data->trapezoid_btn;
+      break;
     case GDK_KEY_l:
       button = data->line_btn;
       break;
@@ -416,6 +448,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
       break;
     case GDK_KEY_b:
       button = data->bezier_btn;
+      break;
+    case GDK_KEY_k:
+      button = data->cube_btn;
       break;
     default:
       return FALSE; // Let other handlers process this key
@@ -601,14 +636,20 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   data->rounded_rect_btn = create_shape_button("Rounded Rect (O)", SHAPE_ROUNDED_RECTANGLE, data);
   gtk_grid_attach(GTK_GRID(shapes_grid), data->rounded_rect_btn, 0, 2, 1, 1);
 
+  data->trapezoid_btn = create_shape_button("Trapezoid (P)", SHAPE_TRAPEZOID, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->trapezoid_btn, 1, 2, 1, 1);
+
   data->line_btn = create_shape_button("Line (L)", SHAPE_LINE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->line_btn, 1, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->line_btn, 2, 2, 1, 1);
 
   data->arrow_btn = create_shape_button("Arrow (A)", SHAPE_ARROW, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->arrow_btn, 2, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->arrow_btn, 0, 3, 1, 1);
 
   data->bezier_btn = create_shape_button("Bezier (B)", SHAPE_BEZIER, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 0, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 1, 3, 1, 1);
+
+  data->cube_btn = create_shape_button("Cube (K)", SHAPE_CUBE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 2, 3, 1, 1);
 
 
   // Add Cancel button

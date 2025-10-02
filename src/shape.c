@@ -493,6 +493,26 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_stroke(cr);
       }
       break;
+    case SHAPE_TRAPEZOID:
+      {
+        // Draw trapezoid with top edge narrower than bottom edge
+        double top_inset = element->width * 0.2;  // Top is 60% of width
+        double x = element->x;
+        double y = element->y;
+        double width = element->width;
+        double height = element->height;
+
+        cairo_move_to(cr, x + top_inset, y);
+        cairo_line_to(cr, x + width - top_inset, y);
+        cairo_line_to(cr, x + width, y + height);
+        cairo_line_to(cr, x, y + height);
+        cairo_close_path(cr);
+
+        apply_fill(shape, cr);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+        cairo_stroke(cr);
+      }
+      break;
     case SHAPE_LINE:
     case SHAPE_ARROW:
       {
@@ -535,6 +555,38 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
           cairo_line_to(cr, right_x, right_y);
           cairo_stroke(cr);
         }
+      }
+      break;
+    case SHAPE_CUBE:
+      {
+        double x = element->x;
+        double y = element->y;
+        double width = element->width;
+        double height = element->height;
+        double offset = MIN(width, height) * 0.35;
+
+        if (width < 10 || height < 10) { // too small to draw a cube
+            cairo_rectangle(cr, x, y, width, height);
+        } else {
+            // Front face
+            cairo_rectangle(cr, x, y + offset, width - offset, height - offset);
+            // Top face
+            cairo_move_to(cr, x, y + offset);
+            cairo_line_to(cr, x + offset, y);
+            cairo_line_to(cr, x + width, y);
+            cairo_line_to(cr, x + width - offset, y + offset);
+            cairo_close_path(cr);
+            // Side face
+            cairo_move_to(cr, x + width - offset, y + offset);
+            cairo_line_to(cr, x + width, y);
+            cairo_line_to(cr, x + width, y + height - offset);
+            cairo_line_to(cr, x + width - offset, y + height);
+            cairo_close_path(cr);
+        }
+
+        apply_fill(shape, cr);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+        cairo_stroke(cr);
       }
       break;
     case SHAPE_BEZIER:

@@ -205,6 +205,9 @@ static gboolean parse_shape_type(const gchar *str, int *shape_type) {
              g_strcmp0(str, "roundrect") == 0) {
     *shape_type = SHAPE_ROUNDED_RECTANGLE;
     return TRUE;
+  } else if (g_strcmp0(str, "trapezoid") == 0) {
+    *shape_type = SHAPE_TRAPEZOID;
+    return TRUE;
   } else if (g_strcmp0(str, "line") == 0) {
     *shape_type = SHAPE_LINE;
     return TRUE;
@@ -213,6 +216,9 @@ static gboolean parse_shape_type(const gchar *str, int *shape_type) {
     return TRUE;
   } else if (g_strcmp0(str, "bezier") == 0 || g_strcmp0(str, "curve") == 0) {
     *shape_type = SHAPE_BEZIER;
+    return TRUE;
+  } else if (g_strcmp0(str, "cube") == 0) {
+    *shape_type = SHAPE_CUBE;
     return TRUE;
   }
   return FALSE;
@@ -2438,8 +2444,11 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
         case SHAPE_CYLINDER_VERTICAL: shape_type_str = "vcylinder"; break;
         case SHAPE_CYLINDER_HORIZONTAL: shape_type_str = "hcylinder"; break;
         case SHAPE_ROUNDED_RECTANGLE: shape_type_str = "rounded_rectangle"; break;
+        case SHAPE_TRAPEZOID: shape_type_str = "trapezoid"; break;
         case SHAPE_LINE: shape_type_str = "line"; break;
         case SHAPE_ARROW: shape_type_str = "arrow"; break;
+        case SHAPE_BEZIER: shape_type_str = "bezier"; break;
+        case SHAPE_CUBE: shape_type_str = "cube"; break;
       }
 
       gchar *text_escaped = escape_text_for_dsl(element->text ? element->text->text : "");
