@@ -385,8 +385,6 @@ animate_resize circle1 (120,120) (80,80) 1.0 1.0 bezier
 
 **Example Files:**
 - `examples/presentation_demo.dsl` - Basic presentation without animations
-- `examples/presentation_with_animation.dsl` - Presentation with single-play animations
-- `examples/presentation_with_cycled_animation.dsl` - Presentation with looping animations
 
 ---
 

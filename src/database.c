@@ -39,13 +39,13 @@ int database_create_tables(sqlite3 *db) {
   const char *sql =
     // Spaces table
     "CREATE TABLE IF NOT EXISTS spaces ("
-    "    uuid TEXT PRIMARY KEY,"  // UUID
+    "    uuid TEXT PRIMARY KEY,"                   // UUID
     "    name TEXT NOT NULL,"
-    "    parent_uuid TEXT,"       // UUID of parent space
+    "    parent_uuid TEXT,"                        // UUID of parent space
     "    is_current BOOLEAN DEFAULT 0,"
-    "    background_color TEXT DEFAULT '#181818',"  // Background color in hex format
-    "    grid_enabled BOOLEAN DEFAULT 1,"           // Whether grid is enabled
-    "    grid_color TEXT DEFAULT '#999999',"        // Grid color in hex format
+    "    background_color TEXT DEFAULT '#181818'," // Background color in hex format
+    "    grid_enabled BOOLEAN DEFAULT 1,"          // Whether grid is enabled
+    "    grid_color TEXT DEFAULT '#26262666',"     // Grid color in hex format
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (parent_uuid) REFERENCES spaces(uuid)"
     ");"
@@ -95,7 +95,7 @@ int database_create_tables(sqlite3 *db) {
     "    text_a REAL NOT NULL DEFAULT 1.0,"
     "    font_description TEXT DEFAULT 'Ubuntu Mono Bold 16',"
     "    strikethrough BOOLEAN DEFAULT 0,"
-    "    alignment TEXT DEFAULT 'center',"  // 'center', 'lefttop', 'left', 'right'
+    "    alignment TEXT DEFAULT 'center',"
     "    ref_count INTEGER DEFAULT 1,"
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"
