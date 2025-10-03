@@ -197,6 +197,7 @@ static gboolean refresh_tree_view_idle(gpointer user_data) {
   tree_view->suppress_selection_signal = FALSE;
   select_current_space_node(tree_view);
 
+  tree_view->is_built = TRUE;
   tree_view->idle_refresh_handle = 0;
 
   return G_SOURCE_REMOVE;

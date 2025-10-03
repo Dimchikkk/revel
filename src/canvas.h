@@ -99,6 +99,7 @@ struct _CanvasData {
   // Space tree view
   SpaceTreeView *space_tree_view;
   GtkWidget *tree_scrolled;
+  GtkWidget *tree_toggle_button;
   gboolean tree_view_visible;
 
   // Copy/paste management

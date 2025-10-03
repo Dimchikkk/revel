@@ -522,7 +522,6 @@ void canvas_toggle_tree_view(GtkToggleButton *button, gpointer user_data) {
 
     // Build tree on first open (lazy initialization)
     if (data->space_tree_view && !data->space_tree_view->is_built) {
-      data->space_tree_view->is_built = TRUE;
       space_tree_view_schedule_refresh(data->space_tree_view);
     } else if (data->space_tree_view) {
       // Refresh tree view to show current state

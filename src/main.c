@@ -359,6 +359,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   // Initialize tree view
   data->tree_scrolled = tree_scrolled;
+  data->tree_toggle_button = tree_btn;
   data->tree_view_visible = FALSE;
   data->space_tree_view = space_tree_view_new(data);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(tree_scrolled),
