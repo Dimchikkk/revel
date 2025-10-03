@@ -165,6 +165,10 @@ void inline_text_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 }
 
 void inline_text_get_connection_point(Element *element, int point, int *cx, int *cy) {
+  InlineText *text = (InlineText*)element;
+  // Update layout to ensure width/height are current
+  inline_text_update_layout(text);
+
   switch(point) {
   case 0: *cx = element->x + element->width/2; *cy = element->y; break;
   case 1: *cx = element->x + element->width; *cy = element->y + element->height/2; break;
@@ -180,7 +184,7 @@ int inline_text_pick_resize_handle(Element *element, int x, int y) {
 
 int inline_text_pick_connection_point(Element *element, int x, int y) {
   // x, y are already in canvas coordinates - no conversion needed
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 4; i++) {
     int px, py;
     inline_text_get_connection_point(element, i, &px, &py);
     int dx = x - px, dy = y - py;
@@ -222,6 +226,7 @@ static void on_text_buffer_changed(GtkTextBuffer *buffer, gpointer user_data) {
 
 gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   InlineText *text = (InlineText*)user_data;
+
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
     if (state & GDK_CONTROL_MASK) {
       // Ctrl+Enter does nothing special for inline text (allow newline)
@@ -231,15 +236,6 @@ gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, gu
       inline_text_finish_editing((Element*)text);
       return TRUE;
     }
-  }
-  if (keyval == GDK_KEY_Escape) {
-    // Cancel editing - restore original text without saving
-    if (text->text_view) {
-      GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text->text_view));
-      gtk_text_buffer_set_text(buffer, text->text, -1);
-    }
-    inline_text_finish_editing((Element*)text);
-    return TRUE;
   }
   return FALSE;
 }

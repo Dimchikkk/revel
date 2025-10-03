@@ -2409,6 +2409,62 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     }
   }
 
+  // Auto-create inline text when typing with nothing selected
+  // Check if it's a printable character and no modifiers (except Shift for capitals)
+  if (!data->selected_elements &&
+      !(state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) &&
+      keyval >= 0x20 && keyval <= 0x7E) {  // Printable ASCII range
+
+    // Create inline text at center of viewport
+    int cx, cy;
+    int screen_center_x = gtk_widget_get_width(data->drawing_area) / 2;
+    int screen_center_y = gtk_widget_get_height(data->drawing_area) / 2;
+    canvas_screen_to_canvas(data, screen_center_x, screen_center_y, &cx, &cy);
+
+    // Get the typed character
+    gunichar unicode_char = gdk_keyval_to_unicode(keyval);
+    char utf8_char[7] = {0};  // UTF-8 char can be up to 6 bytes + null
+    g_unichar_to_utf8(unicode_char, utf8_char);
+
+    // Create inline text element
+    ElementPosition position = {cx, cy, data->next_z_index++};
+    ElementColor bg_color = {0.0, 0.0, 0.0, 0.0};  // Transparent background
+    ElementSize size = {50, 20};
+    ElementText text = {
+      .text = utf8_char,
+      .text_color = {1.0, 1.0, 1.0, 1.0},
+      .font_description = "Ubuntu Mono 12"
+    };
+
+    InlineText *inline_text = inline_text_create(position, bg_color, size, text, data);
+
+    // Save to model
+    ElementConfig config = {0};
+    config.type = ELEMENT_INLINE_TEXT;
+    config.position = position;
+    config.bg_color = bg_color;
+    config.size.width = inline_text->base.width;
+    config.size.height = inline_text->base.height;
+    config.text = text;
+
+    ModelElement *model_element = model_create_element(data->model, config);
+    if (model_element) {
+      model_element->visual_element = (Element*)inline_text;
+
+      // Select and start editing immediately
+      canvas_clear_selection(data);
+      data->selected_elements = g_list_append(data->selected_elements, (Element*)inline_text);
+      element_start_editing((Element*)inline_text, data->overlay);
+
+      gtk_widget_queue_draw(data->drawing_area);
+
+      // Push undo action
+      undo_manager_push_create_action(data->undo_manager, model_element);
+    }
+
+    return TRUE;
+  }
+
   if (keyval == GDK_KEY_F1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) {
     canvas_show_shortcuts_dialog(data);
     return TRUE;
@@ -2544,6 +2600,74 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     // Redraw to show selection
     gtk_widget_queue_draw(data->drawing_area);
     return TRUE;
+  }
+
+  // Ctrl+Plus: Increase font size for selected inline text
+  if ((state & GDK_CONTROL_MASK) && (keyval == GDK_KEY_plus || keyval == GDK_KEY_equal)) {
+    if (data->selected_elements) {
+      for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        if (element->type == ELEMENT_INLINE_TEXT) {
+          InlineText *text = (InlineText*)element;
+          PangoFontDescription *font_desc = pango_font_description_from_string(text->font_description);
+          int current_size = pango_font_description_get_size(font_desc) / PANGO_SCALE;
+          int new_size = current_size + 2;
+          if (new_size > 72) new_size = 72;
+
+          pango_font_description_set_size(font_desc, new_size * PANGO_SCALE);
+          char *new_font_desc = pango_font_description_to_string(font_desc);
+          g_free(text->font_description);
+          text->font_description = g_strdup(new_font_desc);
+          g_free(new_font_desc);
+          pango_font_description_free(font_desc);
+
+          inline_text_update_layout(text);
+
+          // Update model (font and size)
+          ModelElement *model_element = model_get_by_visual(data->model, element);
+          if (model_element) {
+            model_update_font(data->model, model_element, text->font_description);
+            model_update_size(data->model, model_element, text->base.width, text->base.height);
+          }
+        }
+      }
+      gtk_widget_queue_draw(data->drawing_area);
+      return TRUE;
+    }
+  }
+
+  // Ctrl+Minus: Decrease font size for selected inline text
+  if ((state & GDK_CONTROL_MASK) && (keyval == GDK_KEY_minus || keyval == GDK_KEY_underscore)) {
+    if (data->selected_elements) {
+      for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        if (element->type == ELEMENT_INLINE_TEXT) {
+          InlineText *text = (InlineText*)element;
+          PangoFontDescription *font_desc = pango_font_description_from_string(text->font_description);
+          int current_size = pango_font_description_get_size(font_desc) / PANGO_SCALE;
+          int new_size = current_size - 2;
+          if (new_size < 6) new_size = 6;
+
+          pango_font_description_set_size(font_desc, new_size * PANGO_SCALE);
+          char *new_font_desc = pango_font_description_to_string(font_desc);
+          g_free(text->font_description);
+          text->font_description = g_strdup(new_font_desc);
+          g_free(new_font_desc);
+          pango_font_description_free(font_desc);
+
+          inline_text_update_layout(text);
+
+          // Update model (font and size)
+          ModelElement *model_element = model_get_by_visual(data->model, element);
+          if (model_element) {
+            model_update_font(data->model, model_element, text->font_description);
+            model_update_size(data->model, model_element, text->base.width, text->base.height);
+          }
+        }
+      }
+      gtk_widget_queue_draw(data->drawing_area);
+      return TRUE;
+    }
   }
 
   // Add Delete key for deleting selected elements (when not editing)
