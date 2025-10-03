@@ -2,8 +2,8 @@
 
 Note-taking and brainstorming application with infinite canvas and powerful organization features.
 
-![Revel Animation](examples/revel_animation.gif)
-*Animation from `examples/animation_elegant_demo.dsl`*
+![Revel Presentation](examples/revel_recording.gif)
+*Interactive presentation created entirely within Revel using the DSL animation system (`examples/presentation_demo.dsl`). Features animated slides with both single-play and looping animations, navigated with keyboard shortcuts.*
 
 ## Table of Contents
 

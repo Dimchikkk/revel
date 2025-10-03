@@ -480,16 +480,90 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
     return;
   }
 
+  // Check if this is a presentation script (has animation_next_slide commands)
+  gboolean is_presentation = (strstr(script, "animation_next_slide") != NULL);
+
+  if (is_presentation) {
+    // Clean up previous presentation state
+    if (data->presentation_dsl_slides) {
+      g_strfreev(data->presentation_dsl_slides);
+      data->presentation_dsl_slides = NULL;
+    }
+    if (data->presentation_original_script) {
+      g_free(data->presentation_original_script);
+      data->presentation_original_script = NULL;
+    }
+
+    // Store original script
+    data->presentation_original_script = g_strdup(script);
+
+    // Split script by animation_next_slide
+    GPtrArray *slides = g_ptr_array_new();
+    GString *current_slide = g_string_new(NULL);
+
+    gchar **lines = g_strsplit(script, "\n", 0);
+    for (int i = 0; lines[i] != NULL; i++) {
+      gchar *line = trim_whitespace(lines[i]);
+
+      if (g_strcmp0(line, "animation_next_slide") == 0) {
+        // Finish current slide
+        if (current_slide->len > 0) {
+          g_ptr_array_add(slides, g_string_free(current_slide, FALSE));
+          current_slide = g_string_new(NULL);
+        }
+      } else {
+        // Add line to current slide
+        if (current_slide->len > 0) {
+          g_string_append_c(current_slide, '\n');
+        }
+        g_string_append(current_slide, lines[i]);
+      }
+    }
+
+    // Add final slide
+    if (current_slide->len > 0) {
+      g_ptr_array_add(slides, g_string_free(current_slide, FALSE));
+    } else {
+      g_string_free(current_slide, TRUE);
+    }
+
+    g_strfreev(lines);
+
+    // Convert to NULL-terminated array
+    g_ptr_array_add(slides, NULL);
+    data->presentation_dsl_slides = (gchar **)g_ptr_array_free(slides, FALSE);
+    data->presentation_slide_count = g_strv_length(data->presentation_dsl_slides);
+    data->presentation_current_slide = 0;
+    data->presentation_mode_active = TRUE;
+
+    g_print("Presentation mode: %d slides detected\n", data->presentation_slide_count);
+
+    // Execute first slide
+    if (data->presentation_dsl_slides[0]) {
+      canvas_execute_script(data, data->presentation_dsl_slides[0]);
+    }
+    return;
+  }
+
   // Check if this is an animation script
   gboolean is_animation_mode = FALSE;
   gboolean is_cycled = FALSE;
-  if (g_str_has_prefix(script, "animation_mode") || strstr(script, "\nanimation_mode")) {
-    is_animation_mode = TRUE;
-    // Check for cycled mode
-    if (strstr(script, "animation_mode cycled") || strstr(script, "animation_mode cycle")) {
-      is_cycled = TRUE;
+
+  // Check each line to see if it contains animation_mode (ignoring comments)
+  gchar **check_lines = g_strsplit(script, "\n", 0);
+  for (int i = 0; check_lines[i] != NULL && !is_animation_mode; i++) {
+    gchar *check_line = trim_whitespace(check_lines[i]);
+    if (check_line[0] != '#' && check_line[0] != '\0') {
+      if (g_str_has_prefix(check_line, "animation_mode")) {
+        is_animation_mode = TRUE;
+        if (strstr(check_line, "cycled") || strstr(check_line, "cycle")) {
+          is_cycled = TRUE;
+        }
+        break;
+      }
     }
   }
+  g_strfreev(check_lines);
 
   // Initialize animation engine if in animation mode
   if (is_animation_mode) {
@@ -2562,6 +2636,93 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
   }
 
   gtk_widget_queue_draw(data->drawing_area);
+}
+
+// Helper function to clear all elements in current space while preserving space settings
+static void canvas_clear_space_for_presentation(CanvasData *data) {
+  if (!data || !data->model) return;
+
+  const gchar *current_space_uuid = data->model->current_space_uuid;
+  if (!current_space_uuid) return;
+
+  // Get all elements from hash table
+  GList *all_elements = g_hash_table_get_values(data->model->elements);
+
+  // Build list of elements to delete (those in current space)
+  GList *elements_to_delete = NULL;
+  for (GList *l = all_elements; l != NULL; l = l->next) {
+    ModelElement *element = (ModelElement *)l->data;
+    if (element && element->space_uuid &&
+        g_strcmp0(element->space_uuid, current_space_uuid) == 0) {
+      elements_to_delete = g_list_append(elements_to_delete, element);
+    }
+  }
+
+  g_list_free(all_elements);
+
+  // Delete all elements in current space
+  for (GList *l = elements_to_delete; l != NULL; l = l->next) {
+    ModelElement *element = (ModelElement *)l->data;
+    model_delete_element(data->model, element);
+  }
+
+  g_list_free(elements_to_delete);
+
+  // Clear visual selection
+  canvas_clear_selection(data);
+  canvas_sync_with_model(data);
+}
+
+// Check if we're in presentation mode
+gboolean canvas_is_presentation_mode(CanvasData *data) {
+  return data && data->presentation_mode_active;
+}
+
+// Navigate to next slide in presentation mode
+void canvas_presentation_next_slide(CanvasData *data) {
+  if (!data || !data->presentation_mode_active) return;
+  if (data->presentation_current_slide >= data->presentation_slide_count - 1) {
+    extern void canvas_show_notification(CanvasData *data, const char *message);
+    canvas_show_notification(data, "Already at last slide");
+    return;
+  }
+
+  data->presentation_current_slide++;
+  g_print("Moving to slide %d/%d\n", data->presentation_current_slide + 1, data->presentation_slide_count);
+
+  // Stop any running animation from previous slide
+  if (data->anim_engine) {
+    animation_engine_stop(data->anim_engine);
+  }
+
+  // Clear current space (preserving grid settings)
+  canvas_clear_space_for_presentation(data);
+
+  // Execute the new slide's DSL
+  if (data->presentation_dsl_slides[data->presentation_current_slide]) {
+    canvas_execute_script(data, data->presentation_dsl_slides[data->presentation_current_slide]);
+  }
+}
+
+// Navigate to previous slide in presentation mode
+void canvas_presentation_prev_slide(CanvasData *data) {
+  if (!data || !data->presentation_mode_active) return;
+  if (data->presentation_current_slide <= 0) {
+    extern void canvas_show_notification(CanvasData *data, const char *message);
+    canvas_show_notification(data, "Already at first slide");
+    return;
+  }
+
+  data->presentation_current_slide--;
+  g_print("Moving to slide %d/%d\n", data->presentation_current_slide + 1, data->presentation_slide_count);
+
+  // Clear current space (preserving grid settings)
+  canvas_clear_space_for_presentation(data);
+
+  // Execute the new slide's DSL
+  if (data->presentation_dsl_slides[data->presentation_current_slide]) {
+    canvas_execute_script(data, data->presentation_dsl_slides[data->presentation_current_slide]);
+  }
 }
 
 static gchar* escape_text_for_dsl(const gchar *text) {

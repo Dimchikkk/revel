@@ -100,6 +100,13 @@ struct _CanvasData {
   // DSL Animation engine
   AnimationEngine *anim_engine;
 
+  // Presentation mode slide navigation
+  gchar **presentation_dsl_slides;  // Array of DSL script sections (one per slide)
+  int presentation_slide_count;
+  int presentation_current_slide;
+  gchar *presentation_original_script;  // Full original DSL script
+  gboolean presentation_mode_active;
+
   // Space tree view
   SpaceTreeView *space_tree_view;
   GtkWidget *tree_scrolled;

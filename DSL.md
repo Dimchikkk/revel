@@ -312,6 +312,84 @@ animate_disappear ELEMENT_ID START_TIME DURATION [TYPE]
 
 ---
 
+## Presentation Mode
+
+Create slide-based presentations with automatic space clearing between slides.
+
+### Slide Separator
+
+```
+animation_next_slide
+```
+
+**Description:**
+- Marks the boundary between slides in a presentation
+- When reached, pauses execution and waits for navigation input
+- Clears all elements from current space (preserving grid settings) before moving to next slide
+- Script is automatically split into slides at each `animation_next_slide` command
+
+### Navigation Controls
+
+- **Ctrl+Right Arrow** - Move to next slide
+- **Ctrl+Left Arrow** - Move to previous slide
+
+### Example Presentation
+
+```dsl
+# Slide 1: Title
+canvas_background (0.1,0.1,0.15,1.0) true (0.2,0.2,0.25,0.5)
+text_create title "Welcome to Revel" (400,300) (400,100) text_color #FFFFFF font "Ubuntu Bold 48"
+
+animation_next_slide
+
+# Slide 2: Feature List
+text_create header "Key Features" (400,150) (400,80) text_color #3b82f6 font "Ubuntu Bold 36"
+note_create feat1 "• Infinite canvas" (100,300) (300,60)
+note_create feat2 "• Rich animations" (100,380) (300,60)
+note_create feat3 "• Nested spaces" (100,460) (300,60)
+
+animation_next_slide
+
+# Slide 3: Conclusion
+text_create thanks "Thank You!" (400,350) (300,80) text_color #10b981 font "Ubuntu Bold 42"
+```
+
+**Usage:**
+1. Open DSL Executor (**Ctrl+E**)
+2. Enter your presentation script with `animation_next_slide` separators
+3. Execute the script - first slide displays automatically
+4. Use **Ctrl+Right Arrow** to advance, **Ctrl+Left Arrow** to go back
+5. Optionally hide toolbar with **Ctrl+Shift+T** for clean presentation view
+6. Notifications appear when trying to navigate past first or last slide
+
+**Combining with Animations:**
+
+Presentations can include animations on each slide:
+
+```dsl
+# Slide with single-play animation
+animation_mode
+canvas_background (0.1,0.1,0.15,1.0) true
+text_create title "Animated Slide" (300,200) (400,100) text_color #FFFFFF
+animate_appear title 0.0 1.5 bezier
+
+animation_next_slide
+
+# Slide with looping animation
+animation_mode cycled
+text_create pulse "Pulsing Text" (300,300) (400,100) text_color #60a5fa
+shape_create circle1 circle "" (500,350) (80,80) bg #f59e0b filled true
+animate_resize circle1 (80,80) (120,120) 0.0 1.0 bezier
+animate_resize circle1 (120,120) (80,80) 1.0 1.0 bezier
+```
+
+**Example Files:**
+- `examples/presentation_demo.dsl` - Basic presentation without animations
+- `examples/presentation_with_animation.dsl` - Presentation with single-play animations
+- `examples/presentation_with_cycled_animation.dsl` - Presentation with looping animations
+
+---
+
 ## Tips and Best Practices
 
 1. **Element IDs**: Use descriptive IDs for easier reference in connections and animations

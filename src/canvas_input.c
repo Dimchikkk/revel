@@ -2528,6 +2528,19 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
     return TRUE;
   }
 
+  // Add Ctrl+Left/Right Arrow for presentation slide navigation
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_Right) {
+    extern void canvas_presentation_next_slide(CanvasData *data);
+    canvas_presentation_next_slide(data);
+    return TRUE;
+  }
+
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_Left) {
+    extern void canvas_presentation_prev_slide(CanvasData *data);
+    canvas_presentation_prev_slide(data);
+    return TRUE;
+  }
+
   // Add backspace navigation to parent space (when not editing)
   if (keyval == GDK_KEY_BackSpace) {
     go_back_to_parent_space(data);

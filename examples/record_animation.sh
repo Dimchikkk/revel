@@ -1,9 +1,19 @@
 #!/bin/bash
-# Script to record Revel animation as high-quality GIF
+# Script to record Revel as high-quality GIF or video
+#
+# USAGE:
+#   1. Start Revel (with or without DSL)
+#   2. Run this script: ./examples/record_animation.sh
+#   3. Select the Revel window area when prompted
+#   4. Perform your actions (navigate slides, create elements, etc.)
+#   5. Press 'q' in the terminal to stop recording
+#
+# OUTPUT:
+#   - If OUTPUT_FILE ends with .gif: Creates optimized GIF
+#   - If OUTPUT_FILE ends with .mp4: Creates MP4 video (smaller file size)
 
-# Configuration
-OUTPUT_FILE="revel_animation.gif"
-DURATION=14
+# Configuration - adjust these as needed
+OUTPUT_FILE="revel_recording.gif"  # Change extension to .mp4 for video output
 FPS=30
 SCALE=1200  # Width in pixels, height auto-calculated
 
@@ -13,8 +23,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Revel Animation GIF Recorder${NC}"
-echo "================================"
+echo -e "${GREEN}Revel Presentation Recorder${NC}"
+echo "=============================="
 
 # Check for required tools
 if ! command -v ffmpeg &> /dev/null; then
@@ -54,7 +64,7 @@ for i in 3 2 1; do
 done
 
 echo -e "${GREEN}Recording started!${NC}"
-echo -e "${YELLOW}Duration: ${DURATION} seconds${NC}"
+echo -e "${YELLOW}Press 'q' to stop recording${NC}"
 echo ""
 
 # Round coordinates to integers (slop may return floats)
@@ -76,19 +86,40 @@ fi
 
 echo -e "${YELLOW}Using display: $DISPLAY${NC}"
 
-# Record the animation as MP4 first
+# Record the video as MP4 (press 'q' to stop)
 TEMP_VIDEO="temp_recording.mp4"
 
+# Start ffmpeg in background and capture its PID
 ffmpeg -video_size ${WIDTH}x${HEIGHT} \
        -framerate $FPS \
        -f x11grab \
        -i ${DISPLAY}+${X},${Y} \
-       -t $DURATION \
        -c:v libx264 \
        -preset ultrafast \
        -crf 18 \
        -y \
-       $TEMP_VIDEO 2>&1 | tail -20
+       $TEMP_VIDEO 2>&1 &
+
+FFMPEG_PID=$!
+
+# Wait for user to press 'q' to stop
+echo -e "${YELLOW}Recording in progress... (PID: $FFMPEG_PID)${NC}"
+echo -e "${GREEN}Press 'q' and then Enter to stop${NC}"
+
+# Wait for 'q' key
+while true; do
+    read -n 1 -s key
+    if [[ $key == "q" ]]; then
+        echo -e "\n${YELLOW}Stopping recording...${NC}"
+        # Send 'q' to ffmpeg to stop gracefully
+        kill -SIGINT $FFMPEG_PID
+        wait $FFMPEG_PID 2>/dev/null
+        break
+    fi
+done
+
+# Give ffmpeg time to finalize the file
+sleep 2
 
 # Check if recording succeeded
 if [ ! -f "$TEMP_VIDEO" ] || [ ! -s "$TEMP_VIDEO" ]; then
@@ -97,27 +128,47 @@ if [ ! -f "$TEMP_VIDEO" ] || [ ! -s "$TEMP_VIDEO" ]; then
 fi
 
 echo -e "\n${GREEN}Video recorded successfully${NC}"
-echo -e "${YELLOW}Converting to optimized GIF...${NC}"
 
-# Convert to GIF with high quality palette
-ffmpeg -i $TEMP_VIDEO \
-       -vf "fps=$FPS,scale=$SCALE:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
-       -y \
-       $OUTPUT_FILE 2>&1 | tail -10
+# Check if output should be GIF or video
+if [[ "$OUTPUT_FILE" == *.gif ]]; then
+    echo -e "${YELLOW}Converting to optimized GIF...${NC}"
 
-# Clean up temp file
-rm -f $TEMP_VIDEO
+    # Convert to GIF with high quality palette
+    ffmpeg -i $TEMP_VIDEO \
+           -vf "fps=$FPS,scale=$SCALE:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+           -y \
+           $OUTPUT_FILE 2>&1 | tail -10
 
-# Check if conversion succeeded
-if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
-    FILE_SIZE=$(du -h "$OUTPUT_FILE" | cut -f1)
-    echo -e "\n${GREEN}Success!${NC}"
-    echo -e "${GREEN}GIF saved as: $OUTPUT_FILE${NC}"
-    echo -e "${GREEN}File size: $FILE_SIZE${NC}"
-    echo ""
-    echo "To view the GIF:"
-    echo "  xdg-open $OUTPUT_FILE"
+    # Clean up temp file
+    rm -f $TEMP_VIDEO
+
+    # Check if conversion succeeded
+    if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
+        FILE_SIZE=$(du -h "$OUTPUT_FILE" | cut -f1)
+        echo -e "\n${GREEN}Success!${NC}"
+        echo -e "${GREEN}GIF saved as: $OUTPUT_FILE${NC}"
+        echo -e "${GREEN}File size: $FILE_SIZE${NC}"
+        echo ""
+        echo "To view the GIF:"
+        echo "  xdg-open $OUTPUT_FILE"
+    else
+        echo -e "\n${RED}Error: GIF conversion failed${NC}"
+        exit 1
+    fi
 else
-    echo -e "\n${RED}Error: GIF conversion failed${NC}"
-    exit 1
+    # Keep as video (MP4)
+    mv $TEMP_VIDEO $OUTPUT_FILE
+
+    if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
+        FILE_SIZE=$(du -h "$OUTPUT_FILE" | cut -f1)
+        echo -e "\n${GREEN}Success!${NC}"
+        echo -e "${GREEN}Video saved as: $OUTPUT_FILE${NC}"
+        echo -e "${GREEN}File size: $FILE_SIZE${NC}"
+        echo ""
+        echo "To view the video:"
+        echo "  xdg-open $OUTPUT_FILE"
+    else
+        echo -e "\n${RED}Error: Video save failed${NC}"
+        exit 1
+    fi
 fi
