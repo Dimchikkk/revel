@@ -32,6 +32,7 @@ static void test_setup(TestFixture *fixture, gconstpointer user_data) {
   fixture->canvas_data = g_new0(CanvasData, 1);
   fixture->canvas_data->model = fixture->model;
   fixture->canvas_data->hidden_elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  fixture->canvas_data->hidden_children_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
   // Initialize tree view (we'll create it in individual tests if needed)
   fixture->tree_view = NULL;
