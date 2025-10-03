@@ -3,6 +3,7 @@
 Note-taking and brainstorming application with infinite canvas and powerful organization features.
 
 ![Revel Animation](examples/revel_animation.gif)
+*Animation from `examples/animation_elegant_demo.dsl`*
 
 ## Table of Contents
 
