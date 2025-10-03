@@ -154,23 +154,6 @@ opening the generated database will display the scripted layout shown below:
 
 For complete DSL reference including all commands, options, and animation features, see [DSL.md](DSL.md).
 
-**Quick links:**
-- [Canvas Settings](DSL.md#canvas-settings) - Background and grid configuration
-- [Element Creation](DSL.md#element-creation) - Notes, shapes, media, and spaces
-- [Connections](DSL.md#connections) - Arrows and relationships
-- [Animation System](DSL.md#animation-system) - Create animated presentations
-- [Examples](DSL.md#examples) - Ready-to-use code snippets
-
-**Animation Examples:**
-```bash
-# Run basic animation example
-make -j 7
-rm -f anim.db && ./revel --dsl animation_example.dsl anim.db
-
-# Run looping animation example
-rm -f anim.db && ./revel --dsl animation_cycled_example.dsl anim.db
-```
-
 ## How to add app launcher:
 
 1. Copy `revel.desktop` to `~/.local/share/applications/`  
