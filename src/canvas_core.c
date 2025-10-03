@@ -1170,6 +1170,30 @@ void canvas_toggle_space_name_visibility(GtkToggleButton *button, gpointer user_
   gtk_widget_queue_draw(data->drawing_area);
 }
 
+void canvas_reset_view(GtkButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  if (!data) return;
+  if (!data->drawing_area) return;
+  if (!GTK_IS_WIDGET(data->drawing_area)) return;
+
+  // Reset zoom to 100%
+  data->zoom_scale = 1.0;
+
+  // Center canvas to (0, 0)
+  data->offset_x = 0;
+  data->offset_y = 0;
+
+  // Update zoom entry if it exists
+  if (data->zoom_entry) {
+    char zoom_text[16];
+    snprintf(zoom_text, sizeof(zoom_text), "%.0f%%", data->zoom_scale * 100);
+    gtk_editable_set_text(GTK_EDITABLE(data->zoom_entry), zoom_text);
+  }
+
+  // Redraw canvas
+  gtk_widget_queue_draw(data->drawing_area);
+}
+
 // Toolbar auto-hide functions
 static gboolean hide_toolbar_timeout(gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;

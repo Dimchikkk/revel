@@ -124,6 +124,9 @@ struct _ModelElement {
   // Element description
   gchar *description;
   gchar *created_at;
+
+  // Element lock state
+  gboolean locked;  // Whether element is locked (non-interactable except context menu)
 };
 
 // Model manages all elements
@@ -182,6 +185,7 @@ int model_update_strikethrough(Model *model, ModelElement *element, gboolean str
 int model_update_position(Model *model, ModelElement *element, int x, int y, int z);
 int model_update_size(Model *model, ModelElement *element, int width, int height);
 int model_update_rotation(Model *model, ModelElement *element, double rotation_degrees);
+int model_update_locked(Model *model, ModelElement *element, gboolean locked);
 // This method slightly inconsistent with other update methods: it doesn't create ModelColor if it is NULL
 int model_update_color(Model *model, ModelElement *element, double r, double g, double b, double a);
 

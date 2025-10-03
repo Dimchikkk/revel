@@ -589,6 +589,23 @@ int model_update_size(Model *model, ModelElement *element, int width, int height
   return 0; // No change needed
 }
 
+int model_update_locked(Model *model, ModelElement *element, gboolean locked) {
+  if (!model || !element) {
+    return 0;
+  }
+
+  // If locked value changed, update it
+  if (element->locked != locked) {
+    element->locked = locked;
+
+    if (element->state != MODEL_STATE_NEW) {
+      element->state = MODEL_STATE_UPDATED;
+    }
+  }
+
+  return 1;
+}
+
 int model_update_rotation(Model *model, ModelElement *element, double rotation_degrees) {
   if (!model || !element) {
     return 0;

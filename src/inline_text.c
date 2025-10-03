@@ -54,6 +54,9 @@ InlineText* inline_text_create(ElementPosition position,
   inline_text->text_view = NULL;
   inline_text->scrolled_window = NULL;
 
+  // Update layout to calculate proper size based on text
+  inline_text_update_layout(inline_text);
+
   return inline_text;
 }
 

@@ -197,6 +197,13 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
       GList *l;
       for (l = data->selected_elements; l != NULL; l = l->next) {
           Element *selected_element = (Element *)l->data;
+
+          // Check if element is locked before allowing rotation
+          ModelElement *model_element_check = model_get_by_visual(data->model, selected_element);
+          if (model_element_check && model_element_check->locked) {
+              continue; // Skip locked elements
+          }
+
           if (element_pick_rotation_handle(selected_element, cx, cy)) {
               if (!(data->modifier_state & GDK_SHIFT_MASK)) {
                   // Keep the current selection
@@ -995,6 +1002,12 @@ void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double 
     for (GList *iter = visual_elements; iter != NULL; iter = iter->next) {
       Element *element = (Element*)iter->data;
 
+      // Skip locked elements from box selection
+      ModelElement *model_element = model_get_by_visual(data->model, element);
+      if (model_element && model_element->locked) {
+        continue;
+      }
+
       if (element->x + element->width >= sel_x &&
           element->x <= sel_x + sel_width &&
           element->y + element->height >= sel_y &&
@@ -1133,7 +1146,7 @@ void canvas_on_leave(GtkEventControllerMotion *controller, gpointer user_data) {
   canvas_set_cursor(data, data->default_cursor);
 }
 
-Element* canvas_pick_element(CanvasData *data, int x, int y) {
+static Element* canvas_pick_element_internal(CanvasData *data, int x, int y, gboolean include_locked) {
   Element *selected_element = NULL;
   int highest_z_index = -1;
 
@@ -1149,10 +1162,15 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
   for (GList *l = candidates; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
 
-    // Skip hidden elements from picking
+    // Skip hidden elements, and optionally skip locked elements
     ModelElement *model_element = model_get_by_visual(data->model, element);
-    if (model_element && canvas_is_element_hidden(data, model_element->uuid)) {
-      continue;
+    if (model_element) {
+      if (canvas_is_element_hidden(data, model_element->uuid)) {
+        continue;
+      }
+      if (!include_locked && model_element->locked) {
+        continue;
+      }
     }
 
     double rotated_x = x;
@@ -1184,6 +1202,15 @@ Element* canvas_pick_element(CanvasData *data, int x, int y) {
   return selected_element;
 }
 
+// Helper function to pick any element (including locked ones) - used for right-click
+static Element* canvas_pick_element_including_locked(CanvasData *data, int x, int y) {
+  return canvas_pick_element_internal(data, x, y, TRUE);
+}
+
+Element* canvas_pick_element(CanvasData *data, int x, int y) {
+  return canvas_pick_element_internal(data, x, y, FALSE);
+}
+
 void canvas_update_cursor(CanvasData *data, int x, int y) {
   if (data->drawing_mode) {
     // Use appropriate cursor based on shift state
@@ -1202,6 +1229,11 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
       GList *l;
       for (l = data->selected_elements; l != NULL; l = l->next) {
           Element *selected_element = (Element *)l->data;
+          // Skip locked elements for rotation handle cursor
+          ModelElement *model_element = model_get_by_visual(data->model, selected_element);
+          if (model_element && model_element->locked) {
+              continue;
+          }
           if (element_pick_rotation_handle(selected_element, cx, cy)) {
               canvas_set_cursor(data, gdk_cursor_new_from_name("crosshair", NULL));
               return;
@@ -1356,6 +1388,28 @@ static void on_description_action(GSimpleAction *action, GVariant *parameter, gp
       g_signal_connect(dialog, "response", G_CALLBACK(on_description_dialog_response), NULL);
 
       gtk_widget_show(dialog);
+    }
+  }
+}
+
+static void on_lock_unlock_element_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (data && data->model && element_uuid) {
+    ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+    if (model_element) {
+      // Toggle locked state
+      gboolean new_locked_state = !model_element->locked;
+
+      // Update in model (also updates database)
+      model_update_locked(data->model, model_element, new_locked_state);
+
+      // Redraw canvas
+      gtk_widget_queue_draw(data->drawing_area);
+
+      // Show notification
+      canvas_show_notification(data, new_locked_state ? "Element locked" : "Element unlocked");
     }
   }
 }
@@ -1808,7 +1862,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
   if (n_press == 1) {
     int cx, cy;
     canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
-    Element *element = canvas_pick_element(data, cx, cy);
+    Element *element = canvas_pick_element_including_locked(data, cx, cy);
 
     if (element) {
       ModelElement *model_element = model_get_by_visual(data->model, element);
@@ -1828,6 +1882,12 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data(G_OBJECT(description_action), "canvas_data", data);
         g_object_set_data_full(G_OBJECT(description_action), "element_uuid", g_strdup(model_element->uuid), g_free);
         g_signal_connect(description_action, "activate", G_CALLBACK(on_description_action), NULL);
+
+        // Create lock/unlock action
+        GSimpleAction *lock_unlock_action = g_simple_action_new("lock-unlock", NULL);
+        g_object_set_data(G_OBJECT(lock_unlock_action), "canvas_data", data);
+        g_object_set_data_full(G_OBJECT(lock_unlock_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+        g_signal_connect(lock_unlock_action, "activate", G_CALLBACK(on_lock_unlock_element_action), NULL);
 
         GSimpleAction *change_color_action = g_simple_action_new("change-color", NULL);
         g_object_set_data(G_OBJECT(change_color_action), "canvas_data", data);
@@ -1864,6 +1924,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         // Add all actions to the action group
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(delete_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(description_action));
+        g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(lock_unlock_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
         g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
@@ -1964,6 +2025,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_menu_append(clone_section, "Clone", "menu.clone");
 
         g_menu_append(info_section, "Description", "menu.description");
+        g_menu_append(info_section, model_element->locked ? "Unlock" : "Lock", "menu.lock-unlock");
         g_menu_append(danger_section, "Delete", "menu.delete");
 
         append_section_if_not_empty(menu_model, modify_section);
@@ -1987,6 +2049,7 @@ void canvas_on_right_click(GtkGestureClick *gesture, int n_press, double x, doub
         g_object_set_data_full(G_OBJECT(popover), "action_group", action_group, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "menu_model", menu_model, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "delete_action", delete_action, g_object_unref);
+        g_object_set_data_full(G_OBJECT(popover), "lock_unlock_action", lock_unlock_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "clone_action", clone_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_space_action", change_space_action, g_object_unref);
         g_object_set_data_full(G_OBJECT(popover), "change_color_action", change_color_action, g_object_unref);
@@ -2457,19 +2520,19 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) on_undo_clicked(NULL, data);
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) on_redo_clicked(NULL, data);
 
-  // Add Ctrl+A for select all elements (when not editing)
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_a) {
+  // Add Ctrl+A for select all elements (including locked)
+  if ((state & GDK_CONTROL_MASK) && (keyval == GDK_KEY_a || keyval == GDK_KEY_A)) {
     // Clear existing selection first
     canvas_clear_selection(data);
 
     // Get all visual elements in current space
     GList *visual_elements = canvas_get_visual_elements(data);
 
-    // Add all elements to selection
+    // Add all elements to selection (including locked)
     for (GList *l = visual_elements; l != NULL; l = l->next) {
       Element *element = (Element*)l->data;
-      // Skip hidden elements from selection
       ModelElement *model_element = model_get_by_visual(data->model, element);
+
       if (model_element && !canvas_is_element_hidden(data, model_element->uuid)) {
         data->selected_elements = g_list_append(data->selected_elements, element);
       }

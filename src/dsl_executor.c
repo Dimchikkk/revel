@@ -693,6 +693,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double rotation_degrees = 0.0;
       gboolean rotation_set = FALSE;
       gboolean expect_rotation = FALSE;
+      gboolean locked = FALSE;
+      gboolean locked_set = FALSE;
       gchar *alignment = NULL;
       gboolean alignment_set = FALSE;
       gboolean expect_alignment = FALSE;
@@ -818,6 +820,29 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
             }
           }
           g_print("Failed to parse rotation angle: %s\n", token);
+          continue;
+        }
+
+        if (!locked_set && (g_strcmp0(token, "locked") == 0 || g_strcmp0(token, "lock") == 0)) {
+          locked = TRUE;
+          locked_set = TRUE;
+          continue;
+        }
+        if (!locked_set && (g_str_has_prefix(token, "locked=") || g_str_has_prefix(token, "locked:") ||
+                            g_str_has_prefix(token, "lock=") || g_str_has_prefix(token, "lock:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (g_strcmp0(value + 1, "true") == 0 || g_strcmp0(value + 1, "1") == 0 || g_strcmp0(value + 1, "yes") == 0) {
+              locked = TRUE;
+              locked_set = TRUE;
+            } else if (g_strcmp0(value + 1, "false") == 0 || g_strcmp0(value + 1, "0") == 0 || g_strcmp0(value + 1, "no") == 0) {
+              locked = FALSE;
+              locked_set = TRUE;
+            } else {
+              g_print("Failed to parse locked value: %s (expected true/false, 1/0, yes/no)\n", value + 1);
+            }
+          }
           continue;
         }
 
@@ -899,6 +924,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
         if (rotation_set && rotation_degrees != 0.0) {
           model_element->rotation_degrees = rotation_degrees;
         }
+        if (locked_set) {
+          model_element->locked = locked;
+        }
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         new_elements = g_list_prepend(new_elements, model_element);
       }
@@ -946,6 +974,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double rotation_degrees = 0.0;
       gboolean rotation_set = FALSE;
       gboolean expect_rotation = FALSE;
+      gboolean locked = FALSE;
+      gboolean locked_set = FALSE;
       gchar *alignment = NULL;
       gboolean alignment_set = FALSE;
       gboolean expect_alignment = FALSE;
@@ -1074,6 +1104,29 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (!locked_set && (g_strcmp0(token, "locked") == 0 || g_strcmp0(token, "lock") == 0)) {
+          locked = TRUE;
+          locked_set = TRUE;
+          continue;
+        }
+        if (!locked_set && (g_str_has_prefix(token, "locked=") || g_str_has_prefix(token, "locked:") ||
+                            g_str_has_prefix(token, "lock=") || g_str_has_prefix(token, "lock:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (g_strcmp0(value + 1, "true") == 0 || g_strcmp0(value + 1, "1") == 0 || g_strcmp0(value + 1, "yes") == 0) {
+              locked = TRUE;
+              locked_set = TRUE;
+            } else if (g_strcmp0(value + 1, "false") == 0 || g_strcmp0(value + 1, "0") == 0 || g_strcmp0(value + 1, "no") == 0) {
+              locked = FALSE;
+              locked_set = TRUE;
+            } else {
+              g_print("Failed to parse locked value: %s (expected true/false, 1/0, yes/no)\n", value + 1);
+            }
+          }
+          continue;
+        }
+
         if (expect_alignment) {
           alignment = g_strdup(token);
           alignment_set = TRUE;
@@ -1151,6 +1204,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       if (model_element) {
         if (rotation_set && rotation_degrees != 0.0) {
           model_element->rotation_degrees = rotation_degrees;
+        }
+        if (locked_set) {
+          model_element->locked = locked;
         }
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         new_elements = g_list_prepend(new_elements, model_element);
@@ -1582,6 +1638,8 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       double rotation_degrees = 0.0;
       gboolean rotation_set = FALSE;
       gboolean expect_rotation = FALSE;
+      gboolean locked = FALSE;
+      gboolean locked_set = FALSE;
       gchar *alignment = NULL;
       gboolean alignment_set = FALSE;
       gboolean expect_alignment = FALSE;
@@ -1928,6 +1986,29 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           continue;
         }
 
+        if (!locked_set && (g_strcmp0(token, "locked") == 0 || g_strcmp0(token, "lock") == 0)) {
+          locked = TRUE;
+          locked_set = TRUE;
+          continue;
+        }
+        if (!locked_set && (g_str_has_prefix(token, "locked=") || g_str_has_prefix(token, "locked:") ||
+                            g_str_has_prefix(token, "lock=") || g_str_has_prefix(token, "lock:"))) {
+          const gchar *value = strchr(token, '=');
+          if (!value) value = strchr(token, ':');
+          if (value && *(value + 1) != '\0') {
+            if (g_strcmp0(value + 1, "true") == 0 || g_strcmp0(value + 1, "1") == 0 || g_strcmp0(value + 1, "yes") == 0) {
+              locked = TRUE;
+              locked_set = TRUE;
+            } else if (g_strcmp0(value + 1, "false") == 0 || g_strcmp0(value + 1, "0") == 0 || g_strcmp0(value + 1, "no") == 0) {
+              locked = FALSE;
+              locked_set = TRUE;
+            } else {
+              g_print("Failed to parse locked value: %s (expected true/false, 1/0, yes/no)\n", value + 1);
+            }
+          }
+          continue;
+        }
+
         if (expect_alignment) {
           alignment = g_strdup(token);
           alignment_set = TRUE;
@@ -2178,6 +2259,9 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       if (model_element) {
         if (rotation_set && rotation_degrees != 0.0) {
           model_element->rotation_degrees = rotation_degrees;
+        }
+        if (locked_set) {
+          model_element->locked = locked;
         }
         g_hash_table_insert(element_map, g_strdup(id), model_element);
         new_elements = g_list_prepend(new_elements, model_element);

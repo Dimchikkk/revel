@@ -145,6 +145,7 @@ int database_create_tables(sqlite3 *db) {
     "    arrowhead_type INTEGER,"            // For connections: none, single, double
     "    rotation_degrees REAL DEFAULT 0.0," // Rotation angle in degrees (0-360)
     "    description TEXT,"                  // Element description/comment
+    "    locked INTEGER NOT NULL DEFAULT 0," // Whether element is locked (non-interactable except context menu)
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
     "    FOREIGN KEY (space_uuid) REFERENCES spaces(uuid),"
     "    FOREIGN KEY (type_id) REFERENCES element_type_refs(id),"
@@ -778,8 +779,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, locked) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -879,6 +880,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
+  // Bind locked
+  sqlite3_bind_int(stmt, param_index++, element->locked ? 1 : 0);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to create element: %s\n", sqlite3_errmsg(db));
@@ -894,7 +897,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, bg_color_id, "
     "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id, video_id, "
-    "drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, created_at "
+    "drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, created_at, locked "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
 
@@ -1036,6 +1039,9 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
       elem->created_at = g_strdup(created_at);
     }
 
+    // Read locked
+    elem->locked = sqlite3_column_int(stmt, col++) ? TRUE : FALSE;
+
     *element = elem;
     sqlite3_finalize(stmt);
     return 1; // Success
@@ -1097,7 +1103,7 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
     "from_element_uuid = ?, to_element_uuid = ?, "
     "from_point = ?, to_point = ?, target_space_uuid = ?, "
     "space_uuid = ?, drawing_points = ?, stroke_width = ?, "
-    "shape_type = ?, filled = ?, stroke_style = ?, fill_style = ?, stroke_color = ?, connection_type = ?, arrowhead_type = ?, rotation_degrees = ?, description = ? "
+    "shape_type = ?, filled = ?, stroke_style = ?, fill_style = ?, stroke_color = ?, connection_type = ?, arrowhead_type = ?, rotation_degrees = ?, description = ?, locked = ? "
     "WHERE uuid = ?";
 
   sqlite3_stmt *stmt;
@@ -1209,6 +1215,8 @@ int database_update_element(sqlite3 *db, const char *element_uuid, const ModelEl
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
+  // Bind locked
+  sqlite3_bind_int(stmt, param_index++, element->locked ? 1 : 0);
 
   // Where clause
   sqlite3_bind_text(stmt, param_index++, element_uuid, -1, SQLITE_STATIC);
@@ -1325,7 +1333,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid, "
     "e.image_id, e.video_id, "
     "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.stroke_style, e.fill_style, e.stroke_color, "
-    "e.connection_type, e.arrowhead_type, e.rotation_degrees, e.description, e.created_at, "
+    "e.connection_type, e.arrowhead_type, e.rotation_degrees, e.description, e.created_at, e.locked, "
     "t.type, t.ref_count, "
     "p.x, p.y, p.z, p.ref_count, "
     "s.width, s.height, s.ref_count, "
@@ -1376,6 +1384,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_ROTATION_DEGREES,
     COL_DESCRIPTION,
     COL_CREATED_AT,
+    COL_LOCKED,
     // JOINed data starts here
     COL_TYPE_TYPE,
     COL_TYPE_REF_COUNT,
@@ -1591,6 +1600,9 @@ int database_load_space(sqlite3 *db, Model *model) {
     if (created_at) {
       element->created_at = g_strdup(created_at);
     }
+
+    // Read locked
+    element->locked = sqlite3_column_int(stmt, COL_LOCKED) ? TRUE : FALSE;
 
     element->visual_element = NULL;
 

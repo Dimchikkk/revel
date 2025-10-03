@@ -275,8 +275,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_widget_set_tooltip_text(space_name_btn, "Toggle Space Name Display");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(space_name_btn), TRUE); // Default to shown
 
+  // Reset view button with target/crosshair icon
+  GtkWidget *reset_view_btn = gtk_button_new();
+  GtkWidget *reset_view_icon = gtk_image_new_from_icon_name("find-location");
+  gtk_button_set_child(GTK_BUTTON(reset_view_btn), reset_view_icon);
+  gtk_widget_set_tooltip_text(reset_view_btn, "Reset View (Zoom 100%, Center to 0,0)");
+
   gtk_box_append(GTK_BOX(view_group), zoom_box);
   gtk_box_append(GTK_BOX(view_group), space_name_btn);
+  gtk_box_append(GTK_BOX(view_group), reset_view_btn);
   gtk_box_append(GTK_BOX(view_group), background_btn);
   gtk_box_append(GTK_BOX(toolbar), view_group);
 
@@ -422,6 +429,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(shapes_btn, "clicked", G_CALLBACK(canvas_show_shape_selection_dialog), data);
   g_signal_connect(background_btn, "clicked", G_CALLBACK(canvas_show_background_dialog), data);
   g_signal_connect(space_name_btn, "toggled", G_CALLBACK(canvas_toggle_space_name_visibility), data);
+  g_signal_connect(reset_view_btn, "clicked", G_CALLBACK(canvas_reset_view), data);
   g_signal_connect(zoom_entry, "activate", G_CALLBACK(on_zoom_entry_activate), data);
 
   g_object_set_data(G_OBJECT(app), "canvas_data", data);
