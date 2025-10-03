@@ -12,6 +12,7 @@
 #include "shape.h"
 #include "canvas_drop.h"
 #include "paper_note.h"
+#include "animation.h"
 
 static gchar* unescape_text(const gchar *str) {
   if (!str) return g_strdup("");
@@ -477,6 +478,27 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
   if (!data || !script) {
     g_print("Error: No data or script provided\n");
     return;
+  }
+
+  // Check if this is an animation script
+  gboolean is_animation_mode = FALSE;
+  gboolean is_cycled = FALSE;
+  if (g_str_has_prefix(script, "animation_mode") || strstr(script, "\nanimation_mode")) {
+    is_animation_mode = TRUE;
+    // Check for cycled mode
+    if (strstr(script, "animation_mode cycled") || strstr(script, "animation_mode cycle")) {
+      is_cycled = TRUE;
+    }
+  }
+
+  // Initialize animation engine if in animation mode
+  if (is_animation_mode) {
+    if (!data->anim_engine) {
+      data->anim_engine = g_malloc0(sizeof(AnimationEngine));
+    }
+    animation_engine_cleanup(data->anim_engine);
+    animation_engine_init(data->anim_engine, is_cycled);
+    g_print("Animation mode: %s\n", is_cycled ? "cycled" : "single");
   }
 
   GHashTable *element_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
@@ -2179,6 +2201,237 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
       connections = g_list_append(connections, info);
     }
+    // Animation commands
+    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_move") == 0 && token_count >= 6) {
+      // animate_move ELEMENT_ID (from_x,from_y) (to_x,to_y) START_TIME DURATION [TYPE]
+      const gchar *elem_id = tokens[1];
+      int from_x, from_y, to_x, to_y;
+      double start_time, duration;
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+
+      if (!parse_point(tokens[2], &from_x, &from_y)) {
+        g_print("Error: Failed to parse from position: %s\n", tokens[2]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_point(tokens[3], &to_x, &to_y)) {
+        g_print("Error: Failed to parse to position: %s\n", tokens[3]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[4], &start_time)) {
+        g_print("Error: Failed to parse start_time: %s\n", tokens[4]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[5], &duration)) {
+        g_print("Error: Failed to parse duration: %s\n", tokens[5]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      // Parse interpolation type if provided
+      if (token_count >= 7) {
+        if (g_strcmp0(tokens[6], "immediate") == 0) {
+          interp = ANIM_INTERP_IMMEDIATE;
+        } else if (g_strcmp0(tokens[6], "linear") == 0) {
+          interp = ANIM_INTERP_LINEAR;
+        } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
+          interp = ANIM_INTERP_BEZIER;
+        }
+      }
+
+      // Look up element by ID and get UUID
+      ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+      if (elem && elem->uuid) {
+        animation_add_move(data->anim_engine, elem->uuid,
+                          start_time, duration, interp,
+                          from_x, from_y, to_x, to_y);
+      } else {
+        g_print("Warning: Element %s not found for animation\n", elem_id);
+      }
+    }
+    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_resize") == 0 && token_count >= 6) {
+      // animate_resize ELEMENT_ID (from_w,from_h) (to_w,to_h) START_TIME DURATION [TYPE]
+      const gchar *elem_id = tokens[1];
+      int from_w, from_h, to_w, to_h;
+      double start_time, duration;
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+
+      if (!parse_point(tokens[2], &from_w, &from_h)) {
+        g_print("Error: Failed to parse from size: %s\n", tokens[2]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_point(tokens[3], &to_w, &to_h)) {
+        g_print("Error: Failed to parse to size: %s\n", tokens[3]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[4], &start_time)) {
+        g_print("Error: Failed to parse start_time: %s\n", tokens[4]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[5], &duration)) {
+        g_print("Error: Failed to parse duration: %s\n", tokens[5]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (token_count >= 7) {
+        if (g_strcmp0(tokens[6], "immediate") == 0) {
+          interp = ANIM_INTERP_IMMEDIATE;
+        } else if (g_strcmp0(tokens[6], "linear") == 0) {
+          interp = ANIM_INTERP_LINEAR;
+        } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
+          interp = ANIM_INTERP_BEZIER;
+        }
+      }
+
+      ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+      if (elem && elem->uuid) {
+        animation_add_resize(data->anim_engine, elem->uuid,
+                            start_time, duration, interp,
+                            from_w, from_h, to_w, to_h);
+      } else {
+        g_print("Warning: Element %s not found for animation\n", elem_id);
+      }
+    }
+    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_color") == 0 && token_count >= 5) {
+      // animate_color ELEMENT_ID FROM_COLOR TO_COLOR START_TIME DURATION [TYPE]
+      const gchar *elem_id = tokens[1];
+      const gchar *from_color = tokens[2];
+      const gchar *to_color = tokens[3];
+      double start_time, duration;
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+
+      if (!parse_double_value(tokens[4], &start_time)) {
+        g_print("Error: Failed to parse start_time: %s\n", tokens[4]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (token_count < 6 || !parse_double_value(tokens[5], &duration)) {
+        g_print("Error: Failed to parse duration\n");
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (token_count >= 7) {
+        if (g_strcmp0(tokens[6], "immediate") == 0) {
+          interp = ANIM_INTERP_IMMEDIATE;
+        } else if (g_strcmp0(tokens[6], "linear") == 0) {
+          interp = ANIM_INTERP_LINEAR;
+        } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
+          interp = ANIM_INTERP_BEZIER;
+        }
+      }
+
+      ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+      if (elem && elem->uuid) {
+        animation_add_color(data->anim_engine, elem->uuid,
+                           start_time, duration, interp,
+                           from_color, to_color);
+      } else {
+        g_print("Warning: Element %s not found for animation\n", elem_id);
+      }
+    }
+    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_appear") == 0 && token_count >= 4) {
+      // animate_appear ELEMENT_ID START_TIME DURATION [TYPE]
+      const gchar *elem_id = tokens[1];
+      double start_time, duration;
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+
+      if (!parse_double_value(tokens[2], &start_time)) {
+        g_print("Error: Failed to parse start_time: %s\n", tokens[2]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[3], &duration)) {
+        g_print("Error: Failed to parse duration: %s\n", tokens[3]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (token_count >= 5) {
+        if (g_strcmp0(tokens[4], "immediate") == 0) {
+          interp = ANIM_INTERP_IMMEDIATE;
+        } else if (g_strcmp0(tokens[4], "linear") == 0) {
+          interp = ANIM_INTERP_LINEAR;
+        } else if (g_strcmp0(tokens[4], "bezier") == 0 || g_strcmp0(tokens[4], "curve") == 0) {
+          interp = ANIM_INTERP_BEZIER;
+        }
+      }
+
+      ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+      if (elem && elem->uuid) {
+        animation_add_create(data->anim_engine, elem->uuid,
+                            start_time, duration, interp);
+      } else {
+        g_print("Warning: Element %s not found for animation\n", elem_id);
+      }
+    }
+    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_disappear") == 0 && token_count >= 4) {
+      // animate_disappear ELEMENT_ID START_TIME DURATION [TYPE]
+      const gchar *elem_id = tokens[1];
+      double start_time, duration;
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+
+      if (!parse_double_value(tokens[2], &start_time)) {
+        g_print("Error: Failed to parse start_time: %s\n", tokens[2]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[3], &duration)) {
+        g_print("Error: Failed to parse duration: %s\n", tokens[3]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (token_count >= 5) {
+        if (g_strcmp0(tokens[4], "immediate") == 0) {
+          interp = ANIM_INTERP_IMMEDIATE;
+        } else if (g_strcmp0(tokens[4], "linear") == 0) {
+          interp = ANIM_INTERP_LINEAR;
+        } else if (g_strcmp0(tokens[4], "bezier") == 0 || g_strcmp0(tokens[4], "curve") == 0) {
+          interp = ANIM_INTERP_BEZIER;
+        }
+      }
+
+      ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+      if (elem && elem->uuid) {
+        animation_add_delete(data->anim_engine, elem->uuid,
+                            start_time, duration, interp);
+      } else {
+        g_print("Warning: Element %s not found for animation\n", elem_id);
+      }
+    }
+    else if (is_animation_mode && (g_strcmp0(tokens[0], "animation_mode") == 0)) {
+      // Just skip this line, already processed
+    }
 
     for (int j = 0; j < token_count; j++)
       g_free(tokens[j]);
@@ -2301,6 +2554,12 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
   g_print("DSL: Complete! Total elements: %d + %d connections\n",
           element_count, connection_count);
+
+  // Start animation if in animation mode
+  if (is_animation_mode && data->anim_engine) {
+    g_print("Starting animation...\n");
+    animation_engine_start(data->anim_engine, data->drawing_area, data);
+  }
 
   gtk_widget_queue_draw(data->drawing_area);
 }

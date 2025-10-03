@@ -1372,16 +1372,12 @@ static void on_delete_element_action(GSimpleAction *action, GVariant *parameter,
         if (model_element->state != MODEL_STATE_NEW) {
           int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
           if (element_count > 0) {
-            GtkWidget *dialog = gtk_message_dialog_new(
-              GTK_WINDOW(gtk_widget_get_ancestor(data->drawing_area, GTK_TYPE_WINDOW)),
-              GTK_DIALOG_MODAL,
-              GTK_MESSAGE_WARNING,
-              GTK_BUTTONS_OK,
-              "Space contains %d elements. Please remove them first before deleting the space.",
-              element_count
-            );
-            gtk_window_present(GTK_WINDOW(dialog));
-            g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
+            // Show notification for non-empty spaces
+            char message[128];
+            snprintf(message, sizeof(message),
+                    "Cannot delete space with %d element%s",
+                    element_count, element_count == 1 ? "" : "s");
+            canvas_show_notification(data, message);
             return;
           }
         }
@@ -2503,17 +2499,12 @@ gboolean canvas_on_key_pressed(GtkEventControllerKey *controller, guint keyval,
             if (model_element->state != MODEL_STATE_NEW) {
               int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
               if (element_count > 0) {
-                // Show dialog for non-empty spaces
-                GtkWidget *dialog = gtk_message_dialog_new(
-                  GTK_WINDOW(gtk_widget_get_ancestor(data->drawing_area, GTK_TYPE_WINDOW)),
-                  GTK_DIALOG_MODAL,
-                  GTK_MESSAGE_WARNING,
-                  GTK_BUTTONS_OK,
-                  "Space contains %d elements. Please remove them first before deleting the space.",
-                  element_count
-                );
-                gtk_window_present(GTK_WINDOW(dialog));
-                g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
+                // Show notification for non-empty spaces
+                char message[128];
+                snprintf(message, sizeof(message),
+                        "Cannot delete space with %d element%s",
+                        element_count, element_count == 1 ? "" : "s");
+                canvas_show_notification(data, message);
                 continue;
               }
             }

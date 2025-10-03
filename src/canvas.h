@@ -9,6 +9,7 @@
 #include "freehand_drawing.h"
 #include "shape.h"
 #include "quadtree.h"
+#include "animation.h"
 
 // Forward declare to avoid circular dependency
 typedef struct _SpaceTreeView SpaceTreeView;
@@ -95,6 +96,9 @@ struct _CanvasData {
   // Animation management
   guint animation_timer_id;
   gboolean is_loading_space;
+
+  // DSL Animation engine
+  AnimationEngine *anim_engine;
 
   // Space tree view
   SpaceTreeView *space_tree_view;

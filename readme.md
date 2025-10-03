@@ -2,6 +2,8 @@
 
 Note-taking and brainstorming application with infinite canvas and powerful organization features.
 
+![Revel Animation](examples/revel_animation.gif)
+
 ## Table of Contents
 
 * [Features](#features)
@@ -10,6 +12,7 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * [To run on x86_64 GNU/Linux](#to-run-on-x86_64-gnulinux)
 * [Project layout](#project-layout)
 * [DSL example](#dsl-example)
+* [DSL Documentation](#dsl-documentation)
 * [How to add app launcher](#how-to-add-app-launcher)
 
 ## Features
@@ -82,6 +85,14 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
     * Batch element creation
     * Automated connections
     * Scripted arrangements
+    * **Advanced Animation Engine** for presentations and demos:
+        * **Move animations:** Smooth position transitions
+        * **Resize animations:** Dynamic size changes
+        * **Color animations:** Seamless color transitions
+        * **Appear/Disappear:** Fade in/out effects
+        * **Three interpolation types:** Immediate, linear, and bezier (smooth ease-in-out)
+        * Support for single-play and looping animations
+        * Timeline-based sequencing for complex choreography
 
 ### Keyboard Shortcuts
 
@@ -138,6 +149,27 @@ This command generates `demo.db` alongside the executable. Launching `revel` and
 opening the generated database will display the scripted layout shown below:
 
 ![Demo Canvas](examples/media/demo.jpg)
+
+## DSL Documentation
+
+For complete DSL reference including all commands, options, and animation features, see [DSL.md](DSL.md).
+
+**Quick links:**
+- [Canvas Settings](DSL.md#canvas-settings) - Background and grid configuration
+- [Element Creation](DSL.md#element-creation) - Notes, shapes, media, and spaces
+- [Connections](DSL.md#connections) - Arrows and relationships
+- [Animation System](DSL.md#animation-system) - Create animated presentations
+- [Examples](DSL.md#examples) - Ready-to-use code snippets
+
+**Animation Examples:**
+```bash
+# Run basic animation example
+make -j 7
+rm -f anim.db && ./revel --dsl animation_example.dsl anim.db
+
+# Run looping animation example
+rm -f anim.db && ./revel --dsl animation_cycled_example.dsl anim.db
+```
 
 ## How to add app launcher:
 
