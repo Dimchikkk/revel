@@ -107,7 +107,7 @@ Model* model_new_with_file(const char *db_filename) {
   model->current_space_background_color = NULL;
   model->current_space_name = NULL;
   model->current_space_show_grid = FALSE;
-  model->current_space_grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0};
+  model->current_space_grid_color = (GdkRGBA){0.15, 0.15, 0.20, 0.4};
 
   if (!database_init(&model->db, db_filename)) {
     g_free(model);

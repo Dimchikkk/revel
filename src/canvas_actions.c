@@ -408,8 +408,8 @@ void canvas_show_background_dialog(GtkButton *button, gpointer user_data) {
   gtk_grid_attach(GTK_GRID(grid), grid_color_label, 0, 2, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), grid_color_button, 1, 2, 1, 1);
 
-  // Set default grid color to light gray
-  GdkRGBA default_grid_color = {0.8, 0.8, 0.8, 1.0};
+  // Set default grid color
+  GdkRGBA default_grid_color = {0.15, 0.15, 0.20, 0.4};
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(grid_color_button), &default_grid_color);
 
   // Load current background settings

@@ -116,7 +116,7 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
 
   // Initialize grid settings
   data->show_grid = FALSE;
-  data->grid_color = (GdkRGBA){0.8, 0.8, 0.8, 1.0}; // Default light gray
+  data->grid_color = (GdkRGBA){0.15, 0.15, 0.20, 0.4};
 
   // Initialize space name display (default to shown)
   data->show_space_name = TRUE;
