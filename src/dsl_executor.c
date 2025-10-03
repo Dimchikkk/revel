@@ -2287,19 +2287,20 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
   }
 
   // Push batch undo action for connections
+  int connection_count = g_list_length(connection_elements);
   if (connection_elements) {
     undo_manager_push_create_action_batch(data->undo_manager, connection_elements);
   }
 
   // Clean up
   g_hash_table_destroy(element_map);
-  g_list_free_full(connections, g_free);
+  g_list_free(connections);  // ConnectionInfo already freed in loop above
   g_list_free(new_elements);
   g_list_free(connection_elements);
   g_strfreev(lines);
 
   g_print("DSL: Complete! Total elements: %d + %d connections\n",
-          element_count, g_list_length(connection_elements));
+          element_count, connection_count);
 
   gtk_widget_queue_draw(data->drawing_area);
 }
