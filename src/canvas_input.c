@@ -39,89 +39,115 @@ static void append_section_if_not_empty(GMenu *parent, GMenu *section) {
   g_object_unref(section);
 }
 
+static gboolean hide_shortcuts_notification(gpointer user_data) {
+  GtkWidget *box = GTK_WIDGET(user_data);
+  gtk_widget_set_visible(box, FALSE);
+  return G_SOURCE_REMOVE;
+}
+
 static void canvas_show_shortcuts_dialog(CanvasData *data) {
-  if (!data || !data->drawing_area) {
+  if (!data || !data->overlay) {
     return;
   }
 
-  static const ShortcutInfo shortcuts[] = {
-    { "Ctrl+N", "Create inline text note" },
-    { "Ctrl+Shift+N", "Create rich text note" },
-    { "Ctrl+Shift+P", "Create paper note" },
-    { "Ctrl+Shift+S", "Create nested space" },
-    { "Ctrl+L", "Open shape library" },
-    { "Ctrl+S", "Open search" },
-    { "Ctrl+E", "Open DSL executor" },
-    { "Ctrl+D", "Toggle drawing mode" },
-    { "Ctrl+V", "Paste from clipboard" },
-    { "Ctrl+Z", "Undo" },
-    { "Ctrl+Y", "Redo" },
-    { "Ctrl+A", "Select all elements" },
-    { "Delete", "Delete selected elements" },
-    { "Backspace", "Return to parent space" },
-    { "Ctrl+J", "Toggle space tree" },
-    { "Ctrl+T", "Toggle toolbar visibility" },
-    { "Ctrl+Shift+T", "Toggle toolbar auto-hide" },
-    { "Enter", "Finish text editing" },
-    { "Tab", "Finish editing and create new inline text" }
-  };
+  // Create a box to hold the grid
+  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_halign(container, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(container, GTK_ALIGN_START);
+  gtk_widget_set_margin_top(container, 20);
+  gtk_widget_set_margin_start(container, 20);
+  gtk_widget_set_margin_end(container, 20);
 
-  GtkWidget *root = GTK_WIDGET(gtk_widget_get_root(data->drawing_area));
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(
-    "Keyboard Shortcuts",
-    GTK_WINDOW(root),
-    GTK_DIALOG_MODAL,
-    "Close",
-    GTK_RESPONSE_CLOSE,
-    NULL);
-
-  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(root));
-  gtk_window_set_default_size(GTK_WINDOW(dialog), 440, 420);
-
-  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-
-  GtkWidget *header = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(header), "<span size='large' weight='bold'>Keyboard Shortcuts</span>");
-  gtk_label_set_xalign(GTK_LABEL(header), 0.0);
-  gtk_widget_set_margin_start(header, 8);
-  gtk_widget_set_margin_end(header, 8);
-  gtk_widget_set_margin_top(header, 8);
-  gtk_widget_set_margin_bottom(header, 12);
-  gtk_box_append(GTK_BOX(content), header);
-
-  GtkWidget *scrolled = gtk_scrolled_window_new();
-  gtk_widget_set_vexpand(scrolled, TRUE);
-  gtk_widget_set_hexpand(scrolled, TRUE);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-  gtk_box_append(GTK_BOX(content), scrolled);
-
+  // Create grid for two columns (keys and descriptions)
   GtkWidget *grid = gtk_grid_new();
-  gtk_widget_set_margin_start(grid, 12);
-  gtk_widget_set_margin_end(grid, 12);
-  gtk_widget_set_margin_bottom(grid, 12);
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 6);
   gtk_grid_set_column_spacing(GTK_GRID(grid), 16);
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), grid);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
 
-  const size_t shortcut_count = G_N_ELEMENTS(shortcuts);
-  for (size_t i = 0; i < shortcut_count; i++) {
-    GtkWidget *shortcut_label = gtk_label_new(NULL);
-    gchar *markup = g_strdup_printf("<tt>%s</tt>", shortcuts[i].shortcut);
-    gtk_label_set_markup(GTK_LABEL(shortcut_label), markup);
-    g_free(markup);
-    gtk_label_set_xalign(GTK_LABEL(shortcut_label), 0.0);
+  // Keys column
+  const char *keys =
+    "Ctrl+N\n"
+    "Ctrl+Shift+N\n"
+    "Ctrl+Shift+P\n"
+    "Ctrl+Shift+S\n"
+    "Ctrl+L\n"
+    "Ctrl+S\n"
+    "Ctrl+E\n"
+    "Ctrl+D\n"
+    "Ctrl+V\n"
+    "Ctrl+Z\n"
+    "Ctrl+Y\n"
+    "Ctrl+A\n"
+    "Delete\n"
+    "Backspace\n"
+    "Ctrl+J\n"
+    "Ctrl+T\n"
+    "Ctrl+Shift+T\n"
+    "Enter\n"
+    "Tab";
 
-    GtkWidget *description_label = gtk_label_new(shortcuts[i].description);
-    gtk_label_set_xalign(GTK_LABEL(description_label), 0.0);
-    gtk_label_set_wrap(GTK_LABEL(description_label), TRUE);
+  // Descriptions column
+  const char *descriptions =
+    "Create inline text\n"
+    "Create rich text\n"
+    "Create paper note\n"
+    "Create nested space\n"
+    "Open shape library\n"
+    "Open search\n"
+    "Open DSL executor\n"
+    "Toggle drawing mode\n"
+    "Paste from clipboard\n"
+    "Undo\n"
+    "Redo\n"
+    "Select all\n"
+    "Delete selected elements\n"
+    "Return to parent space\n"
+    "Toggle space tree\n"
+    "Toggle toolbar\n"
+    "Toggle toolbar auto-hide\n"
+    "Finish text editing\n"
+    "Finish editing and create new inline text";
 
-    gtk_grid_attach(GTK_GRID(grid), shortcut_label, 0, (int)i, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), description_label, 1, (int)i, 1, 1);
-  }
+  GtkWidget *keys_label = gtk_label_new(keys);
+  gtk_label_set_xalign(GTK_LABEL(keys_label), 0.0);
+  gtk_widget_add_css_class(keys_label, "shortcuts-keys");
 
-  g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
-  gtk_window_present(GTK_WINDOW(dialog));
+  GtkWidget *desc_label = gtk_label_new(descriptions);
+  gtk_label_set_xalign(GTK_LABEL(desc_label), 0.0);
+
+  gtk_grid_attach(GTK_GRID(grid), keys_label, 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), desc_label, 1, 0, 1, 1);
+
+  gtk_box_append(GTK_BOX(container), grid);
+
+  // Style the notification
+  gtk_widget_add_css_class(container, "shortcuts-notification");
+
+  // Add CSS for the notification style
+  GtkCssProvider *provider = gtk_css_provider_new();
+  const char *css =
+    ".shortcuts-notification { "
+    "  background-color: rgba(0, 0, 0, 0.85); "
+    "  color: white; "
+    "  padding: 16px 24px; "
+    "  border-radius: 8px; "
+    "  font-size: 13px; "
+    "  font-family: monospace; "
+    "} "
+    ".shortcuts-keys { "
+    "  font-weight: bold; "
+    "}";
+  gtk_css_provider_load_from_data(provider, css, -1);
+  gtk_style_context_add_provider_for_display(
+    gdk_display_get_default(),
+    GTK_STYLE_PROVIDER(provider),
+    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref(provider);
+
+  // Add to overlay
+  gtk_overlay_add_overlay(GTK_OVERLAY(data->overlay), container);
+
+  // Auto-hide after 10 seconds
+  g_timeout_add(10000, hide_shortcuts_notification, container);
 }
 
 void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
