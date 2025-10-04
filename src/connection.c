@@ -220,8 +220,10 @@ void connection_parallel_arrow_mid(Vec2 start, Vec2 end, int start_pos, int end_
   *mid2 = mid;
 }
 
-void connection_draw(Element *element, cairo_t *cr, gboolean is_selected) {
+void connection_update_bounds(Element *element) {
   Connection *conn = (Connection*)element;
+  if (!conn->from || !conn->to) return;
+
   int x1, y1, x2, y2;
   element_get_connection_point(conn->from, conn->from_point, &x1, &y1);
   element_get_connection_point(conn->to, conn->to_point, &x2, &y2);
@@ -231,6 +233,17 @@ void connection_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   conn->base.y = MIN(y1, y2);
   conn->base.width = ABS(x2 - x1);
   conn->base.height = ABS(y2 - y1);
+}
+
+void connection_draw(Element *element, cairo_t *cr, gboolean is_selected) {
+  Connection *conn = (Connection*)element;
+
+  // Update bounds before drawing
+  connection_update_bounds(element);
+
+  int x1, y1, x2, y2;
+  element_get_connection_point(conn->from, conn->from_point, &x1, &y1);
+  element_get_connection_point(conn->to, conn->to_point, &x2, &y2);
 
   // Draw connection line
   if (is_selected) {

@@ -1069,6 +1069,12 @@ void canvas_rebuild_quadtree(CanvasData *canvas_data) {
   GList *visual_elements = canvas_get_visual_elements(canvas_data);
   for (GList *l = visual_elements; l != NULL; l = l->next) {
     Element *element = (Element*)l->data;
+
+    // Update connection bounds before inserting into quadtree
+    if (element->type == ELEMENT_CONNECTION) {
+      connection_update_bounds(element);
+    }
+
     quadtree_insert(canvas_data->quadtree, element);
   }
 }

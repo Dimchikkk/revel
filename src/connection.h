@@ -57,5 +57,6 @@ void connection_determine_optimal_points(ConnectionRect from_rect,
                                          ConnectionRect to_rect,
                                          int *from_point,
                                          int *to_point);
+void connection_update_bounds(Element *element);
 
 #endif
