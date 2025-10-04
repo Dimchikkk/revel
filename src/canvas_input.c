@@ -61,7 +61,9 @@ static void canvas_show_shortcuts_dialog(CanvasData *data) {
     { "Backspace", "Return to parent space" },
     { "Ctrl+J", "Toggle space tree" },
     { "Ctrl+T", "Toggle toolbar visibility" },
-    { "Ctrl+Shift+T", "Toggle toolbar auto-hide" }
+    { "Ctrl+Shift+T", "Toggle toolbar auto-hide" },
+    { "Enter", "Finish text editing" },
+    { "Tab", "Finish editing and create new inline text" }
   };
 
   GtkWidget *root = GTK_WIDGET(gtk_widget_get_root(data->drawing_area));
