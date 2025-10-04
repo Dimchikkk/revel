@@ -82,6 +82,7 @@ static void canvas_show_shortcuts_dialog(CanvasData *data) {
     "Ctrl+J\n"
     "Ctrl+T\n"
     "Ctrl+Shift+T\n"
+    "Ctrl+Click\n"
     "Enter\n"
     "Tab";
 
@@ -104,6 +105,7 @@ static void canvas_show_shortcuts_dialog(CanvasData *data) {
     "Toggle space tree\n"
     "Toggle toolbar\n"
     "Toggle toolbar auto-hide\n"
+    "Perform main action (edit/open/play)\n"
     "Finish text editing\n"
     "Finish editing and create new inline text";
 
@@ -258,8 +260,9 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 
   Element *element = canvas_pick_element(data, cx, cy);
 
-  // Handle video playback toggle on SINGLE click only
-  if (element && element->type == ELEMENT_MEDIA_FILE && n_press == 2) {
+  // Handle video playback toggle on double-click or Ctrl+click
+  if (element && element->type == ELEMENT_MEDIA_FILE &&
+      (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK)))) {
     MediaNote *media_note = (MediaNote*)element;
     if (media_note->media_type == MEDIA_TYPE_VIDEO) {
       media_note_toggle_video_playback(element);
@@ -272,7 +275,9 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
     canvas_clear_selection(data);
   }
 
-  if (element && element->type == ELEMENT_SPACE && n_press == 2) {
+  // Handle space opening on double-click or Ctrl+click
+  if (element && element->type == ELEMENT_SPACE &&
+      (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK)))) {
     model_save_elements(data->model);
     ModelElement *model_element = model_get_by_visual(data->model, element);
     switch_to_space(data, model_element->target_space_uuid);
@@ -425,7 +430,8 @@ void canvas_on_left_click(GtkGestureClick *gesture, int n_press, double x, doubl
 
     element_bring_to_front(element, &data->next_z_index);
 
-    if (n_press == 2) {
+    // Handle text editing on double-click or Ctrl+click
+    if (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK))) {
       element_start_editing(element, data->overlay);
       gtk_widget_queue_draw(data->drawing_area);
       return;
