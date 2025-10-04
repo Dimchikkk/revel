@@ -1,6 +1,7 @@
 #include "inline_text.h"
 #include "canvas.h"
 #include "canvas_core.h"
+#include "canvas_actions.h"
 #include "model.h"
 #include "undo_manager.h"
 #include <math.h>
@@ -236,6 +237,11 @@ gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, gu
       inline_text_finish_editing((Element*)text);
       return TRUE;
     }
+  } else if (keyval == GDK_KEY_Tab) {
+    // Tab finishes current element and creates a new one
+    inline_text_finish_editing((Element*)text);
+    canvas_on_add_text(NULL, text->base.canvas_data);
+    return TRUE;
   }
   return FALSE;
 }
