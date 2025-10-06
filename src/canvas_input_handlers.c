@@ -678,6 +678,14 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
 
   Element *element = canvas_pick_element(data, cx, cy);
 
+  if (n_press == 1) {
+    data->dsl_pressed_element = element;
+    data->dsl_pressed_valid = TRUE;
+  } else {
+    data->dsl_pressed_valid = FALSE;
+    data->dsl_pressed_element = NULL;
+  }
+
   if (element && element->type == ELEMENT_MEDIA_FILE &&
       (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK)))) {
     MediaNote *media_note = (MediaNote*)element;
@@ -1383,6 +1391,14 @@ static void canvas_process_left_release(CanvasData *data, int n_press, double x,
   }
 
   g_list_free(visual_elements);
+
+  if (!was_moved && !was_resized && !was_rotated &&
+      data->dsl_pressed_valid && data->dsl_pressed_element) {
+    dsl_handle_element_click(data, data->dsl_pressed_element);
+  }
+
+  data->dsl_pressed_valid = FALSE;
+  data->dsl_pressed_element = NULL;
 
   if (was_moved || was_resized || was_rotated) {
     canvas_sync_with_model(data);

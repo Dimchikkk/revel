@@ -114,6 +114,10 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   data->shape_start_x = 0;
   data->shape_start_y = 0;
 
+  data->dsl_runtime = NULL;
+  data->dsl_pressed_element = NULL;
+  data->dsl_pressed_valid = FALSE;
+
   // Initialize grid settings
   data->show_grid = FALSE;
   data->grid_color = (GdkRGBA){0.15, 0.15, 0.20, 0.4};

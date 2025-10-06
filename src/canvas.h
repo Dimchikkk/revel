@@ -14,6 +14,7 @@
 
 // Forward declare to avoid circular dependency
 typedef struct _SpaceTreeView SpaceTreeView;
+typedef struct _DSLRuntime DSLRuntime;
 
 typedef struct _CanvasData CanvasData;
 typedef struct _UndoManager UndoManager;
@@ -124,6 +125,11 @@ struct _CanvasData {
   guint ui_event_subscriptions[UI_EVENT_TYPE_COUNT];
 
   Model *model;
+
+  DSLRuntime *dsl_runtime;
+
+  Element *dsl_pressed_element;
+  gboolean dsl_pressed_valid;
 };
 
 #endif

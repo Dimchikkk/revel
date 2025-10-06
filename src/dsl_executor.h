@@ -2,6 +2,7 @@
 #define CANVAS_EXECUTE_H
 
 #include <gtk/gtk.h>
+#include "element.h"
 
 typedef struct _CanvasData CanvasData;
 
@@ -19,5 +20,6 @@ void canvas_execute_script(CanvasData *data, const gchar *script);
 void canvas_presentation_next_slide(CanvasData *data);
 void canvas_presentation_prev_slide(CanvasData *data);
 gboolean canvas_is_presentation_mode(CanvasData *data);
+gboolean dsl_handle_element_click(CanvasData *data, Element *element);
 
 #endif

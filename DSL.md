@@ -9,6 +9,7 @@ Complete reference for Revel's Domain Specific Language (DSL) for creating compl
 3. [Element Creation](#element-creation)
 4. [Connections](#connections)
 5. [Animation System](#animation-system)
+6. [Variables & Events](#variables--events)
 
 ---
 
@@ -385,6 +386,8 @@ animate_resize circle1 (120,120) (80,80) 1.0 1.0 bezier
 
 **Example Files:**
 - `examples/presentation_demo.dsl` - Basic presentation without animations
+- `examples/interactive_dashboard.dsl` - Variable-driven sales dashboard with animated bars
+- `examples/interactive_gauge.dsl` - Clickable thermostat gauge with live readouts
 
 ---
 
@@ -397,3 +400,53 @@ animate_resize circle1 (120,120) (80,80) 1.0 1.0 bezier
 5. **Performance**: For large layouts (1000+ elements), rendering may take time
 6. **Export to DSL**: Use the "Export to DSL" button in DSL Executor to generate DSL from current canvas
 7. **Animation Recording**: Use screen recording tools to capture cycled animations as videos/GIFs
+
+---
+
+## Variables & Events
+
+Create dynamic layouts by storing values, reacting to user interaction, and updating visuals automatically.
+
+### Declare Variables
+
+```
+var NAME VALUE
+
+var total_sales {q1 + q2 + q3 + q4}
+```
+
+- Literal numbers or expressions inside `{ ... }`
+- Expressions support `+ - * /` and other variables
+
+### Interpolate Values
+
+```
+text_create total "Total: ${total_sales}" (400,120) (320,40)
+```
+
+- `${ ... }` in strings evaluates expressions when the element is created or when refreshed by events
+
+### Runtime Commands (inside event blocks)
+
+```
+add VARIABLE EXPRESSION
+animate_move ELEMENT (to_x,to_y) START DURATION [interp]
+animate_resize ELEMENT (to_w,to_h) START DURATION [interp]
+text_update ELEMENT "New text with ${expr}"
+```
+
+### Event Handlers
+
+```
+on click element_id
+  add counter 1
+end
+
+on variable counter
+  text_update label "Clicks: ${counter}"
+end
+```
+
+- `on click` runs when the element is clicked (and not dragged)
+- `on variable` runs after the named variable changes
+- Handlers may contain multiple commands; animations are queued automatically
