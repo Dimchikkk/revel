@@ -2,9 +2,7 @@ main
 revel
 revel.db*
 demo.db*
-test_model_runner
-test_space_tree_runner
-test_undo_runner
+build/*
 *.o
 .gdb_history
 ai_cube.dsl

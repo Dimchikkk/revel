@@ -17,20 +17,24 @@ TARGET = revel
 TEST_MODEL_SRC = $(TEST_DIR)/test_model.c
 TEST_UNDO_SRC = $(TEST_DIR)/test_undo_manager.c
 TEST_SPACE_TREE_SRC = $(TEST_DIR)/test_canvas_space_tree.c
+TEST_CANVAS_INPUT_SRC = $(TEST_DIR)/test_canvas_input_events.c
 
 TEST_MODEL_OBJ = $(TEST_MODEL_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
 TEST_UNDO_OBJ = $(TEST_UNDO_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
 TEST_SPACE_TREE_OBJ = $(TEST_SPACE_TREE_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
+TEST_CANVAS_INPUT_OBJ = $(TEST_CANVAS_INPUT_SRC:$(TEST_DIR)/%.c=$(TEST_BUILD_DIR)/%.o)
 
 COMMON_OBJS = $(filter-out $(BUILD_DIR)/main.o,$(OBJS))
 
 TEST_MODEL_OBJS_FULL = $(COMMON_OBJS) $(TEST_MODEL_OBJ)
 TEST_UNDO_OBJS_FULL = $(COMMON_OBJS) $(TEST_UNDO_OBJ)
 TEST_SPACE_TREE_OBJS_FULL = $(COMMON_OBJS) $(TEST_SPACE_TREE_OBJ)
+TEST_CANVAS_INPUT_OBJS_FULL = $(COMMON_OBJS) $(TEST_CANVAS_INPUT_OBJ)
 
 TEST_MODEL_TARGET = $(TEST_BUILD_DIR)/test_model_runner
 TEST_UNDO_TARGET = $(TEST_BUILD_DIR)/test_undo_runner
 TEST_SPACE_TREE_TARGET = $(TEST_BUILD_DIR)/test_space_tree_runner
+TEST_CANVAS_INPUT_TARGET = $(TEST_BUILD_DIR)/test_canvas_input_runner
 
 all: $(TARGET)
 
@@ -49,7 +53,7 @@ $(TEST_BUILD_DIR)/%.o: $(TEST_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Test targets
-test: test-model test-undo test-space-tree
+test: test-model test-undo test-space-tree test-canvas-input
 
 test-model: $(TEST_MODEL_TARGET)
 	./$(TEST_MODEL_TARGET)
@@ -71,6 +75,13 @@ $(TEST_UNDO_TARGET): $(TEST_UNDO_OBJS_FULL)
 $(TEST_SPACE_TREE_TARGET): $(TEST_SPACE_TREE_OBJS_FULL)
 	@mkdir -p $(dir $@)
 	$(CC) -o $@ $(TEST_SPACE_TREE_OBJS_FULL) $(LIBS) `pkg-config --libs glib-2.0`
+
+test-canvas-input: $(TEST_CANVAS_INPUT_TARGET)
+	./$(TEST_CANVAS_INPUT_TARGET)
+
+$(TEST_CANVAS_INPUT_TARGET): $(TEST_CANVAS_INPUT_OBJS_FULL)
+	@mkdir -p $(dir $@)
+	$(CC) -o $@ $(TEST_CANVAS_INPUT_OBJS_FULL) $(LIBS) `pkg-config --libs glib-2.0`
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET) revel.db test.db test_space_tree.db

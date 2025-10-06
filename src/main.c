@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include "canvas_core.h"
 #include "canvas_input.h"
+#include "ui_event_bus.h"
 #include "canvas_actions.h"
 #include "canvas_spaces.h"
 #include "canvas_search.h"
@@ -363,6 +364,8 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   data->toolbar_visible = TRUE;
   data->toolbar_auto_hide = FALSE;
   data->toolbar_hide_timer_id = 0;
+
+  canvas_input_register_event_handlers(data);
 
   // Initialize tree view
   data->tree_scrolled = tree_scrolled;

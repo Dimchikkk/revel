@@ -10,6 +10,7 @@
 #include "shape.h"
 #include "quadtree.h"
 #include "animation.h"
+#include "ui_event_bus.h"
 
 // Forward declare to avoid circular dependency
 typedef struct _SpaceTreeView SpaceTreeView;
@@ -118,6 +119,9 @@ struct _CanvasData {
 
   // Spatial index for fast element picking
   QuadTree *quadtree;
+
+  // UI event bus subscriptions
+  guint ui_event_subscriptions[UI_EVENT_TYPE_COUNT];
 
   Model *model;
 };

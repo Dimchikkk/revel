@@ -327,6 +327,12 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
 }
 
 void canvas_data_free(CanvasData *data) {
+  if (!data) {
+    return;
+  }
+
+  canvas_input_unregister_event_handlers(data);
+
   if (data->default_cursor) g_object_unref(data->default_cursor);
   if (data->move_cursor) g_object_unref(data->move_cursor);
   if (data->resize_cursor) g_object_unref(data->resize_cursor);
@@ -688,6 +694,8 @@ void canvas_on_app_shutdown(GApplication *app, gpointer user_data) {
     canvas_data_free(data);
     g_object_set_data(G_OBJECT(app), "canvas_data", NULL);
   }
+
+  ui_event_bus_shutdown();
 }
 
 Element* create_visual_element(ModelElement *model_element, CanvasData *data) {

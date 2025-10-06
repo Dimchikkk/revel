@@ -1,4 +1,3 @@
-- [improvement] refactor UI layer to have User Input -> Global Event Handler -> UI callbacks
 - [new feature] make the following example work:
 
 canvas_background (0.05,0.05,0.1,1.0) true
