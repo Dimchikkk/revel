@@ -62,6 +62,13 @@ InlineText* inline_text_create(ElementPosition position,
 }
 
 void inline_text_update_layout(InlineText *text) {
+  if (!text) {
+    return;
+  }
+
+  int old_width = text->base.width;
+  int old_height = text->base.height;
+
   if (text->layout) {
     g_object_unref(text->layout);
   }
@@ -85,6 +92,24 @@ void inline_text_update_layout(InlineText *text) {
   int padding = 8;
   text->base.width = MAX(text_width + padding * 2, text->min_width);
   text->base.height = MAX(text_height + padding * 2, 20);
+
+  gboolean size_changed = (text->base.width != old_width) || (text->base.height != old_height);
+
+  if (size_changed) {
+    Element *element = (Element*)text;
+    CanvasData *canvas_data = element->canvas_data;
+
+    if (canvas_data && canvas_data->model) {
+      ModelElement *model_element = model_get_by_visual(canvas_data->model, element);
+      if (model_element) {
+        model_update_size(canvas_data->model, model_element, text->base.width, text->base.height);
+      }
+    }
+
+    if (canvas_data && canvas_data->quadtree) {
+      canvas_rebuild_quadtree(canvas_data);
+    }
+  }
 
   cairo_destroy(cr);
   cairo_surface_destroy(surface);
