@@ -1,10 +1,10 @@
 # Smart thermostat control demo
 canvas_background (0.08,0.09,0.12,1.0) true (0.15,0.17,0.22,0.5)
 
-var current_temp 68
-var min_temp 60
-var max_temp 80
-var comfort_span {max_temp - min_temp}
+int current_temp 68
+int min_temp 60
+int max_temp 80
+int comfort_span {max_temp - min_temp}
 
 text_create heading "Thermostat" (420,60) (360,60) text_color #e2e8f0 font "Ubuntu Bold 36"
 text_create subheading "Tap buttons to adjust" (420,110) (360,40) text_color #94a3b8 font "Ubuntu 16"

@@ -9,7 +9,7 @@ TEST_DIR = tests
 BUILD_DIR = build
 TEST_BUILD_DIR = $(BUILD_DIR)/tests
 
-SRCS = $(wildcard $(SRC_DIR)/*.c)
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/dsl/*.c)
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TARGET = revel
 

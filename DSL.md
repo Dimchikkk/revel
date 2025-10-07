@@ -410,13 +410,19 @@ Create dynamic layouts by storing values, reacting to user interaction, and upda
 ### Declare Variables
 
 ```
-var NAME VALUE
+int    NAME VALUE
+real   NAME VALUE
+bool   NAME true|false
+string NAME "Text"
 
-var total_sales {q1 + q2 + q3 + q4}
+int total_sales {q1 + q2 + q3 + q4}
+bool is_hot {current_temp - target_temp}
+string status "Total: ${total_sales}"
 ```
 
-- Literal numbers or expressions inside `{ ... }`
-- Expressions support `+ - * /` and other variables
+- Numeric declarations (`int`, `real`) accept literal values or expressions inside `{ ... }`
+- Boolean declarations accept literals (`true`, `false`, `yes`, `no`, `1`, `0`) or expressions (non-zero evaluates to `true`)
+- Strings use quoted text; `${ ... }` interpolation works when rendering
 
 ### Interpolate Values
 
@@ -429,7 +435,7 @@ text_create total "Total: ${total_sales}" (400,120) (320,40)
 ### Runtime Commands (inside event blocks)
 
 ```
-add VARIABLE EXPRESSION
+add VARIABLE EXPRESSION        # numeric variables only
 animate_move ELEMENT (to_x,to_y) START DURATION [interp]
 animate_resize ELEMENT (to_w,to_h) START DURATION [interp]
 text_update ELEMENT "New text with ${expr}"

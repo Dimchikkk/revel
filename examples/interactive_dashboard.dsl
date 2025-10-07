@@ -1,10 +1,10 @@
 canvas_background (0.05,0.05,0.1,1.0) true
 
-var data_q1 1000
-var data_q2 1500
-var data_q3 1200
-var data_q4 1800
-var total {data_q1 + data_q2 + data_q3 + data_q4}
+int data_q1 1000
+int data_q2 1500
+int data_q3 1200
+int data_q4 1800
+int total {data_q1 + data_q2 + data_q3 + data_q4}
 
 text_create title "Sales Dashboard" (400,50) (400,60) font "Ubuntu Bold 36"
 text_create total_label "Total: ${total}" (400,120) (300,40) text_color #22c55e font "Ubuntu Bold 24"
