@@ -140,6 +140,9 @@ gboolean parse_shape_type(const gchar *str, int *shape_type) {
   } else if (g_strcmp0(str, "cube") == 0) {
     *shape_type = SHAPE_CUBE;
     return TRUE;
+  } else if (g_strcmp0(str, "plot") == 0 || g_strcmp0(str, "graph") == 0) {
+    *shape_type = SHAPE_PLOT;
+    return TRUE;
   }
   return FALSE;
 }

@@ -25,6 +25,7 @@ typedef struct {
   GtkWidget *arrow_btn;
   GtkWidget *bezier_btn;
   GtkWidget *cube_btn;
+  GtkWidget *plot_btn;
 } ShapeDialogData;
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
@@ -290,6 +291,51 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_close_path(cr);
     break;
   }
+  case SHAPE_PLOT: {
+    // Draw plot icon with simple line graph
+    double margin = inset + 2;
+
+    // Draw axes
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.5);
+    cairo_set_line_width(cr, 1.0);
+    cairo_move_to(cr, margin, margin);
+    cairo_line_to(cr, margin, height - margin);
+    cairo_line_to(cr, width - margin, height - margin);
+    cairo_stroke(cr);
+
+    // Draw simple plot line
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, stroke_width);
+    double points[][2] = {
+      {0.1, 0.7},
+      {0.3, 0.3},
+      {0.5, 0.5},
+      {0.7, 0.2},
+      {0.9, 0.4}
+    };
+
+    for (int i = 0; i < 5; i++) {
+      double x = margin + points[i][0] * (width - 2 * margin);
+      double y = margin + points[i][1] * (height - 2 * margin);
+      if (i == 0) {
+        cairo_move_to(cr, x, y);
+      } else {
+        cairo_line_to(cr, x, y);
+      }
+    }
+    cairo_stroke(cr);
+
+    // Draw points
+    for (int i = 0; i < 5; i++) {
+      double x = margin + points[i][0] * (width - 2 * margin);
+      double y = margin + points[i][1] * (height - 2 * margin);
+      cairo_arc(cr, x, y, 2.0, 0, 2 * G_PI);
+      cairo_fill(cr);
+    }
+
+    // Skip normal fill/stroke for plot
+    return;
+  }
   }
 
   if (icon_data->shape_type != SHAPE_CYLINDER_VERTICAL &&
@@ -451,6 +497,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
       break;
     case GDK_KEY_k:
       button = data->cube_btn;
+      break;
+    case GDK_KEY_g:
+      button = data->plot_btn;
       break;
     default:
       return FALSE; // Let other handlers process this key
@@ -651,6 +700,8 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   data->cube_btn = create_shape_button("Cube (K)", SHAPE_CUBE, data);
   gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 2, 3, 1, 1);
 
+  data->plot_btn = create_shape_button("Plot (G)", SHAPE_PLOT, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->plot_btn, 0, 4, 1, 1);
 
   // Add Cancel button
   gtk_dialog_add_button(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL);

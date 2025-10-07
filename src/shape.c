@@ -623,6 +623,217 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_stroke(cr);
       }
       break;
+    case SHAPE_PLOT:
+      {
+        // Parse CSV-like text and draw plot
+        if (!shape->text || strlen(shape->text) == 0) {
+          // Draw empty plot with axes
+          double margin = 20.0;
+          cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+          cairo_set_line_width(cr, 1.0);
+
+          // Y-axis
+          cairo_move_to(cr, element->x + margin, element->y + margin);
+          cairo_line_to(cr, element->x + margin, element->y + element->height - margin);
+          // X-axis
+          cairo_line_to(cr, element->x + element->width - margin, element->y + element->height - margin);
+          cairo_stroke(cr);
+        } else {
+          // Parse text as CSV points (x,y pairs per line or comma-separated)
+          GArray *x_values = g_array_new(FALSE, FALSE, sizeof(double));
+          GArray *y_values = g_array_new(FALSE, FALSE, sizeof(double));
+
+          gchar **lines = g_strsplit(shape->text, "\n", -1);
+          for (int i = 0; lines[i] != NULL; i++) {
+            gchar *line = g_strstrip(lines[i]);
+            if (strlen(line) == 0) continue;
+
+            // Try to parse as comma or space-separated values
+            gchar **parts = g_strsplit_set(line, ", \t", -1);
+            int value_count = 0;
+            double values[2] = {0.0, 0.0};
+
+            for (int j = 0; parts[j] != NULL && value_count < 2; j++) {
+              gchar *trimmed = g_strstrip(parts[j]);
+              if (strlen(trimmed) > 0) {
+                char *endptr;
+                double val = g_strtod(trimmed, &endptr);
+                if (*endptr == '\0' || g_ascii_isspace(*endptr)) {
+                  values[value_count++] = val;
+                }
+              }
+            }
+            g_strfreev(parts);
+
+            if (value_count >= 2) {
+              g_array_append_val(x_values, values[0]);
+              g_array_append_val(y_values, values[1]);
+            } else if (value_count == 1) {
+              // If only one value, use index as x
+              double x_val = (double)x_values->len;
+              g_array_append_val(x_values, x_val);
+              g_array_append_val(y_values, values[0]);
+            }
+          }
+          g_strfreev(lines);
+
+          if (x_values->len > 0) {
+            // Find min/max for scaling
+            double min_x = g_array_index(x_values, double, 0);
+            double max_x = g_array_index(x_values, double, 0);
+            double min_y = g_array_index(y_values, double, 0);
+            double max_y = g_array_index(y_values, double, 0);
+
+            for (guint i = 1; i < x_values->len; i++) {
+              double x = g_array_index(x_values, double, i);
+              double y = g_array_index(y_values, double, i);
+              if (x < min_x) min_x = x;
+              if (x > max_x) max_x = x;
+              if (y < min_y) min_y = y;
+              if (y > max_y) max_y = y;
+            }
+
+            // Force axes to start from 0 (don't auto-scale away from zero)
+            if (min_x > 0) min_x = 0;
+            if (min_y > 0) min_y = 0;
+
+            // Add 10% padding to max values for better visualization
+            double x_padding = (max_x - min_x) * 0.1;
+            double y_padding = (max_y - min_y) * 0.1;
+            max_x += x_padding;
+            max_y += y_padding;
+
+            double x_range = max_x - min_x;
+            double y_range = max_y - min_y;
+            if (x_range < 0.001) x_range = 1.0;
+            if (y_range < 0.001) y_range = 1.0;
+
+            double margin_left = 50.0;
+            double margin_bottom = 30.0;
+            double margin_top = 20.0;
+            double margin_right = 20.0;
+            double plot_width = element->width - margin_left - margin_right;
+            double plot_height = element->height - margin_top - margin_bottom;
+
+            // Draw grid lines and labels
+            cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.15);
+            cairo_set_line_width(cr, 0.5);
+
+            // Calculate nice grid intervals
+            int num_y_ticks = 5;
+            int num_x_ticks = 5;
+            double y_tick_interval = y_range / num_y_ticks;
+            double x_tick_interval = x_range / num_x_ticks;
+
+            // Draw horizontal grid lines and Y labels
+            PangoLayout *layout = pango_cairo_create_layout(cr);
+            pango_layout_set_font_description(layout, pango_font_description_from_string("Sans 8"));
+
+            for (int i = 0; i <= num_y_ticks; i++) {
+              double y_val = min_y + i * y_tick_interval;
+              double y_pos = element->y + margin_top + plot_height * (1.0 - (double)i / num_y_ticks);
+
+              // Grid line (skip the one at the bottom which is the x-axis)
+              if (i > 0) {
+                cairo_move_to(cr, element->x + margin_left, y_pos);
+                cairo_line_to(cr, element->x + margin_left + plot_width, y_pos);
+                cairo_stroke(cr);
+              }
+
+              // Y-axis label
+              cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.7);
+              gchar *label = g_strdup_printf("%.0f", y_val);
+              pango_layout_set_text(layout, label, -1);
+              cairo_move_to(cr, element->x + 5, y_pos - 6);
+              pango_cairo_show_layout(cr, layout);
+              g_free(label);
+              cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.15);
+            }
+
+            // Draw vertical grid lines and X labels
+            for (int i = 0; i <= num_x_ticks; i++) {
+              double x_val = min_x + i * x_tick_interval;
+              double x_pos = element->x + margin_left + plot_width * (double)i / num_x_ticks;
+
+              // Grid line (skip the one at the left which is the y-axis)
+              if (i > 0) {
+                cairo_move_to(cr, x_pos, element->y + margin_top);
+                cairo_line_to(cr, x_pos, element->y + margin_top + plot_height);
+                cairo_stroke(cr);
+              }
+
+              // X-axis label
+              cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.7);
+              gchar *label = g_strdup_printf("%.0f", x_val);
+              pango_layout_set_text(layout, label, -1);
+              int text_width, text_height;
+              pango_layout_get_pixel_size(layout, &text_width, &text_height);
+              cairo_move_to(cr, x_pos - text_width / 2, element->y + element->height - margin_bottom + 5);
+              pango_cairo_show_layout(cr, layout);
+              g_free(label);
+              cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.15);
+            }
+
+            g_object_unref(layout);
+
+            // Draw main axes (darker)
+            cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.5);
+            cairo_set_line_width(cr, 1.5);
+
+            // Y-axis
+            cairo_move_to(cr, element->x + margin_left, element->y + margin_top);
+            cairo_line_to(cr, element->x + margin_left, element->y + element->height - margin_bottom);
+            // X-axis
+            cairo_line_to(cr, element->x + element->width - margin_right, element->y + element->height - margin_bottom);
+            cairo_stroke(cr);
+
+            // Draw plot line
+            cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+            cairo_set_line_width(cr, shape->stroke_width);
+            cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+            cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+            for (guint i = 0; i < x_values->len; i++) {
+              double x = g_array_index(x_values, double, i);
+              double y = g_array_index(y_values, double, i);
+
+              // Normalize to plot area (flip y-axis for screen coordinates)
+              double norm_x = (x - min_x) / x_range;
+              double norm_y = 1.0 - ((y - min_y) / y_range);
+
+              double screen_x = element->x + margin_left + norm_x * plot_width;
+              double screen_y = element->y + margin_top + norm_y * plot_height;
+
+              if (i == 0) {
+                cairo_move_to(cr, screen_x, screen_y);
+              } else {
+                cairo_line_to(cr, screen_x, screen_y);
+              }
+            }
+            cairo_stroke(cr);
+
+            // Draw points
+            cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+            for (guint i = 0; i < x_values->len; i++) {
+              double x = g_array_index(x_values, double, i);
+              double y = g_array_index(y_values, double, i);
+
+              double norm_x = (x - min_x) / x_range;
+              double norm_y = 1.0 - ((y - min_y) / y_range);
+
+              double screen_x = element->x + margin_left + norm_x * plot_width;
+              double screen_y = element->y + margin_top + norm_y * plot_height;
+
+              cairo_arc(cr, screen_x, screen_y, shape->stroke_width + 1.0, 0, 2 * M_PI);
+              cairo_fill(cr);
+            }
+          }
+
+          g_array_free(x_values, TRUE);
+          g_array_free(y_values, TRUE);
+        }
+      }
+      break;
   }
 
   // Restore cairo state before drawing selection UI
@@ -692,8 +903,8 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_translate(cr, -center_x, -center_y);
   }
 
-  // Draw text if not editing and text exists
-  if (!shape->editing && shape->text && strlen(shape->text) > 0) {
+  // Draw text if not editing and text exists (but not for plots - their text is data)
+  if (!shape->editing && shape->text && strlen(shape->text) > 0 && shape->shape_type != SHAPE_PLOT) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *font_desc = pango_font_description_from_string(shape->font_description);
     pango_layout_set_font_description(layout, font_desc);
