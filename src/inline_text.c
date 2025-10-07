@@ -1,4 +1,5 @@
 #include "inline_text.h"
+#include "dsl/dsl_runtime.h"
 #include "canvas.h"
 #include "canvas_core.h"
 #include "canvas_actions.h"
@@ -414,6 +415,9 @@ void inline_text_finish_editing(Element *element) {
     canvas_sync_with_model(text->base.canvas_data);
     gtk_widget_queue_draw(text->base.canvas_data->drawing_area);
     gtk_widget_grab_focus(text->base.canvas_data->drawing_area);
+
+    // Notify DSL runtime about updated text (e.g., for bindings)
+    dsl_runtime_inline_text_updated(text->base.canvas_data, element, text->text);
   }
 
   g_free(old_text);

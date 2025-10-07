@@ -14,6 +14,7 @@
 #include "space.h"
 #include "undo_manager.h"
 #include "dsl_executor.h"
+#include "dsl/dsl_runtime.h"
 #include "freehand_drawing.h"
 #include "shape.h"
 #include "shape_dialog.h"
@@ -1399,6 +1400,18 @@ static void canvas_process_left_release(CanvasData *data, int n_press, double x,
 
   data->dsl_pressed_valid = FALSE;
   data->dsl_pressed_element = NULL;
+
+  if (was_moved) {
+    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+      Element *moved_element = (Element *)l->data;
+      if (moved_element) {
+        ModelElement *model_element = model_get_by_visual(data->model, moved_element);
+        if (model_element) {
+          dsl_runtime_element_moved(data, model_element);
+        }
+      }
+    }
+  }
 
   if (was_moved || was_resized || was_rotated) {
     canvas_sync_with_model(data);

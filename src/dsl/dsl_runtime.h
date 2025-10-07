@@ -24,6 +24,7 @@ typedef struct {
   gchar *string_value;
   gchar *expression;
   gboolean evaluating;
+  gboolean is_global;
 } DSLVariable;
 
 DSLRuntime* dsl_runtime_get(CanvasData *data);
@@ -35,6 +36,8 @@ gboolean dsl_runtime_set_variable(CanvasData *data, const gchar *name, double va
 gboolean dsl_runtime_set_string_variable(CanvasData *data, const gchar *name, const gchar *value, gboolean trigger_watchers);
 
 gboolean dsl_runtime_recompute_expressions(CanvasData *data);
+
+void dsl_runtime_seed_global_types(CanvasData *data, GHashTable *dest);
 
 void dsl_runtime_register_element(CanvasData *data, const gchar *id, ModelElement *element);
 ModelElement* dsl_runtime_lookup_element(CanvasData *data, const gchar *id);
@@ -66,5 +69,14 @@ gboolean dsl_parse_point_token(CanvasData *data, const gchar *token, int *out_x,
 gboolean dsl_parse_double_token(CanvasData *data, const gchar *token, double *out_value);
 
 gchar* dsl_unescape_text(const gchar *str);
+
+void dsl_runtime_inline_text_updated(CanvasData *data, Element *element, const gchar *text);
+
+void dsl_runtime_register_text_binding(CanvasData *data, const gchar *element_id, const gchar *var_name);
+
+void dsl_runtime_element_moved(CanvasData *data, ModelElement *model_element);
+void dsl_runtime_register_position_binding(CanvasData *data, const gchar *element_id, const gchar *var_name);
+
+void dsl_runtime_register_auto_next(CanvasData *data, const gchar *var_name, gboolean is_string, const gchar *expected_str, double expected_value);
 
 #endif

@@ -12,6 +12,7 @@
 #include "animation.h"
 #include "inline_text.h"
 
+#include "dsl_executor.h"
 #include "dsl/dsl_runtime.h"
 #include "dsl/dsl_utils.h"
 #include "dsl/dsl_commands.h"
@@ -44,7 +45,7 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
       if (!var) {
         g_print("DSL: add references unknown variable '%s'\n", var_name);
         success = FALSE;
-      } else if (var->type != DSL_VAR_INT && var->type != DSL_VAR_REAL) {
+      } else if (var->type != DSL_VAR_INT && var->type != DSL_VAR_REAL && var->type != DSL_VAR_UNSET) {
         g_print("DSL: add only supports numeric variables (attempted on '%s')\n", var_name);
         success = FALSE;
       } else {
@@ -66,6 +67,10 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
           if (var->type == DSL_VAR_INT) {
             dsl_runtime_set_variable(data, var_name, current + delta, TRUE);
           } else {
+            if (var->type == DSL_VAR_UNSET) {
+              var->type = DSL_VAR_REAL;
+              var->numeric_value = 0.0;
+            }
             dsl_runtime_set_variable(data, var_name, current + delta, TRUE);
           }
           variables_changed = TRUE;
@@ -243,6 +248,44 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
 
       g_free(interpolated);
     }
+    else if (g_strcmp0(tokens[0], "text_bind") == 0 && token_count >= 3) {
+      const gchar *element_id = tokens[1];
+      const gchar *var_name = tokens[2];
+      if (!dsl_runtime_lookup_variable(data, var_name)) {
+        g_print("DSL: text_bind references unknown variable '%s'\n", var_name);
+        success = FALSE;
+      } else {
+        dsl_runtime_register_text_binding(data, element_id, var_name);
+      }
+    }
+    else if (g_strcmp0(tokens[0], "position_bind") == 0 && token_count >= 3) {
+      const gchar *element_id = tokens[1];
+      const gchar *var_name = tokens[2];
+      if (!dsl_runtime_lookup_variable(data, var_name)) {
+        g_print("DSL: position_bind references unknown variable '%s'\n", var_name);
+        success = FALSE;
+      } else {
+        dsl_runtime_register_position_binding(data, element_id, var_name);
+      }
+    }
+    else if (g_strcmp0(tokens[0], "presentation_next") == 0) {
+      canvas_presentation_next_slide(data);
+    }
+    else if (g_strcmp0(tokens[0], "presentation_auto_next_if") == 0 && token_count >= 3) {
+      const gchar *var_name = tokens[1];
+      if (!dsl_runtime_lookup_variable(data, var_name)) {
+        g_print("DSL: presentation_auto_next_if references unknown variable '%s'\n", var_name);
+        success = FALSE;
+      } else {
+        gboolean is_string = TRUE;
+        double expected_value = 0.0;
+        const gchar *value_token = tokens[2];
+        if (dsl_parse_double_token(data, value_token, &expected_value)) {
+          is_string = FALSE;
+        }
+        dsl_runtime_register_auto_next(data, var_name, is_string, is_string ? value_token : NULL, expected_value);
+      }
+    }
     else {
       g_print("DSL: Unsupported command in event block: %s\n", tokens[0]);
       success = FALSE;
@@ -258,7 +301,7 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
   dsl_runtime_flush_notifications(data);
 
   if (animation_prepared && animations_scheduled && data->anim_engine) {
-    animation_engine_start(data->anim_engine, data->drawing_area, NULL);
+    animation_engine_start(data->anim_engine, data->drawing_area, data);
   }
 
   g_strfreev(lines);
@@ -281,4 +324,3 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
 
 // Accepts raw '(r,g,b,a)', 'color(...)', 'color=(...)', 'rgba(...)', or '#RRGGBB[AA]'
 // Custom tokenizer that handles quotes and parentheses
-

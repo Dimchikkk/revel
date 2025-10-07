@@ -18,15 +18,54 @@
 #include "dsl/dsl_commands.h"
 #include "dsl/dsl_utils.h"
 
+#include "canvas_presentation.h"
+
+typedef struct _DSLRuntime DSLRuntime;
+
+typedef struct {
+  gchar *var_name;
+  gboolean is_position;
+} DSLBinding;
+
+typedef struct {
+  gboolean is_string;
+  gchar *expected_str;
+  double expected_value;
+  gboolean triggered;
+} DSLAutoAdvance;
+
 struct _DSLRuntime {
   GHashTable *variables;          // name -> DSLVariable*
   GHashTable *id_to_model;        // id -> ModelElement*
   GHashTable *model_to_id;        // ModelElement* -> id string
   GHashTable *click_handlers;     // id -> GPtrArray* of char* scripts
   GHashTable *variable_handlers;  // var name -> GPtrArray* of char* scripts
+  GHashTable *bindings;          // element id -> DSLBinding*
+  GHashTable *auto_next;         // var name -> DSLAutoAdvance*
   GQueue *pending_notifications;  // queue of gchar* variable names
   int notification_depth;
 };
+
+static void dsl_binding_free(gpointer data) {
+  DSLBinding *binding = (DSLBinding *)data;
+  if (!binding) return;
+  g_free(binding->var_name);
+  g_free(binding);
+}
+
+static void dsl_auto_advance_free(gpointer data) {
+  DSLAutoAdvance *entry = (DSLAutoAdvance *)data;
+  if (!entry) return;
+  g_free(entry->expected_str);
+  g_free(entry);
+}
+
+static DSLBinding* dsl_runtime_lookup_binding(DSLRuntime *runtime, const gchar *element_id) {
+  if (!runtime || !runtime->bindings || !element_id) return NULL;
+  return (DSLBinding *)g_hash_table_lookup(runtime->bindings, element_id);
+}
+
+static void dsl_runtime_try_auto_next(CanvasData *data, const gchar *var_name);
 
 gchar* dsl_unescape_text(const gchar *str) {
   if (!str) return g_strdup("");
@@ -93,6 +132,8 @@ DSLRuntime* dsl_runtime_get(CanvasData *data) {
     data->dsl_runtime->model_to_id = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
     data->dsl_runtime->click_handlers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, dsl_free_block_array);
     data->dsl_runtime->variable_handlers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, dsl_free_block_array);
+    data->dsl_runtime->bindings = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, dsl_binding_free);
+    data->dsl_runtime->auto_next = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, dsl_auto_advance_free);
     data->dsl_runtime->pending_notifications = g_queue_new();
   }
   return data->dsl_runtime;
@@ -102,11 +143,30 @@ void dsl_runtime_reset(CanvasData *data) {
   DSLRuntime *runtime = dsl_runtime_get(data);
   if (!runtime) return;
 
-  g_hash_table_remove_all(runtime->variables);
+  gboolean keep_globals = data && data->presentation_mode_active;
+  if (runtime->variables) {
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, runtime->variables);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      DSLVariable *var = (DSLVariable *)value;
+      if (!var || !keep_globals || !var->is_global) {
+        g_hash_table_iter_remove(&iter);
+      } else {
+        var->evaluating = FALSE;
+      }
+    }
+  }
   g_hash_table_remove_all(runtime->id_to_model);
   g_hash_table_remove_all(runtime->model_to_id);
   g_hash_table_remove_all(runtime->click_handlers);
   g_hash_table_remove_all(runtime->variable_handlers);
+  if (runtime->bindings) {
+    g_hash_table_remove_all(runtime->bindings);
+  }
+  if (runtime->auto_next) {
+    g_hash_table_remove_all(runtime->auto_next);
+  }
 
   if (runtime->pending_notifications) {
     g_queue_clear_full(runtime->pending_notifications, g_free);
@@ -118,6 +178,26 @@ DSLVariable* dsl_runtime_lookup_variable(CanvasData *data, const gchar *name) {
   DSLRuntime *runtime = dsl_runtime_get(data);
   if (!runtime || !name) return NULL;
   return (DSLVariable *)g_hash_table_lookup(runtime->variables, name);
+}
+
+void dsl_runtime_seed_global_types(CanvasData *data, GHashTable *dest) {
+  if (!data || !dest) return;
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !runtime->variables) return;
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, runtime->variables);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    const gchar *name = (const gchar *)key;
+    DSLVariable *var = (DSLVariable *)value;
+    if (!var || !var->is_global || var->type == DSL_VAR_UNSET) {
+      continue;
+    }
+    if (!g_hash_table_contains(dest, name)) {
+      g_hash_table_insert(dest, g_strdup(name), GINT_TO_POINTER(var->type));
+    }
+  }
 }
 
 DSLVariable* dsl_runtime_ensure_variable(CanvasData *data, const gchar *name) {
@@ -292,14 +372,31 @@ static void dsl_runtime_execute_variable_handlers(CanvasData *data, const gchar 
   if (!runtime || !var_name) return;
 
   GPtrArray *handlers = (GPtrArray *)g_hash_table_lookup(runtime->variable_handlers, var_name);
-  if (!handlers) return;
+  if (!handlers || handlers->len == 0) {
+    dsl_runtime_try_auto_next(data, var_name);
+    return;
+  }
 
+  // Take a defensive copy because executing a handler can reset the DSL runtime
+  // and free the original handler array.
+  GPtrArray *snapshot = g_ptr_array_new_with_free_func(g_free);
   for (guint i = 0; i < handlers->len; i++) {
     const gchar *block = (const gchar *)g_ptr_array_index(handlers, i);
+    if (block) {
+      g_ptr_array_add(snapshot, g_strdup(block));
+    }
+  }
+
+  for (guint i = 0; i < snapshot->len; i++) {
+    const gchar *block = (const gchar *)g_ptr_array_index(snapshot, i);
     if (block) {
       dsl_execute_command_block(data, block);
     }
   }
+
+  g_ptr_array_free(snapshot, TRUE);
+
+  dsl_runtime_try_auto_next(data, var_name);
 }
 
 void dsl_runtime_flush_notifications(CanvasData *data) {
@@ -370,8 +467,16 @@ gboolean dsl_runtime_set_variable(CanvasData *data, const gchar *name, double va
     }
   }
 
-  if (changed && trigger_watchers) {
-    dsl_runtime_notify_variable(data, name);
+  if (changed) {
+    if (trigger_watchers) {
+      dsl_runtime_notify_variable(data, name);
+      DSLRuntime *runtime = dsl_runtime_get(data);
+      if (runtime && runtime->notification_depth == 0) {
+        dsl_runtime_flush_notifications(data);
+      }
+    } else {
+      dsl_runtime_try_auto_next(data, name);
+    }
   }
   return TRUE;
 }
@@ -401,6 +506,12 @@ gboolean dsl_runtime_set_string_variable(CanvasData *data, const gchar *name, co
 
   if (trigger_watchers) {
     dsl_runtime_notify_variable(data, name);
+    DSLRuntime *runtime = dsl_runtime_get(data);
+    if (runtime && runtime->notification_depth == 0) {
+      dsl_runtime_flush_notifications(data);
+    }
+  } else {
+    dsl_runtime_try_auto_next(data, name);
   }
   return TRUE;
 }
@@ -495,6 +606,155 @@ gboolean dsl_parse_point_token(CanvasData *data, const gchar *token, int *out_x,
   }
   g_free(resolved);
   return ok;
+}
+
+void dsl_runtime_register_text_binding(CanvasData *data, const gchar *element_id, const gchar *var_name) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !element_id || !var_name) return;
+  if (!g_hash_table_lookup(runtime->variables, var_name)) {
+    g_print("DSL: Cannot bind unknown variable '%s'\n", var_name);
+    return;
+  }
+  DSLBinding *binding = dsl_runtime_lookup_binding(runtime, element_id);
+  if (!binding) {
+    binding = g_new0(DSLBinding, 1);
+  }
+  g_free(binding->var_name);
+  binding->var_name = g_strdup(var_name);
+  binding->is_position = FALSE;
+  g_hash_table_replace(runtime->bindings, g_strdup(element_id), binding);
+
+  ModelElement *element = dsl_runtime_lookup_element(data, element_id);
+  if (element && element->visual_element && element->visual_element->type == ELEMENT_INLINE_TEXT) {
+    DSLVariable *var = dsl_runtime_lookup_variable(data, var_name);
+    const char *value = (var && var->type == DSL_VAR_STRING && var->string_value) ? var->string_value : "";
+    dsl_runtime_text_update(data, element, value);
+  }
+}
+
+void dsl_runtime_register_position_binding(CanvasData *data, const gchar *element_id, const gchar *var_name) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !element_id || !var_name) return;
+  if (!g_hash_table_lookup(runtime->variables, var_name)) {
+    g_print("DSL: Cannot bind position to unknown variable '%s'\n", var_name);
+    return;
+  }
+  DSLBinding *binding = dsl_runtime_lookup_binding(runtime, element_id);
+  if (!binding) {
+    binding = g_new0(DSLBinding, 1);
+  }
+  g_free(binding->var_name);
+  binding->var_name = g_strdup(var_name);
+  binding->is_position = TRUE;
+  g_hash_table_replace(runtime->bindings, g_strdup(element_id), binding);
+
+  ModelElement *element = dsl_runtime_lookup_element(data, element_id);
+  if (element && element->position) {
+    gchar *value = g_strdup_printf("%d,%d", element->position->x, element->position->y);
+    dsl_runtime_set_string_variable(data, var_name, value, FALSE);
+    g_free(value);
+  }
+
+  dsl_runtime_try_auto_next(data, var_name);
+}
+
+void dsl_runtime_element_moved(CanvasData *data, ModelElement *model_element) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !model_element || !model_element->uuid) return;
+
+  const gchar *element_id = dsl_runtime_lookup_element_id(data, model_element);
+  if (!element_id) return;
+
+  DSLBinding *binding = dsl_runtime_lookup_binding(runtime, element_id);
+  if (!binding || !binding->is_position || !binding->var_name) return;
+
+  if (model_element->position) {
+    gchar *value = g_strdup_printf("%d,%d", model_element->position->x, model_element->position->y);
+    dsl_runtime_set_string_variable(data, binding->var_name, value, TRUE);
+    g_free(value);
+  }
+}
+
+void dsl_runtime_inline_text_updated(CanvasData *data, Element *element, const gchar *text) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !element || !text) return;
+  ModelElement *model_element = model_get_by_visual(data->model, element);
+  if (!model_element || !model_element->uuid) return;
+
+  const gchar *element_id = dsl_runtime_lookup_element_id(data, model_element);
+  if (!element_id) return;
+
+  DSLBinding *binding = dsl_runtime_lookup_binding(runtime, element_id);
+  if (!binding || binding->is_position || !binding->var_name) return;
+
+  gchar *sanitized = g_strdup(text);
+  if (sanitized) {
+    g_strstrip(sanitized);
+    dsl_runtime_set_string_variable(data, binding->var_name, sanitized, TRUE);
+    g_free(sanitized);
+  }
+}
+
+void dsl_runtime_register_auto_next(CanvasData *data, const gchar *var_name, gboolean is_string, const gchar *expected_str, double expected_value) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !var_name) return;
+  if (!g_hash_table_lookup(runtime->variables, var_name)) {
+    g_print("DSL: presentation_auto_next_if references unknown variable '%s'\n", var_name);
+    return;
+  }
+
+  DSLAutoAdvance *entry = (DSLAutoAdvance *)g_hash_table_lookup(runtime->auto_next, var_name);
+  if (!entry) {
+    entry = g_new0(DSLAutoAdvance, 1);
+    g_hash_table_insert(runtime->auto_next, g_strdup(var_name), entry);
+  } else {
+    g_free(entry->expected_str);
+  }
+
+  entry->is_string = is_string;
+  entry->expected_str = is_string ? g_strdup(expected_str ? expected_str : "") : NULL;
+  entry->expected_value = expected_value;
+  entry->triggered = FALSE;
+
+  if (entry->is_string) {
+    g_print("DSL auto-next registered: %s == '%s'\n", var_name, entry->expected_str ? entry->expected_str : "");
+  } else {
+    g_print("DSL auto-next registered: %s == %.4f\n", var_name, entry->expected_value);
+  }
+  dsl_runtime_try_auto_next(data, var_name);
+}
+
+static void dsl_runtime_try_auto_next(CanvasData *data, const gchar *var_name) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !var_name || !runtime->auto_next) return;
+
+  DSLAutoAdvance *entry = (DSLAutoAdvance *)g_hash_table_lookup(runtime->auto_next, var_name);
+  if (!entry || entry->triggered) return;
+
+  DSLVariable *var = dsl_runtime_lookup_variable(data, var_name);
+  if (!var) return;
+
+  gboolean matched = FALSE;
+  if (entry->is_string) {
+    const gchar *current = (var->type == DSL_VAR_STRING && var->string_value) ? var->string_value : "";
+    matched = g_strcmp0(current, entry->expected_str ? entry->expected_str : "") == 0;
+    g_print("DSL auto-next check: %s current='%s' expected='%s' match=%s\n",
+            var_name,
+            current ? current : "",
+            entry->expected_str ? entry->expected_str : "",
+            matched ? "yes" : "no");
+  } else {
+    double value = var->numeric_value;
+    matched = fabs(value - entry->expected_value) < 1e-6;
+    g_print("DSL auto-next check: %s current=%.4f expected=%.4f match=%s\n",
+            var_name, value, entry->expected_value, matched ? "yes" : "no");
+  }
+
+  if (matched) {
+    entry->triggered = TRUE;
+    g_print("DSL auto-next: advancing slide for '%s'\n", var_name);
+    canvas_presentation_request_auto_next(data);
+  }
 }
 
 gboolean dsl_parse_double_token(CanvasData *data, const gchar *token, double *out_value) {
@@ -613,14 +873,25 @@ gboolean dsl_runtime_handle_click(CanvasData *data, const gchar *element_id) {
   GPtrArray *handlers = (GPtrArray *)g_hash_table_lookup(runtime->click_handlers, element_id);
   if (!handlers || handlers->len == 0) return FALSE;
 
-  gboolean handled = FALSE;
+  // Copy handler blocks because callbacks can advance slides and reset the runtime.
+  GPtrArray *snapshot = g_ptr_array_new_with_free_func(g_free);
   for (guint i = 0; i < handlers->len; i++) {
     const gchar *block = (const gchar *)g_ptr_array_index(handlers, i);
+    if (block) {
+      g_ptr_array_add(snapshot, g_strdup(block));
+    }
+  }
+
+  gboolean handled = FALSE;
+  for (guint i = 0; i < snapshot->len; i++) {
+    const gchar *block = (const gchar *)g_ptr_array_index(snapshot, i);
     if (block) {
       dsl_execute_command_block(data, block);
       handled = TRUE;
     }
   }
+
+  g_ptr_array_free(snapshot, TRUE);
   return handled;
 }
 
@@ -645,16 +916,8 @@ void dsl_runtime_add_move_animation(CanvasData *data, ModelElement *model_elemen
   animation_add_move(data->anim_engine, model_element->uuid,
                      start_time, duration, interp,
                      from_x, from_y, to_x, to_y);
-
-  if (model_element->position) {
-    model_element->position->x = to_x;
-    model_element->position->y = to_y;
-  }
-
-  if (model_element->visual_element) {
-    int z = model_element->position ? model_element->position->z : model_element->visual_element->z;
-    element_update_position(model_element->visual_element, to_x, to_y, z);
-  }
+  g_print("DSL animation scheduled: %s from (%d,%d) to (%d,%d) start=%.2f dur=%.2f\n",
+          model_element->uuid, from_x, from_y, to_x, to_y, start_time, duration);
 }
 
 void dsl_runtime_add_resize_animation(CanvasData *data, ModelElement *model_element,

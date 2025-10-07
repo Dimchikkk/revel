@@ -1,5 +1,8 @@
 #include "animation.h"
 #include "canvas_core.h"
+#include "element.h"
+#include "model.h"
+#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -500,6 +503,51 @@ bool animation_engine_tick(AnimationEngine *engine, double delta_time) {
             // Animation finished
             if (!anim->completed) {
                 anim->completed = true;
+                CanvasData *data = (CanvasData *)engine->user_data;
+                if (data && anim->element_uuid) {
+                    ModelElement *model_element = g_hash_table_lookup(data->model->elements, anim->element_uuid);
+                    if (model_element) {
+                        int current_z = model_element->position ? model_element->position->z :
+                                         (model_element->visual_element ? model_element->visual_element->z : 0);
+                        gboolean needs_sync = FALSE;
+                        switch (anim->type) {
+                          case ANIM_TYPE_MOVE:
+                            model_update_position(data->model, model_element,
+                                                  (int)anim->to_x, (int)anim->to_y, current_z);
+                            if (model_element->visual_element) {
+                              int z = model_element->position ? model_element->position->z : model_element->visual_element->z;
+                              element_update_position(model_element->visual_element,
+                                                      (int)anim->to_x, (int)anim->to_y, z);
+                            }
+                            needs_sync = TRUE;
+                            break;
+                          case ANIM_TYPE_RESIZE:
+                            model_update_size(data->model, model_element,
+                                              (int)anim->to_width, (int)anim->to_height);
+                            if (model_element->visual_element) {
+                              element_update_size(model_element->visual_element,
+                                                  (int)anim->to_width, (int)anim->to_height);
+                            }
+                            needs_sync = TRUE;
+                            break;
+                          case ANIM_TYPE_COLOR:
+                            if (model_element->bg_color) {
+                              model_element->bg_color->r = anim->to_color[0];
+                              model_element->bg_color->g = anim->to_color[1];
+                              model_element->bg_color->b = anim->to_color[2];
+                              model_element->bg_color->a = anim->to_color[3];
+                            }
+                            needs_sync = TRUE;
+                            break;
+                          default:
+                            break;
+                        }
+                        if (needs_sync) {
+                          canvas_sync_with_model(data);
+                          gtk_widget_queue_draw(data->drawing_area);
+                        }
+                    }
+                }
             }
         } else {
             all_completed = false;
@@ -532,14 +580,17 @@ static gboolean on_animation_tick(GtkWidget *widget, GdkFrameClock *clock,
 
     bool completed = animation_engine_tick(engine, delta);
 
-    if (completed && !engine->cycled) {
-        // Show notification if we have CanvasData and not in presentation mode
-        if (engine->user_data) {
-            CanvasData *data = (CanvasData *)engine->user_data;
+    if (completed && !engine->cycled && engine->count > 0) {
+        g_print("Animation engine completed all animations (count=%d, elapsed=%.2f)\n",
+                engine->count, engine->elapsed_time);
+        CanvasData *data = (CanvasData *)engine->user_data;
+        if (data) {
             extern gboolean canvas_is_presentation_mode(CanvasData *data);
+            extern void canvas_on_animation_finished(CanvasData *data);
             if (!canvas_is_presentation_mode(data)) {
                 canvas_show_notification(data, "Animation completed");
             }
+            canvas_on_animation_finished(data);
         }
         animation_engine_stop(engine);
         return G_SOURCE_REMOVE;

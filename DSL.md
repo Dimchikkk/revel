@@ -384,11 +384,13 @@ animate_resize circle1 (80,80) (120,120) 0.0 1.0 bezier
 animate_resize circle1 (120,120) (80,80) 1.0 1.0 bezier
 ```
 
+You can also advance to the next slide programmatically—for example, call `presentation_next` inside an `on variable` handler once a learner submits the correct answer.
+
 **Example Files:**
 - `examples/presentation_demo.dsl` - Basic presentation without animations
 - `examples/interactive_dashboard.dsl` - Variable-driven sales dashboard with animated bars
 - `examples/interactive_gauge.dsl` - Clickable thermostat gauge with live readouts
-
+- `examples/quiz_match.dsl` - Interactive quiz showing auto-advance from animations and variable triggers
 ---
 
 ## Tips and Best Practices
@@ -414,6 +416,10 @@ int    NAME VALUE
 real   NAME VALUE
 bool   NAME true|false
 string NAME "Text"
+global int    NAME VALUE
+global real   NAME VALUE
+global bool   NAME true|false
+global string NAME "Text"
 
 int total_sales {q1 + q2 + q3 + q4}
 bool is_hot {current_temp - target_temp}
@@ -423,6 +429,7 @@ string status "Total: ${total_sales}"
 - Numeric declarations (`int`, `real`) accept literal values or expressions inside `{ ... }`
 - Boolean declarations accept literals (`true`, `false`, `yes`, `no`, `1`, `0`) or expressions (non-zero evaluates to `true`)
 - Strings use quoted text; `${ ... }` interpolation works when rendering
+- Prefix declarations with `global` when the value should persist across presentation slides; globals keep their value between `animation_next_slide` executions and are not cleared when moving forward/backward.
 
 ### Interpolate Values
 
@@ -435,11 +442,21 @@ text_create total "Total: ${total_sales}" (400,120) (320,40)
 ### Runtime Commands (inside event blocks)
 
 ```
-add VARIABLE EXPRESSION        # numeric variables only
+add VARIABLE EXPRESSION        # numeric variables only (variable must be declared beforehand)
 animate_move ELEMENT (to_x,to_y) START DURATION [interp]
 animate_resize ELEMENT (to_w,to_h) START DURATION [interp]
 text_update ELEMENT "New text with ${expr}"
+text_bind ELEMENT_ID VARIABLE   # bind a text element to a string variable
+position_bind ELEMENT_ID VARIABLE # store element position as "x,y" string
+presentation_next               # advance presentation to next slide
+# presentation_auto_next_if VARIABLE VALUE  # command renamed; see presentation_auto_next_if command documentation
 ```
+
+`text_bind` keeps the element text and string variable in sync—when the user finishes editing the bound element, the variable is updated and any `on variable` handlers run. `position_bind` updates the referenced string variable with the element's canvas coordinates (e.g. `"420,180"`) whenever the element is moved, which is useful for drag/match activities.
+
+`presentation_auto_next_if` lets you automatically advance to the next presentation slide once a variable reaches a target value (numeric or string). This is handy for quizzes—set a counter or status variable in response to user actions, then register the auto-advance trigger.
+
+`add` updates an existing numeric variable; declare all variables with `int` or `real` before using them in commands or interpolations.
 
 ### Event Handlers
 

@@ -47,7 +47,7 @@ static void determine_optimal_connection_points(ModelElement *from, ModelElement
   connection_determine_optimal_points(from_rect, to_rect, from_point, to_point);
 }
 
-void canvas_execute_script(CanvasData *data, const gchar *script) {
+static void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename) {
   if (!data || !script) {
     g_print("Error: No data or script provided\n");
     return;
@@ -56,7 +56,7 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
   // Check if this is a presentation script (has animation_next_slide commands)
   gboolean is_presentation = (strstr(script, "animation_next_slide") != NULL);
 
-  if (!dsl_type_check_script(data, script)) {
+  if (!dsl_type_check_script(data, script, filename)) {
     extern void canvas_show_notification(CanvasData *data, const char *message);
     canvas_show_notification(data, "DSL type check failed");
     return;
@@ -193,25 +193,58 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
 
     const gchar *cmd = tokens[0];
 
-    if ((g_strcmp0(cmd, "int") == 0 ||
-         g_strcmp0(cmd, "real") == 0 ||
-         g_strcmp0(cmd, "bool") == 0 ||
-         g_strcmp0(cmd, "string") == 0) && token_count >= 2) {
-      const gchar *var_name = tokens[1];
+    gboolean is_global_decl = g_strcmp0(cmd, "global") == 0;
+    int type_token_index = is_global_decl ? 1 : 0;
+
+    if (is_global_decl && token_count < 3) {
+      g_print("DSL: global declarations require a type and variable name\n");
+      g_strfreev(tokens);
+      continue;
+    }
+
+    const gchar *type_token = tokens[type_token_index];
+
+    if ((g_strcmp0(type_token, "int") == 0 ||
+         g_strcmp0(type_token, "real") == 0 ||
+         g_strcmp0(type_token, "bool") == 0 ||
+         g_strcmp0(type_token, "string") == 0) && token_count >= (type_token_index + 2)) {
+      const gchar *var_name = tokens[type_token_index + 1];
+
       DSLVariable *var = dsl_runtime_ensure_variable(data, var_name);
       if (!var) {
         g_strfreev(tokens);
         continue;
       }
 
-      DSLVarType target_type = DSL_VAR_REAL;
-      if (g_strcmp0(cmd, "int") == 0) target_type = DSL_VAR_INT;
-      else if (g_strcmp0(cmd, "real") == 0) target_type = DSL_VAR_REAL;
-      else if (g_strcmp0(cmd, "bool") == 0) target_type = DSL_VAR_BOOL;
-      else if (g_strcmp0(cmd, "string") == 0) target_type = DSL_VAR_STRING;
+      if (is_global_decl) {
+        var->is_global = TRUE;
+      }
 
-      if (var->type != DSL_VAR_UNSET && var->type != target_type) {
+      DSLVarType target_type = DSL_VAR_REAL;
+      if (g_strcmp0(type_token, "int") == 0) target_type = DSL_VAR_INT;
+      else if (g_strcmp0(type_token, "real") == 0) target_type = DSL_VAR_REAL;
+      else if (g_strcmp0(type_token, "bool") == 0) target_type = DSL_VAR_BOOL;
+      else if (g_strcmp0(type_token, "string") == 0) target_type = DSL_VAR_STRING;
+
+      gboolean already_initialized = (var->type != DSL_VAR_UNSET);
+      if (already_initialized && var->type != target_type) {
         g_print("DSL: Variable '%s' redeclared with different type\n", var_name);
+      }
+
+      gboolean should_assign = TRUE;
+      if (is_global_decl && already_initialized && var->type == target_type) {
+        should_assign = FALSE;
+      }
+
+      if (!already_initialized) {
+        var->type = target_type;
+      }
+
+      if (!should_assign) {
+        for (int j = 0; j < token_count; j++)
+          g_free(tokens[j]);
+        g_free(tokens);
+        continue;
       }
 
       var->type = target_type;
@@ -221,17 +254,19 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
       var->string_value = NULL;
       var->evaluating = FALSE;
 
+      int expr_start = type_token_index + 2;
+
       if (target_type == DSL_VAR_STRING) {
-        const gchar *literal = (token_count >= 3) ? tokens[2] : "";
+        const gchar *literal = (token_count > expr_start) ? tokens[expr_start] : "";
         gchar *clean_text = dsl_unescape_text(literal);
         dsl_runtime_set_string_variable(data, var_name, clean_text ? clean_text : "", FALSE);
         g_free(clean_text);
       } else if (target_type == DSL_VAR_BOOL) {
-        if (token_count < 3) {
+        if (token_count <= expr_start) {
           dsl_runtime_set_variable(data, var_name, 0.0, FALSE);
         } else {
           GString *expr_builder = g_string_new(NULL);
-          for (int t = 2; t < token_count; t++) {
+          for (int t = expr_start; t < token_count; t++) {
             if (expr_builder->len > 0) g_string_append_c(expr_builder, ' ');
             g_string_append(expr_builder, tokens[t]);
           }
@@ -270,11 +305,11 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           g_free(expr_full);
         }
       } else { // int or real
-        if (token_count < 3) {
+        if (token_count <= expr_start) {
           dsl_runtime_set_variable(data, var_name, 0.0, FALSE);
         } else {
           GString *expr_builder = g_string_new(NULL);
-          for (int t = 2; t < token_count; t++) {
+          for (int t = expr_start; t < token_count; t++) {
             if (expr_builder->len > 0) g_string_append_c(expr_builder, ' ');
             g_string_append(expr_builder, tokens[t]);
           }
@@ -313,6 +348,65 @@ void canvas_execute_script(CanvasData *data, const gchar *script) {
           dsl_runtime_set_variable(data, var_name, value, FALSE);
           g_free(expr_full);
         }
+      }
+
+      for (int j = 0; j < token_count; j++)
+        g_free(tokens[j]);
+      g_free(tokens);
+      continue;
+    }
+
+    if (g_strcmp0(tokens[0], "text_bind") == 0 && token_count >= 3) {
+      const gchar *element_id = tokens[1];
+      const gchar *var_name = tokens[2];
+      if (!dsl_runtime_lookup_variable(data, var_name)) {
+        g_print("DSL: text_bind references unknown variable '%s'\n", var_name);
+      } else {
+        dsl_runtime_register_text_binding(data, element_id, var_name);
+      }
+
+      for (int j = 0; j < token_count; j++)
+        g_free(tokens[j]);
+      g_free(tokens);
+      continue;
+    }
+
+    if (g_strcmp0(tokens[0], "position_bind") == 0 && token_count >= 3) {
+      const gchar *element_id = tokens[1];
+      const gchar *var_name = tokens[2];
+      if (!dsl_runtime_lookup_variable(data, var_name)) {
+        g_print("DSL: position_bind references unknown variable '%s'\n", var_name);
+      } else {
+        dsl_runtime_register_position_binding(data, element_id, var_name);
+      }
+
+      for (int j = 0; j < token_count; j++)
+        g_free(tokens[j]);
+      g_free(tokens);
+      continue;
+    }
+
+    if (g_strcmp0(tokens[0], "presentation_next") == 0) {
+      canvas_presentation_next_slide(data);
+
+      for (int j = 0; j < token_count; j++)
+        g_free(tokens[j]);
+      g_free(tokens);
+      continue;
+    }
+
+    if (g_strcmp0(tokens[0], "presentation_auto_next_if") == 0 && token_count >= 3) {
+      const gchar *var_name = tokens[1];
+      if (!dsl_runtime_lookup_variable(data, var_name)) {
+        g_print("DSL: presentation_auto_next_if references unknown variable '%s'\n", var_name);
+      } else {
+        gboolean is_string = TRUE;
+        double expected_value = 0.0;
+        const gchar *value_token = tokens[2];
+        if (dsl_parse_double_token(data, value_token, &expected_value)) {
+          is_string = FALSE;
+        }
+        dsl_runtime_register_auto_next(data, var_name, is_string, is_string ? value_token : NULL, expected_value);
       }
 
       for (int j = 0; j < token_count; j++)
@@ -2510,28 +2604,29 @@ static void canvas_clear_space_for_presentation(CanvasData *data) {
   const gchar *current_space_uuid = data->model->current_space_uuid;
   if (!current_space_uuid) return;
 
-  // Get all elements from hash table
+  // Collect UUIDs of all elements in current space
   GList *all_elements = g_hash_table_get_values(data->model->elements);
-
-  // Build list of elements to delete (those in current space)
-  GList *elements_to_delete = NULL;
+  GList *uuids_to_remove = NULL;
   for (GList *l = all_elements; l != NULL; l = l->next) {
     ModelElement *element = (ModelElement *)l->data;
     if (element && element->space_uuid &&
-        g_strcmp0(element->space_uuid, current_space_uuid) == 0) {
-      elements_to_delete = g_list_append(elements_to_delete, element);
+        g_strcmp0(element->space_uuid, current_space_uuid) == 0 &&
+        element->uuid) {
+      uuids_to_remove = g_list_prepend(uuids_to_remove, g_strdup(element->uuid));
     }
   }
-
   g_list_free(all_elements);
 
-  // Delete all elements in current space
-  for (GList *l = elements_to_delete; l != NULL; l = l->next) {
-    ModelElement *element = (ModelElement *)l->data;
-    model_delete_element(data->model, element);
+  for (GList *l = uuids_to_remove; l != NULL; l = l->next) {
+    gchar *uuid = (gchar *)l->data;
+    ModelElement *element = g_hash_table_lookup(data->model->elements, uuid);
+    if (element) {
+      model_delete_element(data->model, element);
+      g_hash_table_remove(data->model->elements, uuid);
+    }
+    g_free(uuid);
   }
-
-  g_list_free(elements_to_delete);
+  g_list_free(uuids_to_remove);
 
   // Clear visual selection
   canvas_clear_selection(data);
@@ -2572,13 +2667,22 @@ void canvas_presentation_next_slide(CanvasData *data) {
     animation_engine_stop(data->anim_engine);
   }
 
+  // Reset DSL runtime before clearing space to remove dangling element references
+  dsl_runtime_reset(data);
+
   // Clear current space (preserving grid settings)
   canvas_clear_space_for_presentation(data);
+
+  // Suppress auto-next during slide load to prevent immediate re-triggering
+  data->presentation_suppress_auto_next = TRUE;
 
   // Execute the new slide's DSL
   if (data->presentation_dsl_slides[data->presentation_current_slide]) {
     canvas_execute_script(data, data->presentation_dsl_slides[data->presentation_current_slide]);
   }
+
+  // Re-enable auto-next after slide is fully loaded
+  data->presentation_suppress_auto_next = FALSE;
 }
 
 // Navigate to previous slide in presentation mode
@@ -2593,13 +2697,27 @@ void canvas_presentation_prev_slide(CanvasData *data) {
   data->presentation_current_slide--;
   g_print("Moving to slide %d/%d\n", data->presentation_current_slide + 1, data->presentation_slide_count);
 
+  // Stop any running animation from previous slide
+  if (data->anim_engine) {
+    animation_engine_stop(data->anim_engine);
+  }
+
+  // Reset DSL runtime before clearing space to remove dangling element references
+  dsl_runtime_reset(data);
+
   // Clear current space (preserving grid settings)
   canvas_clear_space_for_presentation(data);
+
+  // Suppress auto-next during slide load to prevent immediate re-triggering
+  data->presentation_suppress_auto_next = TRUE;
 
   // Execute the new slide's DSL
   if (data->presentation_dsl_slides[data->presentation_current_slide]) {
     canvas_execute_script(data, data->presentation_dsl_slides[data->presentation_current_slide]);
   }
+
+  // Re-enable auto-next after slide is fully loaded
+  data->presentation_suppress_auto_next = FALSE;
 }
 
 static gchar* escape_text_for_dsl(const gchar *text) {
@@ -3122,4 +3240,14 @@ void canvas_show_script_dialog(GtkButton *button, gpointer user_data) {
 
   g_signal_connect(dialog, "response", G_CALLBACK(on_script_dialog_response), data);
   gtk_widget_show(dialog);
+}
+
+// Public wrapper function without filename (for interactive use)
+void canvas_execute_script(CanvasData *data, const gchar *script) {
+  canvas_execute_script_internal(data, script, NULL);
+}
+
+// Public wrapper function with filename (for file-based DSL execution)
+void canvas_execute_script_file(CanvasData *data, const gchar *script, const gchar *filename) {
+  canvas_execute_script_internal(data, script, filename);
 }

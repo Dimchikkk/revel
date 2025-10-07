@@ -49,10 +49,10 @@ static void test_teardown(TestFixture *fixture, gconstpointer user_data) {
   }
   if (fixture->model) {
     model_free(fixture->model);
+    // model_free closes the database, so set to NULL to prevent double-close
+    fixture->db = NULL;
   }
-  if (fixture->db) {
-    sqlite3_close(fixture->db);
-  }
+  // db is already closed by model_free, no need to close again
   remove(TEST_DB_FILE);
 }
 

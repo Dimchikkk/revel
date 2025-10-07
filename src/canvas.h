@@ -108,6 +108,8 @@ struct _CanvasData {
   int presentation_current_slide;
   gchar *presentation_original_script;  // Full original DSL script
   gboolean presentation_mode_active;
+  gboolean presentation_auto_next_pending;
+  gboolean presentation_suppress_auto_next;  // Temporarily disable auto-next during manual navigation
 
   // Space tree view
   SpaceTreeView *space_tree_view;

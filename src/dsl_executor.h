@@ -17,6 +17,7 @@ typedef struct {
 
 void canvas_show_script_dialog(GtkButton *button, gpointer user_data);
 void canvas_execute_script(CanvasData *data, const gchar *script);
+void canvas_execute_script_file(CanvasData *data, const gchar *script, const gchar *filename);
 void canvas_presentation_next_slide(CanvasData *data);
 void canvas_presentation_prev_slide(CanvasData *data);
 gboolean canvas_is_presentation_mode(CanvasData *data);

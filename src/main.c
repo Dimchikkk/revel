@@ -7,6 +7,7 @@
 #include "canvas_search.h"
 #include "canvas_drop.h"
 #include "canvas_space_tree.h"
+#include "canvas_presentation.h"
 #include "freehand_drawing.h"
 #include "undo_manager.h"
 #include "shape_dialog.h"
@@ -516,7 +517,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
     if (g_file_get_contents(g_dsl_filename, &script_contents, &length, &error)) {
       g_print("Executing DSL file: %s\n", g_dsl_filename);
-      canvas_execute_script(data, script_contents);
+      canvas_execute_script_file(data, script_contents, g_dsl_filename);
       g_free(script_contents);
     } else {
       g_print("Failed to load DSL file %s: %s\n", g_dsl_filename, error ? error->message : "unknown error");

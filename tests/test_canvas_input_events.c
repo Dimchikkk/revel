@@ -42,6 +42,11 @@ static void teardown_fixture(CanvasInputFixture *fixture, gconstpointer user_dat
   (void)user_data;
 
   if (fixture->canvas) {
+    // Free the model before freeing canvas_data
+    if (fixture->canvas->model) {
+      model_free(fixture->canvas->model);
+      fixture->canvas->model = NULL;
+    }
     canvas_data_free(fixture->canvas);
     fixture->canvas = NULL;
   }

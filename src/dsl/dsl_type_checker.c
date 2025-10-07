@@ -9,6 +9,7 @@ typedef struct {
   GHashTable *variables;  // name -> DSLVarType (stored as gpointer)
   GHashTable *elements;   // id -> gpointer
   GPtrArray *errors;      // array of gchar*
+  const gchar *filename;  // filename for error messages (can be NULL)
 } DSLTypeCheckerContext;
 
 static void dsl_type_add_error(DSLTypeCheckerContext *ctx, int line, const gchar *fmt, ...) {
@@ -19,7 +20,14 @@ static void dsl_type_add_error(DSLTypeCheckerContext *ctx, int line, const gchar
   gchar *message = g_strdup_vprintf(fmt, args);
   va_end(args);
 
-  gchar *full = g_strdup_printf("Line %d: %s", line, message);
+  // Emacs-compatible format: FILE:LINE:COLUMN: message
+  // We use column 1 since we don't track column numbers
+  gchar *full;
+  if (ctx->filename) {
+    full = g_strdup_printf("%s:%d:1: %s", ctx->filename, line, message);
+  } else {
+    full = g_strdup_printf("Line %d: %s", line, message);
+  }
   g_free(message);
   g_ptr_array_add(ctx->errors, full);
 }
@@ -161,7 +169,37 @@ static void dsl_type_check_string_interpolations(DSLTypeCheckerContext *ctx, con
     }
     size_t len = (size_t)((p - 1) - start);
     gchar *expr = g_strndup(start, len);
-    dsl_type_check_expression(ctx, expr, line, context);
+
+    // For string interpolation, we need to check if it's a pure variable reference (string allowed)
+    // or an expression (only numeric allowed)
+    gchar *trimmed = g_strstrip(g_strdup(expr));
+    gboolean is_pure_identifier = TRUE;
+    if (trimmed && *trimmed) {
+      const gchar *c = trimmed;
+      if (g_ascii_isalpha(*c) || *c == '_') {
+        c++;
+        while (*c && (g_ascii_isalnum(*c) || *c == '_')) {
+          c++;
+        }
+        if (*c != '\0') {
+          is_pure_identifier = FALSE;
+        }
+      } else {
+        is_pure_identifier = FALSE;
+      }
+    }
+
+    if (is_pure_identifier) {
+      // Pure identifier: can be string or numeric variable, just check it exists
+      if (!g_hash_table_contains(ctx->variables, trimmed)) {
+        dsl_type_add_error(ctx, line, "%s uses unknown variable '%s'", context, trimmed);
+      }
+    } else {
+      // Expression: must be numeric only
+      dsl_type_check_expression(ctx, expr, line, context);
+    }
+
+    g_free(trimmed);
     g_free(expr);
   }
 }
@@ -566,6 +604,12 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
     }
     dsl_type_require_element(ctx, tokens[1], line, "text_update");
     dsl_type_check_string_interpolations(ctx, tokens[2], line, "text_update");
+  } else if (g_strcmp0(command, "presentation_auto_next_if") == 0) {
+    if (token_count < 3) {
+      dsl_type_add_error(ctx, line, "presentation_auto_next_if requires a variable and value");
+      return;
+    }
+    dsl_type_require_variable(ctx, tokens[1], line, "presentation_auto_next_if");
   } else if (g_strcmp0(command, "canvas_background") == 0 ||
              g_strcmp0(command, "animation_mode") == 0) {
     // No additional checks needed inside event
@@ -603,13 +647,18 @@ static void dsl_type_check_event_block(DSLTypeCheckerContext *ctx, gchar **lines
   }
 }
 
-gboolean dsl_type_check_script(CanvasData *data, const gchar *script) {
+gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gchar *filename) {
   (void)data;
   DSLTypeCheckerContext ctx = {
     .variables = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL),
     .elements = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL),
     .errors = g_ptr_array_new_with_free_func(g_free),
+    .filename = filename,
   };
+
+  if (data && data->presentation_mode_active) {
+    dsl_runtime_seed_global_types(data, ctx.variables);
+  }
 
   gchar **lines = g_strsplit(script, "\n", 0);
 
@@ -630,29 +679,47 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script) {
     const gchar *cmd = tokens[0];
     int line_no = i + 1;
 
-    if ((g_strcmp0(cmd, "int") == 0 ||
-         g_strcmp0(cmd, "real") == 0 ||
-         g_strcmp0(cmd, "bool") == 0 ||
-         g_strcmp0(cmd, "string") == 0) && token_count >= 2) {
-      DSLVarType var_type = DSL_VAR_REAL;
-      if (g_strcmp0(cmd, "int") == 0) var_type = DSL_VAR_INT;
-      else if (g_strcmp0(cmd, "real") == 0) var_type = DSL_VAR_REAL;
-      else if (g_strcmp0(cmd, "bool") == 0) var_type = DSL_VAR_BOOL;
-      else if (g_strcmp0(cmd, "string") == 0) var_type = DSL_VAR_STRING;
+    gboolean is_global_decl = g_strcmp0(cmd, "global") == 0;
+    int type_token_index = is_global_decl ? 1 : 0;
 
-      const gchar *var_name = tokens[1];
-      dsl_type_register_variable(&ctx, var_name, line_no, var_type);
+    if (is_global_decl && token_count < 3) {
+      dsl_type_add_error(&ctx, line_no, "global declaration requires a type and variable name");
+      g_strfreev(tokens);
+      continue;
+    }
+
+    const gchar *type_token = tokens[type_token_index];
+
+    if ((g_strcmp0(type_token, "int") == 0 ||
+         g_strcmp0(type_token, "real") == 0 ||
+         g_strcmp0(type_token, "bool") == 0 ||
+         g_strcmp0(type_token, "string") == 0) && token_count >= (type_token_index + 2)) {
+      DSLVarType var_type = DSL_VAR_REAL;
+      if (g_strcmp0(type_token, "int") == 0) var_type = DSL_VAR_INT;
+      else if (g_strcmp0(type_token, "real") == 0) var_type = DSL_VAR_REAL;
+      else if (g_strcmp0(type_token, "bool") == 0) var_type = DSL_VAR_BOOL;
+      else if (g_strcmp0(type_token, "string") == 0) var_type = DSL_VAR_STRING;
+
+      const gchar *var_name = tokens[type_token_index + 1];
+      gboolean already_defined = g_hash_table_contains(ctx.variables, var_name);
+      if (!already_defined) {
+        dsl_type_register_variable(&ctx, var_name, line_no, var_type);
+      } else if (!is_global_decl) {
+        dsl_type_add_error(&ctx, line_no, "Variable '%s' already defined", var_name);
+      }
+
+      int expr_start = type_token_index + 2;
 
       if (var_type == DSL_VAR_STRING) {
-        // No expression validation beyond presence
-      } else if (token_count >= 3) {
+        // Strings accept literal tokens without additional checks
+      } else if (token_count > expr_start) {
         GString *expr = g_string_new(NULL);
-        for (int t = 2; t < token_count; t++) {
+        for (int t = expr_start; t < token_count; t++) {
           if (expr->len > 0) g_string_append_c(expr, ' ');
           g_string_append(expr, tokens[t]);
         }
         if (var_type == DSL_VAR_BOOL) {
-          const gchar *literal = tokens[2];
+          const gchar *literal = tokens[expr_start];
           if (!(g_ascii_strcasecmp(literal, "true") == 0 ||
                 g_ascii_strcasecmp(literal, "false") == 0 ||
                 g_ascii_strcasecmp(literal, "yes") == 0 ||
@@ -715,6 +782,16 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script) {
                g_strcmp0(cmd, "animation_mode") == 0 ||
                g_strcmp0(cmd, "animation_mode") == 0) {
       // Nothing to validate
+    } else if (g_strcmp0(cmd, "presentation_next") == 0) {
+      // Nothing to validate
+    } else if (g_strcmp0(cmd, "presentation_auto_next_if") == 0 && token_count >= 3) {
+      dsl_type_require_variable(&ctx, tokens[1], line_no, "presentation_auto_next_if");
+    } else if (g_strcmp0(cmd, "text_bind") == 0 && token_count >= 3) {
+      dsl_type_require_element(&ctx, tokens[1], line_no, "text_bind");
+      dsl_type_require_variable(&ctx, tokens[2], line_no, "text_bind");
+    } else if (g_strcmp0(cmd, "position_bind") == 0 && token_count >= 3) {
+      dsl_type_require_element(&ctx, tokens[1], line_no, "position_bind");
+      dsl_type_require_variable(&ctx, tokens[2], line_no, "position_bind");
     } else {
       for (int t = 1; t < token_count; t++) {
         dsl_type_check_token_for_braces(&ctx, tokens[t], line_no, cmd);
