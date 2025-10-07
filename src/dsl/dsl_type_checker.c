@@ -806,7 +806,7 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
     g_print("DSL type check found %u issue(s):\n", ctx.errors->len);
     for (guint i = 0; i < ctx.errors->len; i++) {
       const gchar *msg = g_ptr_array_index(ctx.errors, i);
-      g_print("  - %s\n", msg);
+      g_print("%s\n", msg);
     }
   }
 
