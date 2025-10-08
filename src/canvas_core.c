@@ -647,7 +647,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     cairo_save(cr);
 
     // Set dashed line pattern
-    double dashes[] = {10.0 / data->zoom_scale, 5.0 / data->zoom_scale};
+    double dashes[] = {12.0 / data->zoom_scale, 8.0 / data->zoom_scale};
     cairo_set_dash(cr, dashes, 2, 0);
     cairo_set_line_width(cr, 1.0 / data->zoom_scale);
     cairo_set_source_rgba(cr, 0.6, 0.6, 0.6, 0.5); // Light gray with transparency
@@ -1042,7 +1042,7 @@ static gboolean update_element_animations(gpointer user_data) {
   }
 
   gint64 current_time = g_get_monotonic_time();
-  const gint64 animation_duration = 300000; // 300ms in microseconds
+  const gint64 animation_duration = 150000; // 150ms in microseconds
   gboolean has_animating_elements = FALSE;
 
   // Iterate through all model elements and update their visual element animations

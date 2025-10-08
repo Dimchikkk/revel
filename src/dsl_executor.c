@@ -1652,6 +1652,54 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
+        if (expect_bezier_p0 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p0: %s\n", token);
+          } else {
+            bezier_p0_u = fx;
+            bezier_p0_v = fy;
+          }
+          expect_bezier_p0 = FALSE;
+          continue;
+        }
+
+        if (expect_bezier_p1 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p1: %s\n", token);
+          } else {
+            bezier_p1_u = fx;
+            bezier_p1_v = fy;
+          }
+          expect_bezier_p1 = FALSE;
+          continue;
+        }
+
+        if (expect_bezier_p2 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p2: %s\n", token);
+          } else {
+            bezier_p2_u = fx;
+            bezier_p2_v = fy;
+          }
+          expect_bezier_p2 = FALSE;
+          continue;
+        }
+
+        if (expect_bezier_p3 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
+          double fx, fy;
+          if (!parse_float_point(token, &fx, &fy)) {
+            g_print("Failed to parse bezier p3: %s\n", token);
+          } else {
+            bezier_p3_u = fx;
+            bezier_p3_v = fy;
+          }
+          expect_bezier_p3 = FALSE;
+          continue;
+        }
+
         if (!bg_set && (g_strcmp0(token, "bg") == 0 || g_strcmp0(token, "background") == 0)) {
           expect_bg = TRUE;
           continue;
@@ -1788,6 +1836,28 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         if ((shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW) &&
             (g_strcmp0(token, "line_to") == 0 || g_strcmp0(token, "line_end") == 0)) {
           expect_line_end = TRUE;
+          continue;
+        }
+
+        // Bezier control point parsing
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) &&
+            g_strcmp0(token, "p0") == 0) {
+          expect_bezier_p0 = TRUE;
+          continue;
+        }
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) &&
+            g_strcmp0(token, "p1") == 0) {
+          expect_bezier_p1 = TRUE;
+          continue;
+        }
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) &&
+            g_strcmp0(token, "p2") == 0) {
+          expect_bezier_p2 = TRUE;
+          continue;
+        }
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) &&
+            g_strcmp0(token, "p3") == 0) {
+          expect_bezier_p3 = TRUE;
           continue;
         }
 
@@ -2873,6 +2943,7 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
   GString *dsl = g_string_new(NULL);
   GHashTable *element_id_map = g_hash_table_new(g_str_hash, g_str_equal);
+  GHashTable *used_ids = g_hash_table_new(g_str_hash, g_str_equal);
   int element_counter = 1;
 
   // First pass: create notes and paper notes
@@ -2939,12 +3010,15 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       element_id = g_strdup_printf("elem_%d", element_counter++);
     }
 
-    // Ensure ID is unique
-    if (g_hash_table_contains(element_id_map, element_id)) {
+    // Ensure ID is unique by checking against used_ids
+    while (g_hash_table_contains(used_ids, element_id)) {
       gchar *unique_id = g_strdup_printf("%s_%d", element_id, element_counter++);
       g_free(element_id);
       element_id = unique_id;
     }
+
+    // Store the element_id as used
+    g_hash_table_insert(used_ids, g_strdup(element_id), GINT_TO_POINTER(1));
 
     // Store the mapping from UUID to generated ID
     g_hash_table_insert(element_id_map, g_strdup(element->uuid), g_strdup(element_id));
@@ -3068,12 +3142,35 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
       // Build the shape_create command
       g_string_append_printf(dsl,
-                             "shape_create %s %s %s %s %s bg color(%.2f,%.2f,%.2f,%.2f) stroke %d",
+                             "shape_create %s %s %s %s %s",
                              element_id,
                              shape_type_str,
                              text_escaped,
                              pos_str,
-                             size_str,
+                             size_str);
+
+      // Add control points for shapes that have them
+      if (element->drawing_points && element->drawing_points->len > 0) {
+        DrawingPoint *points = (DrawingPoint*)element->drawing_points->data;
+
+        if ((element->shape_type == SHAPE_BEZIER || element->shape_type == SHAPE_CURVED_ARROW) &&
+            element->drawing_points->len >= 4) {
+          // Bezier curves need 4 control points
+          g_string_append_printf(dsl, " p0 (%.2f,%.2f) p1 (%.2f,%.2f) p2 (%.2f,%.2f) p3 (%.2f,%.2f)",
+                                 points[0].x, points[0].y,
+                                 points[1].x, points[1].y,
+                                 points[2].x, points[2].y,
+                                 points[3].x, points[3].y);
+        } else if ((element->shape_type == SHAPE_LINE || element->shape_type == SHAPE_ARROW) &&
+                   element->drawing_points->len >= 2) {
+          // Lines and arrows need 2 points (start and end)
+          g_string_append_printf(dsl, " line_start (%.2f,%.2f) line_end (%.2f,%.2f)",
+                                 points[0].x, points[0].y,
+                                 points[1].x, points[1].y);
+        }
+      }
+
+      g_string_append_printf(dsl, " bg color(%.2f,%.2f,%.2f,%.2f) stroke %d",
                              bg_r, bg_g, bg_b, bg_a,
                              element->stroke_width);
 
@@ -3277,6 +3374,15 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
     g_free(id_value);  // Free the generated ID value
   }
   g_hash_table_destroy(element_id_map);
+
+  // Clean up used_ids hash table
+  GHashTableIter used_iter;
+  gpointer used_key;
+  g_hash_table_iter_init(&used_iter, used_ids);
+  while (g_hash_table_iter_next(&used_iter, &used_key, NULL)) {
+    g_free(used_key);  // Free the ID key
+  }
+  g_hash_table_destroy(used_ids);
 
   return g_string_free(dsl, FALSE);
 }

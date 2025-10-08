@@ -155,8 +155,15 @@ static void on_delete_element_action(GSimpleAction *action, GVariant *parameter,
     if (model_element) {
       if (model_element->type->type == ELEMENT_SPACE) {
         if (model_element->state != MODEL_STATE_NEW) {
-          canvas_show_notification(data, "Cannot delete a saved space from canvas view");
-          return;
+          int element_count = model_get_amount_of_elements(data->model, model_element->target_space_uuid);
+          if (element_count > 0) {
+            char message[128];
+            snprintf(message, sizeof(message),
+                     "Cannot delete space with %d element%s",
+                     element_count, element_count == 1 ? "" : "s");
+            canvas_show_notification(data, message);
+            return;
+          }
         }
       }
 
@@ -255,7 +262,7 @@ static void on_change_text_action(GSimpleAction *action, GVariant *parameter, gp
     if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE ||
         element->type == ELEMENT_INLINE_TEXT || element->type == ELEMENT_SPACE ||
         element->type == ELEMENT_MEDIA_FILE || element->type == ELEMENT_SHAPE) {
-      element_start_editing(element, data->overlay);
+      font_dialog_open(data, element);
     }
   }
 }
@@ -1118,8 +1125,19 @@ static void canvas_process_motion(CanvasData *data, double x, double y) {
           break;
         }
 
-        if (new_width < 50) new_width = 50;
-        if (new_height < 30) new_height = 30;
+        // Allow smaller sizes for bezier curves and curved arrows for precise control
+        int min_width = 50;
+        int min_height = 30;
+        if (element->type == ELEMENT_SHAPE) {
+          Shape *shape = (Shape*)element;
+          if (shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW) {
+            min_width = 10;
+            min_height = 10;
+          }
+        }
+
+        if (new_width < min_width) new_width = min_width;
+        if (new_height < min_height) new_height = min_height;
 
         element->x = new_x;
         element->y = new_y;
@@ -1140,7 +1158,11 @@ static void canvas_process_motion(CanvasData *data, double x, double y) {
           double u = (double)(cx - element->x) / (double)element->width;
           double v = (double)(cy - element->y) / (double)element->height;
 
-          // Don't clamp - allow control points to move freely
+          // Clamp control points to stay within the bounding box
+          if (u < 0.0) u = 0.0;
+          if (u > 1.0) u = 1.0;
+          if (v < 0.0) v = 0.0;
+          if (v > 1.0) v = 1.0;
 
           // Update the appropriate control point
           switch (cp_index) {
@@ -1633,7 +1655,7 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
   if (element->type == ELEMENT_NOTE || element->type == ELEMENT_PAPER_NOTE  ||
       element->type == ELEMENT_SPACE || element->type == ELEMENT_MEDIA_FILE ||
       element->type == ELEMENT_SHAPE || element->type == ELEMENT_INLINE_TEXT) {
-    g_menu_append(modify_section, "Change Text", "menu.change-text");
+    g_menu_append(modify_section, "Change Text Props", "menu.change-text");
   }
 
   gboolean show_bg_color = TRUE;

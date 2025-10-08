@@ -280,10 +280,10 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
   // Set stroke style (dashed, dotted, or solid)
   if (shape->stroke_style == STROKE_STYLE_DASHED) {
-    double dashes[] = {10.0, 5.0};
+    double dashes[] = {12.0, 8.0};
     cairo_set_dash(cr, dashes, 2, 0);
   } else if (shape->stroke_style == STROKE_STYLE_DOTTED) {
-    double dashes[] = {2.0, 3.0};
+    double dashes[] = {2.0, 5.0};
     cairo_set_dash(cr, dashes, 2, 0);
   } else {
     cairo_set_dash(cr, NULL, 0, 0);  // Solid line
@@ -1066,7 +1066,7 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       // Draw control lines
       cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5);
       cairo_set_line_width(cr, 1);
-      double dashes[] = {5.0, 3.0};
+      double dashes[] = {6.0, 6.0};
       cairo_set_dash(cr, dashes, 2, 0);
       cairo_move_to(cr, p0_cx, p0_cy);
       cairo_line_to(cr, p1_cx, p1_cy);
