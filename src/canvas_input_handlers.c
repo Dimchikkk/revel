@@ -1794,6 +1794,11 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
     g_menu_append(modify_section, "Change Stroke Color", "menu.change-shape-stroke-color");
   }
 
+  if (element->type == ELEMENT_CONNECTION) {
+    g_menu_append(modify_section, "Change Arrow Type", "menu.change-arrow-type");
+    g_menu_append(modify_section, "Change Arrowhead Type", "menu.change-arrowhead-type");
+  }
+
   g_menu_append(structure_section, "Hide Children", "menu.hide-children");
   g_menu_append(structure_section, "Show Children", "menu.show-children");
 

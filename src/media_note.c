@@ -2,6 +2,7 @@
 #include "canvas.h"
 #include "canvas_core.h"
 #include "element.h"
+#include "connection.h"
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <pango/pangocairo.h>
 #include <math.h>
@@ -107,6 +108,14 @@ static gboolean media_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
               elem->from_element_uuid &&
               g_strcmp0(elem->from_element_uuid, current_model->uuid) == 0) {
 
+            // Check arrowhead type - only follow if arrow points forward
+            // ARROWHEAD_NONE (0) = no arrowhead, skip
+            // ARROWHEAD_SINGLE (1) = arrow points to target, follow
+            // ARROWHEAD_DOUBLE (2) = arrows on both ends, follow
+            if (elem->arrowhead_type == ARROWHEAD_NONE) {
+              continue; // Skip connections with no arrowhead
+            }
+
             // Found a connection from current audio, get the target element
             if (elem->to_element_uuid) {
               ModelElement *next_elem = g_hash_table_lookup(
@@ -123,7 +132,7 @@ static gboolean media_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
                 MediaNote *next_audio = (MediaNote*)next_elem->visual_element;
                 if (next_audio->media_type == MEDIA_TYPE_AUDIO) {
                   media_note_toggle_audio_playback((Element*)next_audio);
-                  break; // Only play the first connected audio
+                  break; // Only play the first valid connected audio (based on iteration order)
                 }
               }
             }
