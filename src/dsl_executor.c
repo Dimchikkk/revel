@@ -2278,6 +2278,16 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           interp = ANIM_INTERP_LINEAR;
         } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
           interp = ANIM_INTERP_BEZIER;
+        } else if (g_strcmp0(tokens[6], "ease-in") == 0 || g_strcmp0(tokens[6], "easein") == 0) {
+          interp = ANIM_INTERP_EASE_IN;
+        } else if (g_strcmp0(tokens[6], "ease-out") == 0 || g_strcmp0(tokens[6], "easeout") == 0) {
+          interp = ANIM_INTERP_EASE_OUT;
+        } else if (g_strcmp0(tokens[6], "bounce") == 0) {
+          interp = ANIM_INTERP_BOUNCE;
+        } else if (g_strcmp0(tokens[6], "elastic") == 0) {
+          interp = ANIM_INTERP_ELASTIC;
+        } else if (g_strcmp0(tokens[6], "back") == 0) {
+          interp = ANIM_INTERP_BACK;
         }
       }
 
@@ -2333,6 +2343,16 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           interp = ANIM_INTERP_LINEAR;
         } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
           interp = ANIM_INTERP_BEZIER;
+        } else if (g_strcmp0(tokens[6], "ease-in") == 0 || g_strcmp0(tokens[6], "easein") == 0) {
+          interp = ANIM_INTERP_EASE_IN;
+        } else if (g_strcmp0(tokens[6], "ease-out") == 0 || g_strcmp0(tokens[6], "easeout") == 0) {
+          interp = ANIM_INTERP_EASE_OUT;
+        } else if (g_strcmp0(tokens[6], "bounce") == 0) {
+          interp = ANIM_INTERP_BOUNCE;
+        } else if (g_strcmp0(tokens[6], "elastic") == 0) {
+          interp = ANIM_INTERP_ELASTIC;
+        } else if (g_strcmp0(tokens[6], "back") == 0) {
+          interp = ANIM_INTERP_BACK;
         }
       }
 
@@ -2456,6 +2476,16 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           interp = ANIM_INTERP_LINEAR;
         } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
           interp = ANIM_INTERP_BEZIER;
+        } else if (g_strcmp0(tokens[6], "ease-in") == 0 || g_strcmp0(tokens[6], "easein") == 0) {
+          interp = ANIM_INTERP_EASE_IN;
+        } else if (g_strcmp0(tokens[6], "ease-out") == 0 || g_strcmp0(tokens[6], "easeout") == 0) {
+          interp = ANIM_INTERP_EASE_OUT;
+        } else if (g_strcmp0(tokens[6], "bounce") == 0) {
+          interp = ANIM_INTERP_BOUNCE;
+        } else if (g_strcmp0(tokens[6], "elastic") == 0) {
+          interp = ANIM_INTERP_ELASTIC;
+        } else if (g_strcmp0(tokens[6], "back") == 0) {
+          interp = ANIM_INTERP_BACK;
         }
       }
 

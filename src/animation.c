@@ -19,6 +19,50 @@ static double bezier_ease(double t) {
     return t * t * (3.0 - 2.0 * t);
 }
 
+// Ease-in: starts slow, speeds up (quadratic)
+static double ease_in(double t) {
+    return t * t;
+}
+
+// Ease-out: starts fast, slows down
+static double ease_out(double t) {
+    return t * (2.0 - t);
+}
+
+// Bounce: bouncing effect at the end
+static double bounce(double t) {
+    const double n1 = 7.5625;
+    const double d1 = 2.75;
+
+    if (t < 1.0 / d1) {
+        return n1 * t * t;
+    } else if (t < 2.0 / d1) {
+        t -= 1.5 / d1;
+        return n1 * t * t + 0.75;
+    } else if (t < 2.5 / d1) {
+        t -= 2.25 / d1;
+        return n1 * t * t + 0.9375;
+    } else {
+        t -= 2.625 / d1;
+        return n1 * t * t + 0.984375;
+    }
+}
+
+// Elastic: spring-like effect
+static double elastic(double t) {
+    if (t == 0.0 || t == 1.0) return t;
+
+    double p = 0.3;
+    double s = p / 4.0;
+    return pow(2.0, -10.0 * t) * sin((t - s) * (2.0 * M_PI) / p) + 1.0;
+}
+
+// Back: overshoots then returns
+static double back(double t) {
+    double s = 1.70158; // Overshoot amount
+    return t * t * ((s + 1.0) * t - s);
+}
+
 // Parse color string to RGBA components
 // Supports formats: (r,g,b,a), #RRGGBB, #RRGGBBAA
 static bool parse_color(const char *color_str, double *r, double *g, double *b, double *a) {
@@ -73,6 +117,16 @@ double animation_interpolate(double t, AnimInterpolationType type) {
             return t;
         case ANIM_INTERP_BEZIER:
             return bezier_ease(t);
+        case ANIM_INTERP_EASE_IN:
+            return ease_in(t);
+        case ANIM_INTERP_EASE_OUT:
+            return ease_out(t);
+        case ANIM_INTERP_BOUNCE:
+            return bounce(t);
+        case ANIM_INTERP_ELASTIC:
+            return elastic(t);
+        case ANIM_INTERP_BACK:
+            return back(t);
         default:
             return t;
     }

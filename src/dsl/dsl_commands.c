@@ -144,6 +144,11 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
         else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
         else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
       }
 
       if (!animation_prepared) {
@@ -221,6 +226,11 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
         else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
         else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
       }
 
       if (!animation_prepared) {
@@ -313,6 +323,11 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
         else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
         else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
       }
 
       if (!animation_prepared) {

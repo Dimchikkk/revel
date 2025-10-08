@@ -7,7 +7,12 @@
 typedef enum {
     ANIM_INTERP_IMMEDIATE,  // No interpolation, jump to end
     ANIM_INTERP_LINEAR,     // Linear interpolation
-    ANIM_INTERP_BEZIER      // Smooth bezier curve
+    ANIM_INTERP_BEZIER,     // Smooth bezier curve (ease-in-out)
+    ANIM_INTERP_EASE_IN,    // Starts slow, speeds up
+    ANIM_INTERP_EASE_OUT,   // Starts fast, slows down
+    ANIM_INTERP_BOUNCE,     // Bouncing effect at the end
+    ANIM_INTERP_ELASTIC,    // Spring-like effect
+    ANIM_INTERP_BACK        // Overshoots then returns
 } AnimInterpolationType;
 
 typedef enum {

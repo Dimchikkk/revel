@@ -234,6 +234,11 @@ All animations support these interpolation types:
 - `immediate` - Instant jump (no interpolation)
 - `linear` - Constant speed (default)
 - `bezier` - Smooth ease-in-out curve
+- `ease-in` - Starts slow, speeds up
+- `ease-out` - Starts fast, slows down
+- `bounce` - Bouncing effect at the end
+- `elastic` - Spring-like effect
+- `back` - Overshoots then returns
 
 ### Move Animation
 
@@ -249,7 +254,7 @@ animate_move ELEMENT_ID (from_x,from_y) (to_x,to_y) START_TIME DURATION [TYPE]
 - `(to_x,to_y)` - Ending position in pixels
 - `START_TIME` - When to start (seconds from animation start)
 - `DURATION` - Animation duration in seconds
-- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`, `ease-in`, `ease-out`, `bounce`, `elastic`, `back`
 
 ### Resize Animation
 
@@ -265,7 +270,7 @@ animate_resize ELEMENT_ID (from_w,from_h) (to_w,to_h) START_TIME DURATION [TYPE]
 - `(to_w,to_h)` - Ending size in pixels
 - `START_TIME` - When to start (seconds)
 - `DURATION` - Animation duration in seconds
-- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`, `ease-in`, `ease-out`, `bounce`, `elastic`, `back`
 
 ### Color Animation
 
@@ -281,7 +286,7 @@ animate_color ELEMENT_ID FROM_COLOR TO_COLOR START_TIME DURATION [TYPE]
 - `TO_COLOR` - Ending color
 - `START_TIME` - When to start (seconds)
 - `DURATION` - Animation duration in seconds
-- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`, `ease-in`, `ease-out`, `bounce`, `elastic`, `back`
 
 ### Rotate Animation
 
@@ -298,7 +303,7 @@ animate_rotate ELEMENT_ID TO_DEGREES START_TIME DURATION [TYPE]
 - `TO_DEGREES` - Ending rotation angle in degrees
 - `START_TIME` - When to start (seconds)
 - `DURATION` - Animation duration in seconds
-- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`, `ease-in`, `ease-out`, `bounce`, `elastic`, `back`
 
 **Examples:**
 ```dsl
@@ -321,7 +326,7 @@ animate_appear ELEMENT_ID START_TIME DURATION [TYPE]
 - `ELEMENT_ID` - ID of element to animate
 - `START_TIME` - When to start (seconds)
 - `DURATION` - Fade-in duration in seconds
-- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`, `ease-in`, `ease-out`, `bounce`, `elastic`, `back`
 
 ### Disappear Animation
 
@@ -335,7 +340,7 @@ animate_disappear ELEMENT_ID START_TIME DURATION [TYPE]
 - `ELEMENT_ID` - ID of element to animate
 - `START_TIME` - When to start (seconds)
 - `DURATION` - Fade-out duration in seconds
-- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`, `ease-in`, `ease-out`, `bounce`, `elastic`, `back`
 
 ---
 
