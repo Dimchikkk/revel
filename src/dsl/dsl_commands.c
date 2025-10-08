@@ -232,6 +232,98 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
                                        start_time, duration, interp);
       animations_scheduled = TRUE;
     }
+    else if (g_strcmp0(tokens[0], "animate_rotate") == 0 && token_count >= 4) {
+      const gchar *elem_id = tokens[1];
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: animate_rotate target '%s' not found\n", elem_id);
+        g_strfreev(tokens);
+        continue;
+      }
+
+      double from_rotation = 0.0, to_rotation = 0.0;
+      int cursor = 2;
+
+      // Count ALL numeric tokens to determine syntax
+      // animate_rotate ELEMENT TO START DURATION [TYPE]      (3 numeric)
+      // animate_rotate ELEMENT FROM TO START DURATION [TYPE] (4 numeric)
+      int numeric_count = 0;
+      int temp_idx = 2;
+      while (temp_idx < token_count && tokens[temp_idx][0] != '(') {
+        double dummy;
+        if (dsl_parse_double_token(data, tokens[temp_idx], &dummy)) {
+          numeric_count++;
+          temp_idx++;
+        } else {
+          break;
+        }
+      }
+
+      // Determine how many rotation params based on total count
+      int rotation_param_count = (numeric_count >= 4) ? 2 : 1;
+
+      if (rotation_param_count == 2) {
+        // Two rotation values: from and to
+        if (!dsl_parse_double_token(data, tokens[2], &from_rotation) ||
+            !dsl_parse_double_token(data, tokens[3], &to_rotation)) {
+          g_print("DSL: Failed to parse animate_rotate angles\n");
+          g_strfreev(tokens);
+          success = FALSE;
+          continue;
+        }
+        cursor = 4;
+      } else {
+        // Single rotation value - animate from current rotation
+        if (!model_element->visual_element) {
+          g_print("DSL: animate_rotate missing element rotation data\n");
+          g_strfreev(tokens);
+          success = FALSE;
+          continue;
+        }
+        from_rotation = model_element->visual_element->rotation_degrees;
+        if (!dsl_parse_double_token(data, tokens[2], &to_rotation)) {
+          g_print("DSL: Failed to parse animate_rotate target angle\n");
+          g_strfreev(tokens);
+          success = FALSE;
+          continue;
+        }
+        cursor = 3;
+      }
+
+      if ((cursor + 1) >= token_count) {
+        g_print("DSL: animate_rotate missing timing arguments\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      double start_time = 0.0;
+      double duration = 0.0;
+      if (!dsl_parse_double_token(data, tokens[cursor], &start_time) ||
+          !dsl_parse_double_token(data, tokens[cursor + 1], &duration)) {
+        g_print("DSL: animate_rotate timing parse error\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+      if ((cursor + 2) < token_count) {
+        const gchar *type_token = tokens[cursor + 2];
+        if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
+        else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
+        else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+      }
+
+      if (!animation_prepared) {
+        dsl_runtime_prepare_animation_engine(data);
+        animation_prepared = TRUE;
+      }
+
+      dsl_runtime_add_rotate_animation(data, model_element, from_rotation, to_rotation,
+                                       start_time, duration, interp);
+      animations_scheduled = TRUE;
+    }
     else if (g_strcmp0(tokens[0], "text_update") == 0 && token_count >= 3) {
       const gchar *elem_id = tokens[1];
       const gchar *text_token = tokens[2];

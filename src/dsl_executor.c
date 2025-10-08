@@ -2345,6 +2345,88 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         g_print("Warning: Element %s not found for animation\n", elem_id);
       }
     }
+    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_rotate") == 0 && token_count >= 4) {
+      // animate_rotate ELEMENT_ID TO_DEGREES START_TIME DURATION [TYPE]
+      // animate_rotate ELEMENT_ID FROM_DEGREES TO_DEGREES START_TIME DURATION [TYPE]
+      const gchar *elem_id = tokens[1];
+      double from_rotation = 0.0, to_rotation = 0.0;
+      double start_time, duration;
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+
+      // Count numeric parameters to determine syntax
+      int numeric_count = 0;
+      int temp_idx = 2;
+      while (temp_idx < token_count && tokens[temp_idx][0] != '(') {
+        double dummy;
+        if (parse_double_value(tokens[temp_idx], &dummy)) {
+          numeric_count++;
+          temp_idx++;
+        } else {
+          break;
+        }
+      }
+
+      int cursor = 2;
+      if (numeric_count >= 4) {
+        // Two rotation values provided
+        if (!parse_double_value(tokens[2], &from_rotation) ||
+            !parse_double_value(tokens[3], &to_rotation)) {
+          g_print("Error: Failed to parse rotation degrees\n");
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor = 4;
+      } else {
+        // Single rotation value - from current rotation
+        ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+        if (elem && elem->visual_element) {
+          from_rotation = elem->visual_element->rotation_degrees;
+        } else {
+          from_rotation = 0.0;  // Default if element not found yet
+        }
+        if (!parse_double_value(tokens[2], &to_rotation)) {
+          g_print("Error: Failed to parse rotation degrees\n");
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor = 3;
+      }
+
+      if (!parse_double_value(tokens[cursor], &start_time)) {
+        g_print("Error: Failed to parse start_time: %s\n", tokens[cursor]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!parse_double_value(tokens[cursor + 1], &duration)) {
+        g_print("Error: Failed to parse duration: %s\n", tokens[cursor + 1]);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (token_count >= cursor + 3) {
+        if (g_strcmp0(tokens[cursor + 2], "immediate") == 0) {
+          interp = ANIM_INTERP_IMMEDIATE;
+        } else if (g_strcmp0(tokens[cursor + 2], "linear") == 0) {
+          interp = ANIM_INTERP_LINEAR;
+        } else if (g_strcmp0(tokens[cursor + 2], "bezier") == 0 || g_strcmp0(tokens[cursor + 2], "curve") == 0) {
+          interp = ANIM_INTERP_BEZIER;
+        }
+      }
+
+      ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
+      if (elem && elem->uuid) {
+        animation_add_rotate(data->anim_engine, elem->uuid,
+                            start_time, duration, interp,
+                            from_rotation, to_rotation);
+      } else {
+        g_print("Warning: Element %s not found for animation\n", elem_id);
+      }
+    }
     else if (is_animation_mode && g_strcmp0(tokens[0], "animate_color") == 0 && token_count >= 5) {
       // animate_color ELEMENT_ID FROM_COLOR TO_COLOR START_TIME DURATION [TYPE]
       const gchar *elem_id = tokens[1];

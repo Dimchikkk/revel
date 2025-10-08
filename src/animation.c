@@ -182,6 +182,25 @@ void animation_add_color(AnimationEngine *engine, const char *element_uuid,
     anim->completed = false;
 }
 
+void animation_add_rotate(AnimationEngine *engine, const char *element_uuid,
+                         double start_time, double duration,
+                         AnimInterpolationType interp,
+                         double from_rotation, double to_rotation) {
+    ensure_capacity(engine);
+
+    Animation *anim = &engine->animations[engine->count++];
+    memset(anim, 0, sizeof(Animation));
+
+    anim->element_uuid = strdup(element_uuid);
+    anim->type = ANIM_TYPE_ROTATE;
+    anim->interp = interp;
+    anim->start_time = start_time;
+    anim->duration = duration;
+    anim->from_rotation = from_rotation;
+    anim->to_rotation = to_rotation;
+    anim->completed = false;
+}
+
 void animation_add_create(AnimationEngine *engine, const char *element_uuid,
                          double start_time, double duration,
                          AnimInterpolationType interp) {
@@ -423,6 +442,59 @@ bool animation_engine_get_color(AnimationEngine *engine, const char *element_uui
     return false;
 }
 
+bool animation_engine_get_rotation(AnimationEngine *engine, const char *element_uuid,
+                                   double *out_rotation) {
+    if (!engine->running || !element_uuid) return false;
+
+    Animation *current_anim = NULL;
+    Animation *last_completed = NULL;
+
+    for (int i = 0; i < engine->count; i++) {
+        Animation *anim = &engine->animations[i];
+
+        if (!anim->element_uuid || strcmp(anim->element_uuid, element_uuid) != 0) continue;
+        if (anim->type != ANIM_TYPE_ROTATE) continue;
+
+        double anim_end_time = anim->start_time + anim->duration;
+
+        // Animation hasn't started yet
+        if (engine->elapsed_time < anim->start_time) {
+            if (!current_anim) {
+                *out_rotation = anim->from_rotation;
+                return true;
+            }
+            continue;
+        }
+
+        // Animation is currently active
+        if (engine->elapsed_time >= anim->start_time && engine->elapsed_time < anim_end_time) {
+            current_anim = anim;
+            break;
+        }
+
+        // Animation has completed
+        if (engine->elapsed_time >= anim_end_time) {
+            last_completed = anim;
+        }
+    }
+
+    if (current_anim) {
+        double local_time = engine->elapsed_time - current_anim->start_time;
+        double t = local_time / current_anim->duration;
+        double interp_t = animation_interpolate(t, current_anim->interp);
+
+        *out_rotation = current_anim->from_rotation + (current_anim->to_rotation - current_anim->from_rotation) * interp_t;
+        return true;
+    }
+
+    if (last_completed) {
+        *out_rotation = last_completed->to_rotation;
+        return true;
+    }
+
+    return false;
+}
+
 bool animation_engine_get_visibility(AnimationEngine *engine, const char *element_uuid,
                                     double *out_alpha) {
     if (!engine->running || !element_uuid) return false;
@@ -536,6 +608,13 @@ bool animation_engine_tick(AnimationEngine *engine, double delta_time) {
                               model_element->bg_color->g = anim->to_color[1];
                               model_element->bg_color->b = anim->to_color[2];
                               model_element->bg_color->a = anim->to_color[3];
+                            }
+                            needs_sync = TRUE;
+                            break;
+                          case ANIM_TYPE_ROTATE:
+                            model_update_rotation(data->model, model_element, anim->to_rotation);
+                            if (model_element->visual_element) {
+                              model_element->visual_element->rotation_degrees = anim->to_rotation;
                             }
                             needs_sync = TRUE;
                             break;

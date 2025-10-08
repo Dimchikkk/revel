@@ -537,6 +537,7 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
   } else if (g_strcmp0(command, "animate_move") == 0 ||
              g_strcmp0(command, "animate_resize") == 0 ||
              g_strcmp0(command, "animate_color") == 0 ||
+             g_strcmp0(command, "animate_rotate") == 0 ||
              g_strcmp0(command, "animate_appear") == 0 ||
              g_strcmp0(command, "animate_disappear") == 0 ||
              g_strcmp0(command, "animate_create") == 0 ||
@@ -568,6 +569,48 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
         return;
       }
       dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
+      if (idx < token_count) {
+        const gchar *interp = tokens[idx++];
+        if (g_ascii_strcasecmp(interp, "immediate") != 0 &&
+            g_ascii_strcasecmp(interp, "linear") != 0 &&
+            g_ascii_strcasecmp(interp, "bezier") != 0 &&
+            g_ascii_strcasecmp(interp, "curve") != 0) {
+          dsl_type_add_error(ctx, line, "%s interpolation must be immediate, linear, or bezier", command);
+        }
+      }
+    } else if (g_strcmp0(command, "animate_rotate") == 0) {
+      // animate_rotate ELEMENT TO_DEGREES START DURATION [TYPE]   (4-5 args after element)
+      // animate_rotate ELEMENT FROM TO START DURATION [TYPE]      (5-6 args after element)
+      // We need to count numeric args to determine which syntax
+
+      int numeric_count = 0;
+      int temp_idx = idx;
+      while (temp_idx < token_count) {
+        const gchar *token = tokens[temp_idx];
+        if (token[0] == '(' || g_ascii_isalpha(token[0])) break;
+        if (dsl_type_is_number_literal(token)) {
+          numeric_count++;
+          temp_idx++;
+        } else {
+          break;
+        }
+      }
+
+      // Determine how many rotation params based on total numeric count
+      // If 4+ numeric values, first two are from/to rotation, next two are start/duration
+      // If 3+ numeric values, first is to rotation, next two are start/duration
+      int rotation_params = (numeric_count >= 4) ? 2 : 1;
+
+      // Validate rotation parameters
+      for (int i = 0; i < rotation_params && idx < token_count; i++) {
+        dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
+      }
+
+      // Validate timing parameters
+      if (idx < token_count) dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
+      if (idx < token_count) dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
+
+      // Validate interpolation
       if (idx < token_count) {
         const gchar *interp = tokens[idx++];
         if (g_ascii_strcasecmp(interp, "immediate") != 0 &&

@@ -283,6 +283,32 @@ animate_color ELEMENT_ID FROM_COLOR TO_COLOR START_TIME DURATION [TYPE]
 - `DURATION` - Animation duration in seconds
 - `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
 
+### Rotate Animation
+
+Animate element rotation.
+
+```
+animate_rotate ELEMENT_ID FROM_DEGREES TO_DEGREES START_TIME DURATION [TYPE]
+animate_rotate ELEMENT_ID TO_DEGREES START_TIME DURATION [TYPE]
+```
+
+**Parameters:**
+- `ELEMENT_ID` - ID of element to animate
+- `FROM_DEGREES` - Starting rotation angle in degrees (optional, uses current rotation if omitted)
+- `TO_DEGREES` - Ending rotation angle in degrees
+- `START_TIME` - When to start (seconds)
+- `DURATION` - Animation duration in seconds
+- `TYPE` - Interpolation type (optional): `immediate`, `linear`, `bezier`
+
+**Examples:**
+```dsl
+# Rotate from 0 to 360 degrees
+animate_rotate star 0 360 0.0 2.0 linear
+
+# Rotate from current angle to 180 degrees
+animate_rotate box 180 1.0 1.5 bezier
+```
+
 ### Appear Animation
 
 Fade in element from transparent to visible.

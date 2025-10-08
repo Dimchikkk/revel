@@ -940,6 +940,20 @@ void dsl_runtime_add_resize_animation(CanvasData *data, ModelElement *model_elem
   }
 }
 
+void dsl_runtime_add_rotate_animation(CanvasData *data, ModelElement *model_element,
+                                             double from_rotation, double to_rotation,
+                                             double start_time, double duration,
+                                             AnimInterpolationType interp) {
+  if (!data || !model_element || !model_element->uuid || !data->anim_engine) return;
+
+  animation_add_rotate(data->anim_engine, model_element->uuid,
+                       start_time, duration, interp,
+                       from_rotation, to_rotation);
+
+  g_print("DSL animation scheduled: %s rotate from %.2f to %.2f start=%.2f dur=%.2f\n",
+          model_element->uuid, from_rotation, to_rotation, start_time, duration);
+}
+
 void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, const gchar *new_text) {
   if (!data || !model_element || !new_text) return;
 

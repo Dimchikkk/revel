@@ -221,6 +221,11 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
         }
       }
 
+      // Update rotation if changed
+      if (visual_element->rotation_degrees != model_element->rotation_degrees) {
+        visual_element->rotation_degrees = model_element->rotation_degrees;
+      }
+
       // Handle text updates for specific element types
       if (model_element->text && model_element->text->text) {
         switch (visual_element->type) {
@@ -528,21 +533,25 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     double anim_x, anim_y, anim_w, anim_h;
     double anim_r, anim_g, anim_b, anim_a;
     double anim_alpha;
+    double anim_rotation;
     int saved_x = element->x, saved_y = element->y;
     int saved_w = element->width, saved_h = element->height;
     double saved_bg_r = element->bg_r, saved_bg_g = element->bg_g;
     double saved_bg_b = element->bg_b, saved_bg_a = element->bg_a;
+    double saved_rotation = element->rotation_degrees;
 
     bool has_position_anim = false;
     bool has_size_anim = false;
     bool has_color_anim = false;
     bool has_visibility_anim = false;
+    bool has_rotation_anim = false;
 
     if (data->anim_engine && element->model_element && element->model_element->uuid) {
       has_position_anim = animation_engine_get_position(data->anim_engine, element->model_element->uuid, &anim_x, &anim_y);
       has_size_anim = animation_engine_get_size(data->anim_engine, element->model_element->uuid, &anim_w, &anim_h);
       has_color_anim = animation_engine_get_color(data->anim_engine, element->model_element->uuid, &anim_r, &anim_g, &anim_b, &anim_a);
       has_visibility_anim = animation_engine_get_visibility(data->anim_engine, element->model_element->uuid, &anim_alpha);
+      has_rotation_anim = animation_engine_get_rotation(data->anim_engine, element->model_element->uuid, &anim_rotation);
 
       if (has_position_anim) {
         element->x = (int)anim_x;
@@ -557,6 +566,9 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
         element->bg_g = anim_g;
         element->bg_b = anim_b;
         element->bg_a = anim_a;
+      }
+      if (has_rotation_anim) {
+        element->rotation_degrees = anim_rotation;
       }
     }
 
@@ -587,6 +599,7 @@ void canvas_on_draw(GtkDrawingArea *drawing_area, cairo_t *cr, int width, int he
     element->bg_g = saved_bg_g;
     element->bg_b = saved_bg_b;
     element->bg_a = saved_bg_a;
+    element->rotation_degrees = saved_rotation;
 
     // Draw indicator if element has hidden children
     // OPTIMIZATION: Use cached reverse pointer instead of O(n) lookup

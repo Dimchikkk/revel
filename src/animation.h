@@ -14,6 +14,7 @@ typedef enum {
     ANIM_TYPE_MOVE,
     ANIM_TYPE_RESIZE,
     ANIM_TYPE_COLOR,
+    ANIM_TYPE_ROTATE,
     ANIM_TYPE_CREATE,
     ANIM_TYPE_DELETE
 } AnimationType;
@@ -38,6 +39,10 @@ typedef struct {
     // Color animation
     char from_color[32];
     char to_color[32];
+
+    // Rotate animation
+    double from_rotation;
+    double to_rotation;
 
     bool completed;
 } Animation;
@@ -79,6 +84,11 @@ void animation_add_color(AnimationEngine *engine, const char *element_uuid,
                         AnimInterpolationType interp,
                         const char *from_color, const char *to_color);
 
+void animation_add_rotate(AnimationEngine *engine, const char *element_uuid,
+                         double start_time, double duration,
+                         AnimInterpolationType interp,
+                         double from_rotation, double to_rotation);
+
 void animation_add_create(AnimationEngine *engine, const char *element_uuid,
                          double start_time, double duration,
                          AnimInterpolationType interp);
@@ -104,6 +114,9 @@ bool animation_engine_get_size(AnimationEngine *engine, const char *element_uuid
 
 bool animation_engine_get_color(AnimationEngine *engine, const char *element_uuid,
                                double *out_r, double *out_g, double *out_b, double *out_a);
+
+bool animation_engine_get_rotation(AnimationEngine *engine, const char *element_uuid,
+                                   double *out_rotation);
 
 bool animation_engine_get_visibility(AnimationEngine *engine, const char *element_uuid,
                                     double *out_alpha);

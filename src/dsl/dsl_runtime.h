@@ -54,6 +54,9 @@ void dsl_runtime_add_move_animation(CanvasData *data, ModelElement *model_elemen
 void dsl_runtime_add_resize_animation(CanvasData *data, ModelElement *model_element,
                                       int from_w, int from_h, int to_w, int to_h,
                                       double start_time, double duration, AnimInterpolationType interp);
+void dsl_runtime_add_rotate_animation(CanvasData *data, ModelElement *model_element,
+                                      double from_rotation, double to_rotation,
+                                      double start_time, double duration, AnimInterpolationType interp);
 void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, const gchar *new_text);
 
 void dsl_runtime_notify_variable(CanvasData *data, const gchar *var_name);

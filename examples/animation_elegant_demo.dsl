@@ -1,5 +1,5 @@
 # Elegant Animation Demo
-# Demonstrates all animation types: move, resize, color, appear, disappear
+# Demonstrates all animation types: move, resize, color, rotate, appear, disappear
 # With different interpolation methods: immediate, linear, bezier
 
 animation_mode
@@ -185,13 +185,14 @@ animate_move l6 (600,450) (580,500) 2.5 1.8 bezier
 animate_move l7 (600,450) (590,500) 2.5 1.8 bezier
 
 # ============================================================================
-# Grow and shrink
+# Grow and shrink with rotation
 # ============================================================================
 
 shape_create pulse roundedrect "Pulse" (200,720) (70,70) bg #8b5cf6 filled true text_color #ffffff font "Ubuntu Bold 11"
 animate_appear pulse 5.0 0.3 bezier
 animate_resize pulse (70,70) (130,130) 5.5 1.0 bezier
 animate_resize pulse (130,130) (85,85) 6.5 0.8 bezier
+animate_rotate pulse 0 360 5.5 1.8 bezier
 
 # ============================================================================
 # Color morphing
@@ -203,7 +204,7 @@ animate_color morph #dc2626 #7c3aed 5.5 2.0 bezier
 animate_color morph #7c3aed #0891b2 7.5 1.5 bezier
 
 # ============================================================================
-# Combined effect - The magic box
+# Combined effect - The magic box (all animations combined!)
 # ============================================================================
 
 shape_create magic roundedrect "✨" (820,720) (90,90) bg #f59e0b filled true text_color #ffffff font "Ubuntu Bold 32"
@@ -211,6 +212,7 @@ animate_appear magic 9.0 0.5 bezier
 animate_move magic (820,720) (820,540) 9.5 1.5 bezier
 animate_resize magic (90,90) (160,160) 9.5 1.5 bezier
 animate_color magic #f59e0b #ec4899 9.5 1.5 bezier
+animate_rotate magic 0 720 9.5 1.5 bezier
 
 # ============================================================================
 # Finale - Gentle fade out
