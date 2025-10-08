@@ -78,12 +78,6 @@ shape_create values plot "10\n25\n20\n35" (100, 100) (400, 300) stroke_color #ef
 - `plot`
 - `graph` (alias)
 
-## Implementation Files
-- `src/shape.h` - Added `SHAPE_PLOT` enum
-- `src/shape.c` - Plot rendering logic (lines 626-763)
-- `src/shape_dialog.c` - UI integration
-- `src/dsl/dsl_utils.c` - DSL parser support
-
 ## Styling Options
 - `stroke_color` - Line and point color
 - `stroke_width` - Line thickness (also affects point size)

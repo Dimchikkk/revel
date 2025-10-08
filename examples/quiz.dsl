@@ -133,6 +133,4 @@ text_create final_retries "${incorrect_total}" (580,300) (100,50) text_color #99
 text_create accuracy_label "Accuracy Rate" (360,400) (200,30) text_color #6b7280 font "Ubuntu Bold 18"
 text_create accuracy "${correct_total}/${correct_total + incorrect_total}" (360,440) (200,40) text_color #1f2937 font "Ubuntu Bold 32"
 
-text_create answer_recorded "Your answer: ${fieldnote_note}" (360,500) (400,30) text_color #6b7280 font "Ubuntu Italic 16"
-
-text_create invite "Use Ctrl+Left Arrow to review questions" (360,560) (480,30) text_color #9ca3af font "Ubuntu 14"
+text_create invite "Use Ctrl+Left Arrow to review questions" (360,520) (480,30) text_color #9ca3af font "Ubuntu 14"

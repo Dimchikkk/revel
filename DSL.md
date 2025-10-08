@@ -415,7 +415,7 @@ animate_resize circle1 (80,80) (120,120) 0.0 1.0 bezier
 animate_resize circle1 (120,120) (80,80) 1.0 1.0 bezier
 ```
 
-You can also advance to the next slide programmatically—for example, call `presentation_next` inside an `on variable` handler once a learner submits the correct answer.
+You can also advance to the next slide programmatically - for example, call `presentation_next` inside an `on variable` handler once a learner submits the correct answer.
 
 **Example Files:**
 - `examples/presentation_demo.dsl` - Basic presentation without animations
@@ -483,9 +483,9 @@ presentation_next               # advance presentation to next slide
 # presentation_auto_next_if VARIABLE VALUE  # command renamed; see presentation_auto_next_if command documentation
 ```
 
-`text_bind` keeps the element text and string variable in sync—when the user finishes editing the bound element, the variable is updated and any `on variable` handlers run. `position_bind` updates the referenced string variable with the element's canvas coordinates (e.g. `"420,180"`) whenever the element is moved, which is useful for drag/match activities.
+`text_bind` keeps the element text and string variable in sync - when the user finishes editing the bound element, the variable is updated and any `on variable` handlers run. `position_bind` updates the referenced string variable with the element's canvas coordinates (e.g. `"420,180"`) whenever the element is moved, which is useful for drag/match activities.
 
-`presentation_auto_next_if` lets you automatically advance to the next presentation slide once a variable reaches a target value (numeric or string). This is handy for quizzes—set a counter or status variable in response to user actions, then register the auto-advance trigger.
+`presentation_auto_next_if` lets you automatically advance to the next presentation slide once a variable reaches a target value (numeric or string). This is handy for quizzes - set a counter or status variable in response to user actions, then register the auto-advance trigger.
 
 `add` updates an existing numeric variable; declare all variables with `int` or `real` before using them in commands or interpolations.
 
