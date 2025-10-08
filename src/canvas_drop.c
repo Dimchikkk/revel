@@ -515,6 +515,9 @@ GdkPixbuf* extract_mp3_album_art(const gchar *file_path) {
   return album_art;
 }
 
+// Forward declaration
+static void process_dropped_file(CanvasData *data, GFile *file, double x, double y);
+
 // Function to get file size in bytes
 static gint64 get_file_size(const gchar *file_path) {
   GFile *file = g_file_new_for_path(file_path);
@@ -534,13 +537,9 @@ static gint64 get_file_size(const gchar *file_path) {
   return size;
 }
 
-gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
-                        double x, double y, gpointer user_data) {
-  CanvasData *data = (CanvasData*)user_data;
-
-  if (G_VALUE_HOLDS(value, G_TYPE_FILE)) {
-    GFile *file = g_value_get_object(value);
-    gchar *file_path = g_file_get_path(file);
+// Helper function to process a single file drop
+static void process_dropped_file(CanvasData *data, GFile *file, double x, double y) {
+  gchar *file_path = g_file_get_path(file);
 
     if (file_path) {
       // Check file extension
@@ -617,7 +616,7 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
           if (!data || !data->model) {
             g_printerr("Error: Canvas data or model is NULL\n");
             g_free(file_path);
-            return FALSE;
+            return;
           }
 
           // Get duration
@@ -859,15 +858,130 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
       }
       g_free(file_path);
     }
+}
+
+gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
+                        double x, double y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  // Handle GListModel drops (GTK4 multi-file drops)
+  if (G_VALUE_HOLDS(value, G_TYPE_LIST_MODEL)) {
+    GListModel *model = g_value_get_object(value);
+    int n_items = g_list_model_get_n_items(model);
+
+    if (n_items == 1) {
+      // Single file - drop at cursor
+      GObject *item = g_list_model_get_item(model, 0);
+      if (G_IS_FILE(item)) {
+        process_dropped_file(data, G_FILE(item), x, y);
+      }
+      g_object_unref(item);
+    } else if (n_items > 1) {
+      // Multiple files - arrange in grid
+      int canvas_x, canvas_y;
+      canvas_screen_to_canvas(data, (int)x, (int)y, &canvas_x, &canvas_y);
+
+      int cols = (int)ceil(sqrt(n_items));
+      int spacing = 650;
+
+      int start_x = canvas_x - (cols * spacing) / 2;
+      int start_y = canvas_y;
+
+      int current_col = 0;
+      int current_row = 0;
+
+      for (int i = 0; i < n_items; i++) {
+        GObject *item = g_list_model_get_item(model, i);
+        if (G_IS_FILE(item)) {
+          int file_x = start_x + (current_col * spacing);
+          int file_y = start_y + (current_row * spacing);
+
+          int screen_x, screen_y;
+          canvas_canvas_to_screen(data, file_x, file_y, &screen_x, &screen_y);
+
+          process_dropped_file(data, G_FILE(item), screen_x, screen_y);
+
+          current_col++;
+          if (current_col >= cols) {
+            current_col = 0;
+            current_row++;
+          }
+        }
+        g_object_unref(item);
+      }
+    }
     return TRUE;
   }
+
+  // Handle string drops (text/uri-list) - fallback for some file managers
+  if (G_VALUE_HOLDS(value, G_TYPE_STRING)) {
+    const gchar *uris = g_value_get_string(value);
+    gchar **uri_array = g_strsplit(uris, "\n", -1);
+    int num_uris = 0;
+
+    int canvas_x, canvas_y;
+    canvas_screen_to_canvas(data, (int)x, (int)y, &canvas_x, &canvas_y);
+
+    // Count valid URIs
+    for (int i = 0; uri_array[i] != NULL; i++) {
+      gchar *uri = g_strstrip(uri_array[i]);
+      if (uri && uri[0] != '\0') {
+        num_uris++;
+      }
+    }
+
+    if (num_uris == 1) {
+      // Single file - drop at cursor
+      gchar *uri = g_strstrip(uri_array[0]);
+      GFile *file = g_file_new_for_uri(uri);
+      process_dropped_file(data, file, x, y);
+      g_object_unref(file);
+    } else if (num_uris > 1) {
+      // Multiple files - arrange in grid
+      int cols = (int)ceil(sqrt(num_uris));
+      int spacing = 650;
+
+      int start_x = canvas_x - (cols * spacing) / 2;
+      int start_y = canvas_y;
+
+      int current_col = 0;
+      int current_row = 0;
+
+      for (int i = 0; uri_array[i] != NULL; i++) {
+        gchar *uri = g_strstrip(uri_array[i]);
+        if (!uri || uri[0] == '\0') continue;
+
+        GFile *file = g_file_new_for_uri(uri);
+
+        int file_x = start_x + (current_col * spacing);
+        int file_y = start_y + (current_row * spacing);
+
+        int screen_x, screen_y;
+        canvas_canvas_to_screen(data, file_x, file_y, &screen_x, &screen_y);
+
+        process_dropped_file(data, file, screen_x, screen_y);
+        g_object_unref(file);
+
+        current_col++;
+        if (current_col >= cols) {
+          current_col = 0;
+          current_row++;
+        }
+      }
+    }
+
+    g_strfreev(uri_array);
+    return TRUE;
+  }
+
   return FALSE;
 }
 
 void canvas_setup_drop_target(CanvasData *data) {
   GtkDropTarget *drop_target = gtk_drop_target_new(G_TYPE_INVALID, GDK_ACTION_COPY);
 
-  GType file_types[] = { G_TYPE_FILE };
+  // Accept strings (text/uri-list format for file drops)
+  GType file_types[] = { G_TYPE_STRING };
   gtk_drop_target_set_gtypes(drop_target, file_types, G_N_ELEMENTS(file_types));
 
   g_signal_connect(drop_target, "drop", G_CALLBACK(canvas_on_drop), data);
