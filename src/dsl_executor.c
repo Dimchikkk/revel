@@ -2986,6 +2986,9 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       if (element->rotation_degrees != 0.0) {
         g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
       }
+      if (element->locked) {
+        g_string_append(dsl, " locked");
+      }
       g_string_append_c(dsl, '\n');
 
       g_free(text_escaped);
@@ -3003,6 +3006,9 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
       if (element->rotation_degrees != 0.0) {
         g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      if (element->locked) {
+        g_string_append(dsl, " locked");
       }
       g_string_append_c(dsl, '\n');
 
@@ -3098,6 +3104,9 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       if (element->rotation_degrees != 0.0) {
         g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
       }
+      if (element->locked) {
+        g_string_append(dsl, " locked");
+      }
       g_string_append_c(dsl, '\n');
 
       g_free(text_escaped);
@@ -3135,6 +3144,9 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
       if (element->rotation_degrees != 0.0) {
         g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      if (element->locked) {
+        g_string_append(dsl, " locked");
       }
       g_string_append_c(dsl, '\n');
 
@@ -3184,6 +3196,9 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
       if (element->rotation_degrees != 0.0) {
         g_string_append_printf(dsl, " rotation %.1f", element->rotation_degrees);
+      }
+      if (element->locked) {
+        g_string_append(dsl, " locked");
       }
       g_string_append_c(dsl, '\n');
 
