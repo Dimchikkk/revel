@@ -32,6 +32,24 @@ static void dsl_type_add_error(DSLTypeCheckerContext *ctx, int line, const gchar
   g_ptr_array_add(ctx->errors, full);
 }
 
+static gboolean dsl_type_check_interpolation(const gchar *interp) {
+  return (g_ascii_strcasecmp(interp, "immediate") == 0 ||
+          g_ascii_strcasecmp(interp, "linear") == 0 ||
+          g_ascii_strcasecmp(interp, "bezier") == 0 ||
+          g_ascii_strcasecmp(interp, "ease-in") == 0 ||
+          g_ascii_strcasecmp(interp, "ease-out") == 0 ||
+          g_ascii_strcasecmp(interp, "bounce") == 0 ||
+          g_ascii_strcasecmp(interp, "elastic") == 0 ||
+          g_ascii_strcasecmp(interp, "back") == 0 ||
+          g_ascii_strcasecmp(interp, "curve") == 0);
+}
+
+static void dsl_type_validate_interpolation(DSLTypeCheckerContext *ctx, const gchar *interp, int line, const gchar *command) {
+  if (!dsl_type_check_interpolation(interp)) {
+    dsl_type_add_error(ctx, line, "%s interpolation must be immediate, linear, bezier, ease-in, ease-out, bounce, elastic, or back", command);
+  }
+}
+
 static gboolean dsl_type_register_variable(DSLTypeCheckerContext *ctx, const gchar *name, int line, DSLVarType type) {
   if (!ctx || !ctx->variables || !name) return FALSE;
   if (g_hash_table_contains(ctx->variables, name)) {
@@ -570,13 +588,7 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
       }
       dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
       if (idx < token_count) {
-        const gchar *interp = tokens[idx++];
-        if (g_ascii_strcasecmp(interp, "immediate") != 0 &&
-            g_ascii_strcasecmp(interp, "linear") != 0 &&
-            g_ascii_strcasecmp(interp, "bezier") != 0 &&
-            g_ascii_strcasecmp(interp, "curve") != 0) {
-          dsl_type_add_error(ctx, line, "%s interpolation must be immediate, linear, or bezier", command);
-        }
+        dsl_type_validate_interpolation(ctx, tokens[idx++], line, command);
       }
     } else if (g_strcmp0(command, "animate_rotate") == 0) {
       // animate_rotate ELEMENT TO_DEGREES START DURATION [TYPE]   (4-5 args after element)
@@ -612,13 +624,7 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
 
       // Validate interpolation
       if (idx < token_count) {
-        const gchar *interp = tokens[idx++];
-        if (g_ascii_strcasecmp(interp, "immediate") != 0 &&
-            g_ascii_strcasecmp(interp, "linear") != 0 &&
-            g_ascii_strcasecmp(interp, "bezier") != 0 &&
-            g_ascii_strcasecmp(interp, "curve") != 0) {
-          dsl_type_add_error(ctx, line, "%s interpolation must be immediate, linear, or bezier", command);
-        }
+        dsl_type_validate_interpolation(ctx, tokens[idx++], line, command);
       }
     } else if (g_strcmp0(command, "animate_color") == 0 ||
                g_strcmp0(command, "animate_appear") == 0 ||
@@ -628,13 +634,7 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
       if (idx < token_count) dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
       if (idx < token_count) dsl_type_check_numeric_component(ctx, tokens[idx++], line, command);
       if (idx < token_count) {
-        const gchar *interp = tokens[idx++];
-        if (g_ascii_strcasecmp(interp, "immediate") != 0 &&
-            g_ascii_strcasecmp(interp, "linear") != 0 &&
-            g_ascii_strcasecmp(interp, "bezier") != 0 &&
-            g_ascii_strcasecmp(interp, "curve") != 0) {
-          dsl_type_add_error(ctx, line, "%s interpolation must be immediate, linear, or bezier", command);
-        }
+        dsl_type_validate_interpolation(ctx, tokens[idx++], line, command);
       }
     }
     for (; idx < token_count; idx++) {
