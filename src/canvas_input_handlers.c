@@ -729,6 +729,20 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
   }
 
   if (element) {
+    // For bezier and curved arrow shapes, check control points before resize handles
+    // to prevent corner control points from being blocked by resize handles
+    if (element->type == ELEMENT_SHAPE && canvas_is_element_selected(data, element)) {
+      Shape *shape = (Shape*)element;
+      if ((shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW) && shape->has_bezier_points) {
+        int cp = element_pick_connection_point(element, cx, cy);
+        if (cp >= 0) {
+          shape->dragging_control_point = TRUE;
+          shape->dragging_control_point_index = cp;
+          return;
+        }
+      }
+    }
+
     int rh = element_pick_resize_handle(element, cx, cy);
     if (rh >= 0) {
       if (!(data->modifier_state & GDK_SHIFT_MASK)) {
@@ -772,14 +786,8 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
 
     int cp = element_pick_connection_point(element, cx, cy);
     if (cp >= 0) {
-      if (element->type == ELEMENT_SHAPE && canvas_is_element_selected(data, element)) {
-        Shape *shape = (Shape*)element;
-        if (shape->shape_type == SHAPE_BEZIER && shape->has_bezier_points) {
-          shape->dragging_control_point = TRUE;
-          shape->dragging_control_point_index = cp;
-          return;
-        }
-      }
+      // Control point dragging for bezier/curved arrow is handled earlier (before resize handles)
+      // to prevent corner control points from being blocked
 
       if (!data->connection_start) {
         data->connection_start = element;
@@ -948,8 +956,41 @@ static void canvas_process_motion(CanvasData *data, double x, double y) {
       shape->line_end_u = CLAMP((end_x - base_x) / width, 0.0, 1.0);
       shape->line_end_v = CLAMP((end_y - base_y) / height, 0.0, 1.0);
       shape->has_line_points = TRUE;
-    } else if (shape->shape_type == SHAPE_BEZIER) {
+    } else if (shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW) {
       shape->has_bezier_points = TRUE;
+
+      // For curved arrows, adapt control points based on drag direction
+      if (shape->shape_type == SHAPE_CURVED_ARROW) {
+        double width = MAX(data->current_shape->base.width, 1);
+        double height = MAX(data->current_shape->base.height, 1);
+
+        double start_x = (double)data->shape_start_x;
+        double start_y = (double)data->shape_start_y;
+        double end_x = (double)cx;
+        double end_y = (double)cy;
+
+        double base_x = data->current_shape->base.x;
+        double base_y = data->current_shape->base.y;
+
+        // Calculate normalized start and end positions
+        double p0_u = (start_x - base_x) / width;
+        double p0_v = (start_y - base_y) / height;
+        double p3_u = (end_x - base_x) / width;
+        double p3_v = (end_y - base_y) / height;
+
+        // Set control points to create a smooth curve from start to end
+        // Control points are positioned at the midpoint vertically
+        double mid_v = (p0_v + p3_v) / 2.0;
+
+        shape->bezier_p0_u = p0_u;
+        shape->bezier_p0_v = p0_v;
+        shape->bezier_p1_u = p0_u * 0.75 + p3_u * 0.25;
+        shape->bezier_p1_v = mid_v;
+        shape->bezier_p2_u = p0_u * 0.25 + p3_u * 0.75;
+        shape->bezier_p2_v = mid_v;
+        shape->bezier_p3_u = p3_u;
+        shape->bezier_p3_v = p3_v;
+      }
     }
 
     gtk_widget_queue_draw(data->drawing_area);
@@ -1089,6 +1130,43 @@ static void canvas_process_motion(CanvasData *data, double x, double y) {
         return;
       }
 
+      // Handle bezier/curved arrow control point dragging
+      if (element->type == ELEMENT_SHAPE) {
+        Shape *shape = (Shape*)element;
+        if (shape->dragging_control_point && (shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW)) {
+          int cp_index = shape->dragging_control_point_index;
+
+          // Convert canvas coordinates to normalized coordinates
+          double u = (double)(cx - element->x) / (double)element->width;
+          double v = (double)(cy - element->y) / (double)element->height;
+
+          // Don't clamp - allow control points to move freely
+
+          // Update the appropriate control point
+          switch (cp_index) {
+            case 0:
+              shape->bezier_p0_u = u;
+              shape->bezier_p0_v = v;
+              break;
+            case 1:
+              shape->bezier_p1_u = u;
+              shape->bezier_p1_v = v;
+              break;
+            case 2:
+              shape->bezier_p2_u = u;
+              shape->bezier_p2_v = v;
+              break;
+            case 3:
+              shape->bezier_p3_u = u;
+              shape->bezier_p3_v = v;
+              break;
+          }
+
+          gtk_widget_queue_draw(data->drawing_area);
+          return;
+        }
+      }
+
       if (element->dragging) {
         int dx = cx - element->drag_offset_x - element->x;
         int dy = cy - element->drag_offset_y - element->y;
@@ -1158,7 +1236,7 @@ static void canvas_process_left_release(CanvasData *data, int n_press, double x,
       g_array_append_val(line_points, end_point);
 
       drawing.drawing_points = line_points;
-    } else if (shape->shape_type == SHAPE_BEZIER && shape->has_bezier_points) {
+    } else if ((shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW) && shape->has_bezier_points) {
       line_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 4);
 
       DrawingPoint p0;
@@ -1365,7 +1443,7 @@ static void canvas_process_left_release(CanvasData *data, int n_press, double x,
     }
     if (element->type == ELEMENT_SHAPE) {
       Shape *shape = (Shape*)element;
-      if (shape->dragging_control_point && shape->shape_type == SHAPE_BEZIER) {
+      if (shape->dragging_control_point && (shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW)) {
         ModelElement *model_element = model_get_by_visual(data->model, element);
         if (model_element && shape->has_bezier_points) {
           GArray *bezier_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 4);

@@ -137,6 +137,9 @@ gboolean parse_shape_type(const gchar *str, int *shape_type) {
   } else if (g_strcmp0(str, "bezier") == 0 || g_strcmp0(str, "curve") == 0) {
     *shape_type = SHAPE_BEZIER;
     return TRUE;
+  } else if (g_strcmp0(str, "curved_arrow") == 0 || g_strcmp0(str, "curve_arrow") == 0) {
+    *shape_type = SHAPE_CURVED_ARROW;
+    return TRUE;
   } else if (g_strcmp0(str, "cube") == 0) {
     *shape_type = SHAPE_CUBE;
     return TRUE;

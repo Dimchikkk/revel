@@ -1908,7 +1908,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         }
 
         // Bezier curve control points
-        if (expect_bezier_p0 && shape_type == SHAPE_BEZIER) {
+        if (expect_bezier_p0 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
           double fx, fy;
           if (!parse_float_point(token, &fx, &fy)) {
             g_print("Failed to parse bezier p0 point: %s\n", token);
@@ -1920,7 +1920,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (expect_bezier_p1 && shape_type == SHAPE_BEZIER) {
+        if (expect_bezier_p1 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
           double fx, fy;
           if (!parse_float_point(token, &fx, &fy)) {
             g_print("Failed to parse bezier p1 point: %s\n", token);
@@ -1932,7 +1932,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (expect_bezier_p2 && shape_type == SHAPE_BEZIER) {
+        if (expect_bezier_p2 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
           double fx, fy;
           if (!parse_float_point(token, &fx, &fy)) {
             g_print("Failed to parse bezier p2 point: %s\n", token);
@@ -1944,7 +1944,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (expect_bezier_p3 && shape_type == SHAPE_BEZIER) {
+        if (expect_bezier_p3 && (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW)) {
           double fx, fy;
           if (!parse_float_point(token, &fx, &fy)) {
             g_print("Failed to parse bezier p3 point: %s\n", token);
@@ -1956,24 +1956,24 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p0") == 0 || g_strcmp0(token, "bezier_p0") == 0)) {
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_strcmp0(token, "p0") == 0 || g_strcmp0(token, "bezier_p0") == 0)) {
           expect_bezier_p0 = TRUE;
           continue;
         }
-        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p1") == 0 || g_strcmp0(token, "bezier_p1") == 0)) {
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_strcmp0(token, "p1") == 0 || g_strcmp0(token, "bezier_p1") == 0)) {
           expect_bezier_p1 = TRUE;
           continue;
         }
-        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p2") == 0 || g_strcmp0(token, "bezier_p2") == 0)) {
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_strcmp0(token, "p2") == 0 || g_strcmp0(token, "bezier_p2") == 0)) {
           expect_bezier_p2 = TRUE;
           continue;
         }
-        if (shape_type == SHAPE_BEZIER && (g_strcmp0(token, "p3") == 0 || g_strcmp0(token, "bezier_p3") == 0)) {
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_strcmp0(token, "p3") == 0 || g_strcmp0(token, "bezier_p3") == 0)) {
           expect_bezier_p3 = TRUE;
           continue;
         }
 
-        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p0=") || g_str_has_prefix(token, "bezier_p0=") ||
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_str_has_prefix(token, "p0=") || g_str_has_prefix(token, "bezier_p0=") ||
                                             g_str_has_prefix(token, "p0:") || g_str_has_prefix(token, "bezier_p0:"))) {
           const gchar *value = strchr(token, '=');
           if (!value) value = strchr(token, ':');
@@ -1989,7 +1989,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p1=") || g_str_has_prefix(token, "bezier_p1=") ||
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_str_has_prefix(token, "p1=") || g_str_has_prefix(token, "bezier_p1=") ||
                                             g_str_has_prefix(token, "p1:") || g_str_has_prefix(token, "bezier_p1:"))) {
           const gchar *value = strchr(token, '=');
           if (!value) value = strchr(token, ':');
@@ -2005,7 +2005,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p2=") || g_str_has_prefix(token, "bezier_p2=") ||
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_str_has_prefix(token, "p2=") || g_str_has_prefix(token, "bezier_p2=") ||
                                             g_str_has_prefix(token, "p2:") || g_str_has_prefix(token, "bezier_p2:"))) {
           const gchar *value = strchr(token, '=');
           if (!value) value = strchr(token, ':');
@@ -2021,7 +2021,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (shape_type == SHAPE_BEZIER && (g_str_has_prefix(token, "p3=") || g_str_has_prefix(token, "bezier_p3=") ||
+        if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && (g_str_has_prefix(token, "p3=") || g_str_has_prefix(token, "bezier_p3=") ||
                                             g_str_has_prefix(token, "p3:") || g_str_has_prefix(token, "bezier_p3:"))) {
           const gchar *value = strchr(token, '=');
           if (!value) value = strchr(token, ':');
@@ -2084,7 +2084,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         g_array_append_val(line_points, end_point);
 
         drawing.drawing_points = line_points;
-      } else if (shape_type == SHAPE_BEZIER) {
+      } else if (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) {
         bezier_points = g_array_sized_new(FALSE, FALSE, sizeof(DrawingPoint), 4);
 
         DrawingPoint p0, p1, p2, p3;
@@ -2912,6 +2912,7 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
         case SHAPE_LINE: shape_type_str = "line"; break;
         case SHAPE_ARROW: shape_type_str = "arrow"; break;
         case SHAPE_BEZIER: shape_type_str = "bezier"; break;
+        case SHAPE_CURVED_ARROW: shape_type_str = "curved_arrow"; break;
         case SHAPE_CUBE: shape_type_str = "cube"; break;
       }
 

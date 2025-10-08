@@ -160,7 +160,7 @@ static void shape_get_connection_point(Element *element, int point, int *cx, int
   Shape *shape = (Shape*)element;
   int unrotated_x, unrotated_y;
 
-  if (shape->has_bezier_points && shape->shape_type == SHAPE_BEZIER) {
+  if (shape->has_bezier_points && (shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW)) {
     double p0_x = element->x + shape->bezier_p0_u * element->width;
     double p0_y = element->y + shape->bezier_p0_v * element->height;
     double p1_x = element->x + shape->bezier_p1_u * element->width;
@@ -623,6 +623,63 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_stroke(cr);
       }
       break;
+    case SHAPE_CURVED_ARROW:
+      {
+        double width = MAX(element->width, 1);
+        double height = MAX(element->height, 1);
+
+        // Default control points if not set - creates curved arrow from bottom-left to top-right
+        double p0_u = shape->has_bezier_points ? shape->bezier_p0_u : 0.0;
+        double p0_v = shape->has_bezier_points ? shape->bezier_p0_v : 1.0;
+        double p1_u = shape->has_bezier_points ? shape->bezier_p1_u : 0.25;
+        double p1_v = shape->has_bezier_points ? shape->bezier_p1_v : 0.5;
+        double p2_u = shape->has_bezier_points ? shape->bezier_p2_u : 0.75;
+        double p2_v = shape->has_bezier_points ? shape->bezier_p2_v : 0.5;
+        double p3_u = shape->has_bezier_points ? shape->bezier_p3_u : 1.0;
+        double p3_v = shape->has_bezier_points ? shape->bezier_p3_v : 0.0;
+
+        double p0_x = element->x + p0_u * width;
+        double p0_y = element->y + p0_v * height;
+        double p1_x = element->x + p1_u * width;
+        double p1_y = element->y + p1_v * height;
+        double p2_x = element->x + p2_u * width;
+        double p2_y = element->y + p2_v * height;
+        double p3_x = element->x + p3_u * width;
+        double p3_y = element->y + p3_v * height;
+
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+
+        // Draw the bezier curve
+        cairo_move_to(cr, p0_x, p0_y);
+        cairo_curve_to(cr, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y);
+        cairo_stroke(cr);
+
+        // Calculate the tangent at the end of the curve for the arrowhead
+        // The tangent direction at p3 is along the vector from p2 to p3
+        double dx = p3_x - p2_x;
+        double dy = p3_y - p2_y;
+        double angle = atan2(dy, dx);
+
+        double arrow_length = MAX(shape->stroke_width * 3.0, 12.0);
+        double arrow_angle = 160.0 * G_PI / 180.0; // 160 degrees
+
+        double back_x = p3_x - arrow_length * cos(angle);
+        double back_y = p3_y - arrow_length * sin(angle);
+
+        double left_x = back_x + arrow_length * cos(angle - arrow_angle);
+        double left_y = back_y + arrow_length * sin(angle - arrow_angle);
+        double right_x = back_x + arrow_length * cos(angle + arrow_angle);
+        double right_y = back_y + arrow_length * sin(angle + arrow_angle);
+
+        cairo_move_to(cr, p3_x, p3_y);
+        cairo_line_to(cr, left_x, left_y);
+        cairo_move_to(cr, p3_x, p3_y);
+        cairo_line_to(cr, right_x, right_y);
+        cairo_stroke(cr);
+      }
+      break;
     case SHAPE_PLOT:
       {
         // Parse CSV-like text and draw plot
@@ -856,7 +913,7 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_restore(cr);
 
     // Draw control lines for bezier curves
-    if (shape->shape_type == SHAPE_BEZIER && shape->has_bezier_points) {
+    if ((shape->shape_type == SHAPE_BEZIER || shape->shape_type == SHAPE_CURVED_ARROW) && shape->has_bezier_points) {
       int p0_cx, p0_cy, p1_cx, p1_cy, p2_cx, p2_cy, p3_cx, p3_cy;
       shape_get_connection_point(element, 0, &p0_cx, &p0_cy);
       shape_get_connection_point(element, 1, &p1_cx, &p1_cy);
@@ -1219,9 +1276,26 @@ Shape* shape_create(ElementPosition position,
   shape->dragging_control_point = FALSE;
   shape->dragging_control_point_index = -1;
 
+  // Set has_bezier_points for bezier and curved arrow shapes by default
+  if (shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) {
+    shape->has_bezier_points = TRUE;
+
+    // Use different default control points for curved arrow
+    if (shape_type == SHAPE_CURVED_ARROW) {
+      shape->bezier_p0_u = 0.0;
+      shape->bezier_p0_v = 1.0;  // bottom-left
+      shape->bezier_p1_u = 0.25;
+      shape->bezier_p1_v = 0.5;  // control point
+      shape->bezier_p2_u = 0.75;
+      shape->bezier_p2_v = 0.5;  // control point
+      shape->bezier_p3_u = 1.0;
+      shape->bezier_p3_v = 0.0;  // top-right
+    }
+  }
+
   if (drawing_config && drawing_config->drawing_points && drawing_config->drawing_points->len >= 2) {
     DrawingPoint *points = (DrawingPoint*)drawing_config->drawing_points->data;
-    if (shape_type == SHAPE_BEZIER && drawing_config->drawing_points->len >= 4) {
+    if ((shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) && drawing_config->drawing_points->len >= 4) {
       // For bezier curves, we expect 4 points
       shape->bezier_p0_u = points[0].x;
       shape->bezier_p0_v = points[0].y;

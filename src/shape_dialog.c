@@ -24,6 +24,7 @@ typedef struct {
   GtkWidget *line_btn;
   GtkWidget *arrow_btn;
   GtkWidget *bezier_btn;
+  GtkWidget *curved_arrow_btn;
   GtkWidget *cube_btn;
   GtkWidget *plot_btn;
 } ShapeDialogData;
@@ -273,6 +274,49 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_stroke(cr);
     return;
   }
+  case SHAPE_CURVED_ARROW: {
+    // Draw bezier curve with arrowhead - smooth upward curve
+    double p0_x = inset + 4;
+    double p0_y = height - inset - 4;
+    double p1_x = width * 0.3;
+    double p1_y = height * 0.25;
+    double p2_x = width * 0.7;
+    double p2_y = height * 0.25;
+    double p3_x = width - inset - 4;
+    double p3_y = inset + 4;
+
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_line_width(cr, 2.5);
+
+    cairo_move_to(cr, p0_x, p0_y);
+    cairo_curve_to(cr, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y);
+    cairo_stroke(cr);
+
+    // Draw arrowhead - more prominent
+    double dx = p3_x - p2_x;
+    double dy = p3_y - p2_y;
+    double angle = atan2(dy, dx);
+    double arrow_len = 14.0;
+    double arrow_angle = 155.0 * G_PI / 180.0;
+
+    double back_x = p3_x - arrow_len * cos(angle);
+    double back_y = p3_y - arrow_len * sin(angle);
+
+    double left_x = back_x + arrow_len * cos(angle - arrow_angle);
+    double left_y = back_y + arrow_len * sin(angle - arrow_angle);
+    double right_x = back_x + arrow_len * cos(angle + arrow_angle);
+    double right_y = back_y + arrow_len * sin(angle + arrow_angle);
+
+    cairo_set_line_width(cr, 2.5);
+    cairo_move_to(cr, p3_x, p3_y);
+    cairo_line_to(cr, left_x, left_y);
+    cairo_move_to(cr, p3_x, p3_y);
+    cairo_line_to(cr, right_x, right_y);
+    cairo_stroke(cr);
+    return;
+  }
   case SHAPE_CUBE: {
     double offset = MIN(draw_width, draw_height) * 0.35;
     // Front face
@@ -428,7 +472,7 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   data->canvas_data->shape_stroke_style = data->stroke_style;
   data->canvas_data->shape_fill_style = data->fill_style;
   data->canvas_data->selected_shape_type = shape_type;
-  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER) {
+  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) {
     data->canvas_data->shape_filled = FALSE;
     data->filled = FALSE;
   } else {
@@ -494,6 +538,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
       break;
     case GDK_KEY_b:
       button = data->bezier_btn;
+      break;
+    case GDK_KEY_u:
+      button = data->curved_arrow_btn;
       break;
     case GDK_KEY_k:
       button = data->cube_btn;
@@ -697,11 +744,14 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   data->bezier_btn = create_shape_button("Bezier (B)", SHAPE_BEZIER, data);
   gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 1, 3, 1, 1);
 
+  data->curved_arrow_btn = create_shape_button("Curved Arrow (U)", SHAPE_CURVED_ARROW, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->curved_arrow_btn, 2, 3, 1, 1);
+
   data->cube_btn = create_shape_button("Cube (K)", SHAPE_CUBE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 2, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 0, 4, 1, 1);
 
   data->plot_btn = create_shape_button("Plot (G)", SHAPE_PLOT, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->plot_btn, 0, 4, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->plot_btn, 1, 4, 1, 1);
 
   // Add Cancel button
   gtk_dialog_add_button(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL);
