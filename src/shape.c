@@ -682,7 +682,7 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       break;
     case SHAPE_PLOT:
       {
-        // Parse CSV-like text and draw plot
+        // Parse multi-line plot data: each line can be "line \"Name\" x,y x,y ..." or simple "x,y" format
         if (!shape->text || strlen(shape->text) == 0) {
           // Draw empty plot with axes
           double margin = 20.0;
@@ -696,58 +696,137 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
           cairo_line_to(cr, element->x + element->width - margin, element->y + element->height - margin);
           cairo_stroke(cr);
         } else {
-          // Parse text as CSV points (x,y pairs per line or comma-separated)
-          GArray *x_values = g_array_new(FALSE, FALSE, sizeof(double));
-          GArray *y_values = g_array_new(FALSE, FALSE, sizeof(double));
+          // Data structure for multi-line support
+          typedef struct {
+            gchar *label;
+            GArray *x_values;
+            GArray *y_values;
+          } PlotLine;
 
+          GArray *plot_lines = g_array_new(FALSE, FALSE, sizeof(PlotLine));
+
+          // Parse input text
           gchar **lines = g_strsplit(shape->text, "\n", -1);
+          PlotLine *current_line = NULL;
+
           for (int i = 0; lines[i] != NULL; i++) {
             gchar *line = g_strstrip(lines[i]);
             if (strlen(line) == 0) continue;
 
-            // Try to parse as comma or space-separated values
-            gchar **parts = g_strsplit_set(line, ", \t", -1);
-            int value_count = 0;
-            double values[2] = {0.0, 0.0};
+            // Check if line starts with "line " keyword
+            if (g_str_has_prefix(line, "line ")) {
+              // New line definition: line "Name" x,y x,y ... or line Name x,y x,y ...
+              const char *rest = line + 5; // skip "line "
 
-            for (int j = 0; parts[j] != NULL && value_count < 2; j++) {
-              gchar *trimmed = g_strstrip(parts[j]);
-              if (strlen(trimmed) > 0) {
-                char *endptr;
-                double val = g_strtod(trimmed, &endptr);
-                if (*endptr == '\0' || g_ascii_isspace(*endptr)) {
-                  values[value_count++] = val;
+              // Parse label (with or without quotes)
+              gchar *label = NULL;
+              const char *data_start = rest;
+
+              if (*rest == '"') {
+                // Quoted label
+                rest++; // skip opening quote
+                const char *end_quote = strchr(rest, '"');
+                if (end_quote) {
+                  label = g_strndup(rest, end_quote - rest);
+                  data_start = end_quote + 1;
+                }
+              } else {
+                // Unquoted label (read until space or comma)
+                const char *label_end = rest;
+                while (*label_end && !g_ascii_isspace(*label_end) && *label_end != ',') {
+                  label_end++;
+                }
+                if (label_end > rest) {
+                  label = g_strndup(rest, label_end - rest);
+                  data_start = label_end;
                 }
               }
-            }
-            g_strfreev(parts);
 
-            if (value_count >= 2) {
-              g_array_append_val(x_values, values[0]);
-              g_array_append_val(y_values, values[1]);
-            } else if (value_count == 1) {
-              // If only one value, use index as x
-              double x_val = (double)x_values->len;
-              g_array_append_val(x_values, x_val);
-              g_array_append_val(y_values, values[0]);
+              // Create new plot line
+              PlotLine new_line;
+              new_line.label = label ? label : g_strdup("Series");
+              new_line.x_values = g_array_new(FALSE, FALSE, sizeof(double));
+              new_line.y_values = g_array_new(FALSE, FALSE, sizeof(double));
+              g_array_append_val(plot_lines, new_line);
+              current_line = &g_array_index(plot_lines, PlotLine, plot_lines->len - 1);
+
+              // Parse data points from the rest of the line
+              gchar **points = g_strsplit_set(data_start, " \t", -1);
+              for (int j = 0; points[j] != NULL; j++) {
+                gchar *point = g_strstrip(points[j]);
+                if (strlen(point) == 0) continue;
+
+                // Parse x,y pair
+                gchar **coords = g_strsplit(point, ",", 2);
+                if (coords[0] && coords[1]) {
+                  double x = g_strtod(g_strstrip(coords[0]), NULL);
+                  double y = g_strtod(g_strstrip(coords[1]), NULL);
+                  g_array_append_val(current_line->x_values, x);
+                  g_array_append_val(current_line->y_values, y);
+                }
+                g_strfreev(coords);
+              }
+              g_strfreev(points);
+
+            } else {
+              // Legacy format: simple x,y pairs or single values
+              if (plot_lines->len == 0) {
+                // Create default line if none exists
+                PlotLine new_line;
+                new_line.label = g_strdup("Data");
+                new_line.x_values = g_array_new(FALSE, FALSE, sizeof(double));
+                new_line.y_values = g_array_new(FALSE, FALSE, sizeof(double));
+                g_array_append_val(plot_lines, new_line);
+                current_line = &g_array_index(plot_lines, PlotLine, 0);
+              }
+
+              // Parse as comma or space-separated values
+              gchar **parts = g_strsplit_set(line, ", \t", -1);
+              int value_count = 0;
+              double values[2] = {0.0, 0.0};
+
+              for (int j = 0; parts[j] != NULL && value_count < 2; j++) {
+                gchar *trimmed = g_strstrip(parts[j]);
+                if (strlen(trimmed) > 0) {
+                  char *endptr;
+                  double val = g_strtod(trimmed, &endptr);
+                  if (*endptr == '\0' || g_ascii_isspace(*endptr)) {
+                    values[value_count++] = val;
+                  }
+                }
+              }
+              g_strfreev(parts);
+
+              if (value_count >= 2) {
+                g_array_append_val(current_line->x_values, values[0]);
+                g_array_append_val(current_line->y_values, values[1]);
+              } else if (value_count == 1) {
+                // If only one value, use index as x
+                double x_val = (double)current_line->x_values->len;
+                g_array_append_val(current_line->x_values, x_val);
+                g_array_append_val(current_line->y_values, values[0]);
+              }
             }
           }
           g_strfreev(lines);
 
-          if (x_values->len > 0) {
-            // Find min/max for scaling
-            double min_x = g_array_index(x_values, double, 0);
-            double max_x = g_array_index(x_values, double, 0);
-            double min_y = g_array_index(y_values, double, 0);
-            double max_y = g_array_index(y_values, double, 0);
+          if (plot_lines->len > 0) {
+            // Find global min/max for scaling across all lines
+            double min_x = G_MAXDOUBLE;
+            double max_x = -G_MAXDOUBLE;
+            double min_y = G_MAXDOUBLE;
+            double max_y = -G_MAXDOUBLE;
 
-            for (guint i = 1; i < x_values->len; i++) {
-              double x = g_array_index(x_values, double, i);
-              double y = g_array_index(y_values, double, i);
-              if (x < min_x) min_x = x;
-              if (x > max_x) max_x = x;
-              if (y < min_y) min_y = y;
-              if (y > max_y) max_y = y;
+            for (guint line_idx = 0; line_idx < plot_lines->len; line_idx++) {
+              PlotLine *pline = &g_array_index(plot_lines, PlotLine, line_idx);
+              for (guint i = 0; i < pline->x_values->len; i++) {
+                double x = g_array_index(pline->x_values, double, i);
+                double y = g_array_index(pline->y_values, double, i);
+                if (x < min_x) min_x = x;
+                if (x > max_x) max_x = x;
+                if (y < min_y) min_y = y;
+                if (y > max_y) max_y = y;
+              }
             }
 
             // Force axes to start from 0 (don't auto-scale away from zero)
@@ -844,50 +923,114 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
             cairo_line_to(cr, element->x + element->width - margin_right, element->y + element->height - margin_bottom);
             cairo_stroke(cr);
 
-            // Draw plot line
-            cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+            // Color palette for multiple lines
+            typedef struct { double r, g, b; } Color;
+            Color colors[] = {
+              {0.23, 0.51, 0.96}, // Blue
+              {0.94, 0.27, 0.27}, // Red
+              {0.13, 0.70, 0.29}, // Green
+              {0.60, 0.35, 0.71}, // Purple
+              {0.95, 0.61, 0.07}, // Orange
+              {0.00, 0.74, 0.83}, // Cyan
+              {0.91, 0.12, 0.39}, // Pink
+              {0.55, 0.63, 0.10}, // Lime
+            };
+            int num_colors = sizeof(colors) / sizeof(colors[0]);
+
+            // Draw each plot line with different color
             cairo_set_line_width(cr, shape->stroke_width);
             cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
             cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 
-            for (guint i = 0; i < x_values->len; i++) {
-              double x = g_array_index(x_values, double, i);
-              double y = g_array_index(y_values, double, i);
+            for (guint line_idx = 0; line_idx < plot_lines->len; line_idx++) {
+              PlotLine *pline = &g_array_index(plot_lines, PlotLine, line_idx);
 
-              // Normalize to plot area (flip y-axis for screen coordinates)
-              double norm_x = (x - min_x) / x_range;
-              double norm_y = 1.0 - ((y - min_y) / y_range);
-
-              double screen_x = element->x + margin_left + norm_x * plot_width;
-              double screen_y = element->y + margin_top + norm_y * plot_height;
-
-              if (i == 0) {
-                cairo_move_to(cr, screen_x, screen_y);
+              // Select color (use shape's color for single line, palette for multiple)
+              Color line_color;
+              if (plot_lines->len == 1) {
+                line_color.r = shape->stroke_r;
+                line_color.g = shape->stroke_g;
+                line_color.b = shape->stroke_b;
               } else {
-                cairo_line_to(cr, screen_x, screen_y);
+                line_color = colors[line_idx % num_colors];
+              }
+
+              cairo_set_source_rgba(cr, line_color.r, line_color.g, line_color.b, shape->stroke_a);
+
+              // Draw line
+              for (guint i = 0; i < pline->x_values->len; i++) {
+                double x = g_array_index(pline->x_values, double, i);
+                double y = g_array_index(pline->y_values, double, i);
+
+                double norm_x = (x - min_x) / x_range;
+                double norm_y = 1.0 - ((y - min_y) / y_range);
+
+                double screen_x = element->x + margin_left + norm_x * plot_width;
+                double screen_y = element->y + margin_top + norm_y * plot_height;
+
+                if (i == 0) {
+                  cairo_move_to(cr, screen_x, screen_y);
+                } else {
+                  cairo_line_to(cr, screen_x, screen_y);
+                }
+              }
+              cairo_stroke(cr);
+
+              // Draw points
+              for (guint i = 0; i < pline->x_values->len; i++) {
+                double x = g_array_index(pline->x_values, double, i);
+                double y = g_array_index(pline->y_values, double, i);
+
+                double norm_x = (x - min_x) / x_range;
+                double norm_y = 1.0 - ((y - min_y) / y_range);
+
+                double screen_x = element->x + margin_left + norm_x * plot_width;
+                double screen_y = element->y + margin_top + norm_y * plot_height;
+
+                cairo_arc(cr, screen_x, screen_y, shape->stroke_width + 1.0, 0, 2 * M_PI);
+                cairo_fill(cr);
               }
             }
-            cairo_stroke(cr);
 
-            // Draw points
-            cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
-            for (guint i = 0; i < x_values->len; i++) {
-              double x = g_array_index(x_values, double, i);
-              double y = g_array_index(y_values, double, i);
+            // Draw legend if multiple lines
+            if (plot_lines->len > 1) {
+              double legend_x = element->x + element->width - margin_right - 120;
+              double legend_y = element->y + margin_top + 10;
+              double legend_line_height = 18;
 
-              double norm_x = (x - min_x) / x_range;
-              double norm_y = 1.0 - ((y - min_y) / y_range);
+              PangoLayout *legend_layout = pango_cairo_create_layout(cr);
+              pango_layout_set_font_description(legend_layout, pango_font_description_from_string("Sans 9"));
 
-              double screen_x = element->x + margin_left + norm_x * plot_width;
-              double screen_y = element->y + margin_top + norm_y * plot_height;
+              for (guint line_idx = 0; line_idx < plot_lines->len; line_idx++) {
+                PlotLine *pline = &g_array_index(plot_lines, PlotLine, line_idx);
+                Color line_color = colors[line_idx % num_colors];
 
-              cairo_arc(cr, screen_x, screen_y, shape->stroke_width + 1.0, 0, 2 * M_PI);
-              cairo_fill(cr);
+                double y_pos = legend_y + line_idx * legend_line_height;
+
+                // Draw color box
+                cairo_set_source_rgba(cr, line_color.r, line_color.g, line_color.b, shape->stroke_a);
+                cairo_rectangle(cr, legend_x, y_pos, 12, 12);
+                cairo_fill(cr);
+
+                // Draw label text
+                cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a * 0.9);
+                pango_layout_set_text(legend_layout, pline->label, -1);
+                cairo_move_to(cr, legend_x + 18, y_pos);
+                pango_cairo_show_layout(cr, legend_layout);
+              }
+
+              g_object_unref(legend_layout);
             }
           }
 
-          g_array_free(x_values, TRUE);
-          g_array_free(y_values, TRUE);
+          // Clean up plot_lines
+          for (guint i = 0; i < plot_lines->len; i++) {
+            PlotLine *pline = &g_array_index(plot_lines, PlotLine, i);
+            g_free(pline->label);
+            g_array_free(pline->x_values, TRUE);
+            g_array_free(pline->y_values, TRUE);
+          }
+          g_array_free(plot_lines, TRUE);
         }
       }
       break;
