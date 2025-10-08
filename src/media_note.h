@@ -18,15 +18,18 @@ typedef struct {
   GtkWidget *text_view;
   gboolean editing;
 
-  // Video specific fields
-  GstElement *video_pipeline;
-  gboolean video_playing;
-  GtkWidget *video_widget;
-  unsigned char *video_data;  // Store video data in memory
-  int video_size;
+  // Media specific fields
+  GstElement *media_pipeline;
+  gboolean media_playing;
+  GtkWidget *media_widget;
+  unsigned char *media_data;  // Store media data in memory
+  int media_size;
   gint duration;
+  gboolean reset_media_data;
 
-  gboolean reset_video_data;
+  // Fields for data feeding
+  const guint8 *current_pos;
+  guint remaining;
 } MediaNote;
 
 MediaNote* media_note_create(ElementPosition position,
@@ -45,5 +48,6 @@ void media_note_update_position(Element *element, int x, int y, int z);
 void media_note_update_size(Element *element, int width, int height);
 void media_note_free(Element *element);
 void media_note_toggle_video_playback(Element *element);
+void media_note_toggle_audio_playback(Element *element);
 
 #endif

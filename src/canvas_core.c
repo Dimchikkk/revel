@@ -862,6 +862,25 @@ Element* create_visual_element(ModelElement *model_element, CanvasData *data) {
       };
 
       visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
+    } else if (model_element->audio && model_element->audio->duration >= 0) {
+      ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
+      ElementMedia media = {
+        .type = MEDIA_TYPE_AUDIO,
+        .image_data = model_element->image->image_data,  // Thumbnail
+        .image_size = model_element->image->image_size,
+        .video_data = model_element->audio->audio_data,  // Audio data in video_data field
+        .video_size = model_element->audio->audio_size,
+        .duration = model_element->audio->duration
+      };
+      ElementText text = {
+        .text = model_element->text->text,
+        .text_color = text_color,
+        .font_description = model_element->text->font_description,
+        .alignment = model_element->text->alignment,
+        .strikethrough = model_element->text->strikethrough,
+      };
+
+      visual_element = (Element*)media_note_create(position, bg_color, size, media, text, data);
     } else if(model_element->image && model_element->image->image_data && model_element->image->image_size > 0) {
       ElementColor text_color = { .r = model_element->text->r, .g = model_element->text->g, .b = model_element->text->b, .a = model_element->text->a };
       ElementMedia media = {

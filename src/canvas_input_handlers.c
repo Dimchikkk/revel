@@ -6,6 +6,7 @@
 #include "canvas_space_select.h"
 #include "element.h"
 #include "model.h"
+#include "database.h"
 #include "paper_note.h"
 #include "note.h"
 #include "media_note.h"
@@ -205,6 +206,106 @@ static void on_color_dialog_response(GtkDialog *dialog, int response_id, gpointe
   }
 
   gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void on_thumbnail_dialog_response(GtkNativeDialog *native, int response, gpointer user_data) {
+  GtkFileChooserNative *dialog = GTK_FILE_CHOOSER_NATIVE(native);
+  CanvasData *data = g_object_get_data(G_OBJECT(dialog), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(dialog), "element_uuid");
+
+  if (response == GTK_RESPONSE_ACCEPT && data && element_uuid) {
+    GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
+    if (file) {
+      gchar *file_path = g_file_get_path(file);
+      if (file_path) {
+        // Load the image
+        GError *error = NULL;
+        GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(file_path, &error);
+
+        if (pixbuf) {
+          // Convert pixbuf to PNG data
+          gchar *thumbnail_buffer = NULL;
+          gsize thumbnail_size = 0;
+          if (gdk_pixbuf_save_to_buffer(pixbuf, &thumbnail_buffer, &thumbnail_size, "png", NULL, NULL)) {
+            // Update the model element's thumbnail
+            ModelElement *model_element = g_hash_table_lookup(data->model->elements, element_uuid);
+            if (model_element) {
+              // Update based on media type
+              if (model_element->video) {
+                // Video - update thumbnail_data
+                g_free(model_element->video->thumbnail_data);
+                model_element->video->thumbnail_data = (unsigned char*)thumbnail_buffer;
+                model_element->video->thumbnail_size = thumbnail_size;
+                database_update_video_ref(data->model->db, model_element->video);
+              } else if (model_element->audio && model_element->image) {
+                // Audio - update image (which is used as thumbnail)
+                g_free(model_element->image->image_data);
+                model_element->image->image_data = (unsigned char*)thumbnail_buffer;
+                model_element->image->image_size = thumbnail_size;
+                if (model_element->image->id > 0) {
+                  database_update_image_ref(data->model->db, model_element->image);
+                }
+              } else if (model_element->image) {
+                // Image - update image data
+                g_free(model_element->image->image_data);
+                model_element->image->image_data = (unsigned char*)thumbnail_buffer;
+                model_element->image->image_size = thumbnail_size;
+                if (model_element->image->id > 0) {
+                  database_update_image_ref(data->model->db, model_element->image);
+                }
+              }
+
+              // Recreate visual element
+              if (model_element->visual_element) {
+                model_element->visual_element->vtable->free(model_element->visual_element);
+              }
+              model_element->visual_element = create_visual_element(model_element, data);
+
+              gtk_widget_queue_draw(data->drawing_area);
+            }
+          }
+          g_object_unref(pixbuf);
+        } else {
+          g_printerr("Failed to load image: %s\n", error ? error->message : "unknown error");
+          if (error) g_error_free(error);
+        }
+
+        g_free(file_path);
+      }
+      g_object_unref(file);
+    }
+  }
+
+  g_object_unref(dialog);
+}
+
+static void on_change_thumbnail_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+  CanvasData *data = g_object_get_data(G_OBJECT(action), "canvas_data");
+  const gchar *element_uuid = g_object_get_data(G_OBJECT(action), "element_uuid");
+
+  if (data && data->model && element_uuid) {
+    GtkFileChooserNative *dialog = gtk_file_chooser_native_new(
+      "Choose Thumbnail Image",
+      GTK_WINDOW(gtk_widget_get_root(data->drawing_area)),
+      GTK_FILE_CHOOSER_ACTION_OPEN,
+      "_Open",
+      "_Cancel"
+    );
+
+    // Set up file filter for images
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Image Files");
+    gtk_file_filter_add_mime_type(filter, "image/png");
+    gtk_file_filter_add_mime_type(filter, "image/jpeg");
+    gtk_file_filter_add_mime_type(filter, "image/jpg");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    g_object_set_data(G_OBJECT(dialog), "canvas_data", data);
+    g_object_set_data_full(G_OBJECT(dialog), "element_uuid", g_strdup(element_uuid), g_free);
+
+    g_signal_connect(dialog, "response", G_CALLBACK(on_thumbnail_dialog_response), NULL);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
+  }
 }
 
 static void on_change_color_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
@@ -699,6 +800,9 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
     MediaNote *media_note = (MediaNote*)element;
     if (media_note->media_type == MEDIA_TYPE_VIDEO) {
       media_note_toggle_video_playback(element);
+      return;
+    } else if (media_note->media_type == MEDIA_TYPE_AUDIO) {
+      media_note_toggle_audio_playback(element);
       return;
     }
   }
@@ -1580,6 +1684,11 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
   g_object_set_data_full(G_OBJECT(change_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
   g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
 
+  GSimpleAction *change_thumbnail_action = g_simple_action_new("change-thumbnail", NULL);
+  g_object_set_data(G_OBJECT(change_thumbnail_action), "canvas_data", data);
+  g_object_set_data_full(G_OBJECT(change_thumbnail_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+  g_signal_connect(change_thumbnail_action, "activate", G_CALLBACK(on_change_thumbnail_action), NULL);
+
   GSimpleAction *clone_action = g_simple_action_new("clone", NULL);
   g_object_set_data(G_OBJECT(clone_action), "canvas_data", data);
   g_object_set_data_full(G_OBJECT(clone_action), "element_uuid", g_strdup(model_element->uuid), g_free);
@@ -1610,6 +1719,7 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(lock_unlock_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
+  g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_thumbnail_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_text_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(hide_children_action));
@@ -1668,6 +1778,13 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
       show_bg_color = FALSE;
     }
   }
+
+  // Hide "Change Color" for media files, show "Change Thumbnail" instead
+  if (element->type == ELEMENT_MEDIA_FILE) {
+    show_bg_color = FALSE;
+    g_menu_append(modify_section, "Change Thumbnail", "menu.change-thumbnail");
+  }
+
   if (show_bg_color) {
     g_menu_append(modify_section, "Change Color", "menu.change-color");
   }

@@ -1335,6 +1335,160 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         g_print("Failed to parse parameters for video_create\n");
       }
     }
+    else if (g_strcmp0(tokens[0], "audio_create") == 0 && token_count >= 5) {
+      // audio_create ID PATH (x,y) (width,height) [rotation DEGREES]
+      const gchar *id = tokens[1];
+      const gchar *path = tokens[2];
+      int x, y, width, height;
+
+      if (dsl_parse_point_token(data, tokens[3], &x, &y) &&
+          dsl_parse_point_token(data, tokens[4], &width, &height)) {
+
+        double rotation_degrees = 0.0;
+        gboolean rotation_set = FALSE;
+
+        for (int t = 5; t < token_count; t++) {
+          const gchar *token = tokens[t];
+          if (!rotation_set && g_strcmp0(token, "rotation") == 0 && (t + 1) < token_count) {
+            if (parse_double_value(tokens[t + 1], &rotation_degrees)) {
+              rotation_set = TRUE;
+              t++;
+            }
+          } else if (!rotation_set && (g_str_has_prefix(token, "rotation=") || g_str_has_prefix(token, "rotation:"))) {
+            const gchar *value = strchr(token, '=');
+            if (!value) value = strchr(token, ':');
+            if (value && *(value + 1) != '\0') {
+              if (parse_double_value(value + 1, &rotation_degrees)) {
+                rotation_set = TRUE;
+              }
+            }
+          }
+        }
+
+        // Load audio from file
+        GError *error = NULL;
+        gchar *contents = NULL;
+        gsize length = 0;
+
+        if (!g_file_get_contents(path, &contents, &length, &error)) {
+          g_print("Failed to load audio from %s: %s\n", path, error ? error->message : "unknown error");
+          if (error) g_error_free(error);
+        } else {
+          // Get audio duration
+          gint64 duration_seconds = get_mp3_duration(path);
+          if (duration_seconds < 0) {
+            g_print("Warning: Could not determine duration for %s\n", path);
+            duration_seconds = 0;
+          }
+
+          // Try to extract album art, fallback to gray icon if not found
+          GdkPixbuf *audio_icon = extract_mp3_album_art(path);
+          if (!audio_icon) {
+            // No album art, create gray icon
+            audio_icon = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, 64, 64);
+            gdk_pixbuf_fill(audio_icon, 0x404040FF);  // Dark gray background
+          }
+
+          // Convert pixbuf to PNG data for storage
+          gchar *thumb_buffer = NULL;
+          gsize thumb_size = 0;
+          GError *thumb_error = NULL;
+          if (!gdk_pixbuf_save_to_buffer(audio_icon, &thumb_buffer, &thumb_size, "png", &thumb_error, NULL)) {
+            g_print("Failed to save audio thumbnail to buffer: %s\n", thumb_error ? thumb_error->message : "unknown");
+            if (thumb_error) g_error_free(thumb_error);
+            g_object_unref(audio_icon);
+            g_free(contents);
+            for (int j = 0; j < token_count; j++)
+              g_free(tokens[j]);
+            g_free(tokens);
+            continue;
+          }
+          g_object_unref(audio_icon);
+
+          // Extract filename from path (remove extension)
+          const gchar *filename = strrchr(path, '/');
+          filename = filename ? filename + 1 : path;
+
+          // Remove .mp3 extension for cleaner display
+          gchar *display_name = g_strdup(filename);
+          gchar *ext = g_strrstr(display_name, ".mp3");
+          if (ext) *ext = '\0';
+
+          // Format duration as MM:SS
+          int minutes = (int)(duration_seconds / 60);
+          int seconds = (int)(duration_seconds % 60);
+          gchar *duration_str = g_strdup_printf("%d:%02d", minutes, seconds);
+
+          // Combine: song name (top-left) + duration (bottom-right)
+          // We'll put both in text field with special formatting hint
+          gchar *combined_text = g_strdup_printf("%s\n%s", display_name, duration_str);
+          g_free(display_name);
+          g_free(duration_str);
+
+          ElementPosition position = { .x = x, .y = y, .z = data->next_z_index++ };
+          ElementColor bg_color = { .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
+          ElementColor text_color = { .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 };
+          ElementSize size = { .width = width, .height = height };
+          ElementMedia media = {
+            .type = MEDIA_TYPE_AUDIO,
+            .image_data = (unsigned char*)thumb_buffer,  // Thumbnail
+            .image_size = thumb_size,
+            .video_data = (unsigned char*)contents,  // Audio data in video_data field
+            .video_size = length,
+            .duration = (int)duration_seconds
+          };
+          ElementConnection connection = {
+            .from_element_uuid = NULL,
+            .to_element_uuid = NULL,
+            .from_point = -1,
+            .to_point = -1,
+          };
+          ElementDrawing drawing = {
+            .drawing_points = NULL,
+            .stroke_width = 0,
+          };
+          ElementText text = {
+            .text = combined_text,
+            .text_color = text_color,
+            .font_description = g_strdup("Ubuntu Mono 9"),
+            .alignment = g_strdup("bottom-right"),
+          };
+          ElementShape shape = {
+            .shape_type = -1,
+            .stroke_width = 0,
+            .filled = FALSE,
+            .stroke_style = STROKE_STYLE_SOLID,
+            .fill_style = FILL_STYLE_SOLID,
+            .stroke_color = { .r = bg_color.r, .g = bg_color.g, .b = bg_color.b, .a = 1.0 },
+          };
+
+          ElementConfig config = {
+            .type = ELEMENT_MEDIA_FILE,
+            .bg_color = bg_color,
+            .position = position,
+            .size = size,
+            .media = media,
+            .drawing = drawing,
+            .connection = connection,
+            .text = text,
+            .shape = shape,
+          };
+
+          ModelElement *model_element = model_create_element(data->model, config);
+
+          if (model_element) {
+            if (rotation_set && rotation_degrees != 0.0) {
+              model_element->rotation_degrees = rotation_degrees;
+            }
+            g_hash_table_insert(element_map, g_strdup(id), model_element);
+            dsl_runtime_register_element(data, id, model_element);
+            new_elements = g_list_prepend(new_elements, model_element);
+          }
+        }
+      } else {
+        g_print("Failed to parse parameters for audio_create\n");
+      }
+    }
     else if (g_strcmp0(tokens[0], "space_create") == 0 && token_count >= 5) {
       // space_create ID "Text" (x,y) (width,height)
       const gchar *id = tokens[1];

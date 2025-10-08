@@ -796,6 +796,7 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
       dsl_type_check_options(&ctx, tokens, 6, token_count, line_no, TRUE);
     } else if ((g_strcmp0(cmd, "image_create") == 0 ||
                 g_strcmp0(cmd, "video_create") == 0 ||
+                g_strcmp0(cmd, "audio_create") == 0 ||
                 g_strcmp0(cmd, "space_create") == 0) && token_count >= 5) {
       const gchar *elem_id = tokens[1];
       dsl_type_register_element(&ctx, elem_id, line_no);

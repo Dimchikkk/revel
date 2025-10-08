@@ -32,6 +32,12 @@ void model_video_free(ModelVideo *video) {
   g_free(video);
 }
 
+void model_audio_free(ModelAudio *audio) {
+  if (!audio) return;
+  if (audio->audio_data) g_free(audio->audio_data);
+  g_free(audio);
+}
+
 void model_image_free(ModelImage *image) {
   if (!image) return;
   if (image->image_data) {
@@ -102,6 +108,7 @@ Model* model_new_with_file(const char *db_filename) {
   model->colors = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->images = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->videos = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+  model->audios = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
   model->db = NULL;
 
   model->current_space_background_color = NULL;
@@ -299,6 +306,38 @@ ModelElement* model_create_element(Model *model, ElementConfig config) {
     model_video->duration = config.media.duration;
     model_video->ref_count = 1;
     element->video = model_video;
+  }
+
+  if (config.media.type == MEDIA_TYPE_AUDIO && config.media.video_data && config.media.video_size > 0) {
+    ModelAudio *model_audio = g_new0(ModelAudio, 1);
+    model_audio->id = -1;
+
+    // Audio data might be NULL if not loaded yet (lazy loading)
+    if (config.media.video_data && config.media.video_size > 0) {
+      model_audio->audio_data = g_malloc(config.media.video_size);
+      memcpy(model_audio->audio_data, config.media.video_data, config.media.video_size);
+      model_audio->audio_size = config.media.video_size;
+      model_audio->is_loaded = TRUE;
+    } else {
+      model_audio->audio_data = NULL;
+      model_audio->audio_size = 0;
+      model_audio->is_loaded = FALSE;
+    }
+
+    model_audio->duration = config.media.duration;
+    model_audio->ref_count = 1;
+    element->audio = model_audio;
+
+    // Also store the thumbnail as an image
+    if (config.media.image_data && config.media.image_size > 0) {
+      ModelImage *model_image = g_new0(ModelImage, 1);
+      model_image->id = -1;
+      model_image->image_data = g_malloc(config.media.image_size);
+      memcpy(model_image->image_data, config.media.image_data, config.media.image_size);
+      model_image->image_size = config.media.image_size;
+      model_image->ref_count = 1;
+      element->image = model_image;
+    }
   }
 
   if (config.drawing.drawing_points != NULL) {
@@ -651,6 +690,7 @@ int model_delete_element(Model *model, ModelElement *element) {
   if (element->bg_color && element->bg_color->ref_count > 0) element->bg_color->ref_count--;
   if (element->image && element->image->ref_count > 0) element->image->ref_count--;
   if (element->video && element->video->ref_count > 0) element->video->ref_count--;
+  if (element->audio && element->audio->ref_count > 0) element->audio->ref_count--;
 
   // Mark element as deleted
   element->state = MODEL_STATE_DELETED;
@@ -963,6 +1003,14 @@ int model_save_elements(Model *model) {
           if (element->video->ref_count < 1) {
             g_hash_table_remove(model->videos, GINT_TO_POINTER(element->video->id));
             model_video_free(element->video);
+          }
+        }
+
+        if (element->audio && element->audio->id > 0) {
+          database_update_audio_ref(model->db, element->audio);
+          if (element->audio->ref_count < 1) {
+            g_hash_table_remove(model->audios, GINT_TO_POINTER(element->audio->id));
+            model_audio_free(element->audio);
           }
         }
 
@@ -1343,6 +1391,19 @@ int model_load_video_data(Model *model, ModelVideo *video) {
 
   if (database_load_video_data(model->db, video->id, &video->video_data, &video->video_size)) {
     video->is_loaded = TRUE;
+    return 1;
+  }
+
+  return 0;
+}
+
+int model_load_audio_data(Model *model, ModelAudio *audio) {
+  if (!audio || audio->is_loaded) {
+    return 0;  // Already loaded or invalid
+  }
+
+  if (database_load_audio_data(model->db, audio->id, &audio->audio_data, &audio->audio_size)) {
+    audio->is_loaded = TRUE;
     return 1;
   }
 

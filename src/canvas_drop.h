@@ -10,5 +10,7 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
 GstSample* generate_video_thumbnail(const gchar *file_path);
 GdkPixbuf* sample_to_pixbuf(GstSample *sample);
 gint64 get_mp4_duration(const gchar *file_path);
+gint64 get_mp3_duration(const gchar *file_path);
+GdkPixbuf* extract_mp3_album_art(const gchar *file_path);
 
 #endif

@@ -365,6 +365,156 @@ gint64 get_mp4_duration(const gchar *file_path) {
   return -1;
 }
 
+// Function to get MP3 duration in seconds
+gint64 get_mp3_duration(const gchar *file_path) {
+  GError *error = NULL;
+  GstElement *pipeline;
+  GstStateChangeReturn ret;
+  gint64 duration_nanoseconds = -1;
+
+  // Initialize GStreamer if not already done
+  static gboolean gst_initialized = FALSE;
+  if (!gst_initialized) {
+    gst_init(NULL, NULL);
+    gst_initialized = TRUE;
+  }
+
+  // Create a simple pipeline to discover duration
+  gchar *pipeline_str = g_strdup_printf("filesrc location=\"%s\" ! decodebin ! fakesink", file_path);
+  pipeline = gst_parse_launch(pipeline_str, &error);
+  g_free(pipeline_str);
+
+  if (error) {
+    g_printerr("Failed to create pipeline: %s\n", error->message);
+    g_error_free(error);
+    return -1;
+  }
+
+  if (!pipeline) {
+    g_printerr("Failed to create GStreamer pipeline\n");
+    return -1;
+  }
+
+  // Set pipeline to PAUSED state to discover duration
+  ret = gst_element_set_state(pipeline, GST_STATE_PAUSED);
+  if (ret == GST_STATE_CHANGE_FAILURE) {
+    g_printerr("Failed to set pipeline to paused state\n");
+    gst_object_unref(pipeline);
+    return -1;
+  }
+
+  // Wait for state change to complete
+  ret = gst_element_get_state(pipeline, NULL, NULL, 5 * GST_SECOND);
+  if (ret == GST_STATE_CHANGE_FAILURE) {
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(pipeline);
+    return -1;
+  }
+
+  // Query the duration
+  if (gst_element_query_duration(pipeline, GST_FORMAT_TIME, &duration_nanoseconds)) {
+    gint64 duration_seconds = duration_nanoseconds / GST_SECOND;
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(pipeline);
+    return duration_seconds;
+  }
+
+  gst_element_set_state(pipeline, GST_STATE_NULL);
+  gst_object_unref(pipeline);
+  return -1;
+}
+
+// Extract album art from MP3 file if it exists
+GdkPixbuf* extract_mp3_album_art(const gchar *file_path) {
+  GError *error = NULL;
+  GstElement *pipeline;
+  GdkPixbuf *album_art = NULL;
+
+  // Initialize GStreamer if not already done
+  static gboolean gst_initialized = FALSE;
+  if (!gst_initialized) {
+    gst_init(NULL, NULL);
+    gst_initialized = TRUE;
+  }
+
+  // Create pipeline with uridecodebin to get tags
+  gchar *uri = g_filename_to_uri(file_path, NULL, NULL);
+  if (!uri) {
+    return NULL;
+  }
+
+  gchar *pipeline_str = g_strdup_printf("uridecodebin uri=\"%s\" name=decoder ! fakesink", uri);
+  pipeline = gst_parse_launch(pipeline_str, &error);
+  g_free(pipeline_str);
+  g_free(uri);
+
+  if (error) {
+    g_error_free(error);
+    return NULL;
+  }
+
+  if (!pipeline) {
+    return NULL;
+  }
+
+  // Set to PAUSED to get tags
+  GstStateChangeReturn ret = gst_element_set_state(pipeline, GST_STATE_PAUSED);
+  if (ret == GST_STATE_CHANGE_FAILURE) {
+    gst_object_unref(pipeline);
+    return NULL;
+  }
+
+  // Wait for state change
+  gst_element_get_state(pipeline, NULL, NULL, 5 * GST_SECOND);
+
+  // Get tags from bus
+  GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+  GstMessage *msg = NULL;
+
+  while ((msg = gst_bus_timed_pop_filtered(bus, 100 * GST_MSECOND, GST_MESSAGE_TAG)) != NULL) {
+    GstTagList *tags = NULL;
+    gst_message_parse_tag(msg, &tags);
+
+    GstSample *sample = NULL;
+    // Try GST_TAG_IMAGE first (album art)
+    if (gst_tag_list_get_sample(tags, GST_TAG_IMAGE, &sample) ||
+        gst_tag_list_get_sample(tags, GST_TAG_PREVIEW_IMAGE, &sample)) {
+
+      GstBuffer *buffer = gst_sample_get_buffer(sample);
+      if (buffer) {
+        GstMapInfo map;
+        if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
+          GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+          if (gdk_pixbuf_loader_write(loader, map.data, map.size, NULL)) {
+            if (gdk_pixbuf_loader_close(loader, NULL)) {
+              album_art = gdk_pixbuf_loader_get_pixbuf(loader);
+              if (album_art) {
+                g_object_ref(album_art);
+              }
+            }
+          }
+          g_object_unref(loader);
+          gst_buffer_unmap(buffer, &map);
+        }
+      }
+      gst_sample_unref(sample);
+    }
+
+    gst_tag_list_unref(tags);
+    gst_message_unref(msg);
+
+    if (album_art) {
+      break; // Found album art, stop looking
+    }
+  }
+
+  gst_object_unref(bus);
+  gst_element_set_state(pipeline, GST_STATE_NULL);
+  gst_object_unref(pipeline);
+
+  return album_art;
+}
+
 // Function to get file size in bytes
 static gint64 get_file_size(const gchar *file_path) {
   GFile *file = g_file_new_for_path(file_path);
@@ -397,6 +547,7 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
       const gchar *extension = strrchr(file_path, '.');
       if (extension) {
         gboolean is_video = (g_ascii_strcasecmp(extension, ".mp4") == 0);
+        gboolean is_audio = (g_ascii_strcasecmp(extension, ".mp3") == 0);
         gboolean is_image = (g_ascii_strcasecmp(extension, ".png") == 0 ||
                             g_ascii_strcasecmp(extension, ".jpg") == 0 ||
                             g_ascii_strcasecmp(extension, ".jpeg") == 0);
@@ -459,6 +610,152 @@ gboolean canvas_on_drop(GtkDropTarget *target, const GValue *value,
               g_free(message);
             }
           }
+        } else if (is_audio) {
+          // Handle audio files (MP3)
+
+          // Check if model is available
+          if (!data || !data->model) {
+            g_printerr("Error: Canvas data or model is NULL\n");
+            g_free(file_path);
+            return FALSE;
+          }
+
+          // Get duration
+          gint64 duration_seconds = get_mp3_duration(file_path);
+          if (duration_seconds < 0) {
+            duration_seconds = 0;
+          }
+
+          // Convert screen coordinates to canvas coordinates
+          int canvas_x, canvas_y;
+          canvas_screen_to_canvas(data, (int)x, (int)y, &canvas_x, &canvas_y);
+
+          // Center the element on the cursor (element is 605x145)
+          canvas_x -= 605 / 2;
+          canvas_y -= 145 / 2;
+
+          // Extract just the filename
+          gchar *filename = get_filename_from_path(file_path);
+
+          // Remove .mp3 extension for cleaner display
+          gchar *display_name = g_strdup(filename);
+          gchar *ext = g_strrstr(display_name, ".mp3");
+          if (ext) *ext = '\0';
+
+          // Format duration as MM:SS
+          int minutes = (int)(duration_seconds / 60);
+          int seconds = (int)(duration_seconds % 60);
+          gchar *duration_str = g_strdup_printf("%d:%02d", minutes, seconds);
+
+          // Combine: song name (top-left) + duration (bottom-right)
+          gchar *combined_text = g_strdup_printf("%s\n%s", display_name, duration_str);
+          g_free(display_name);
+          g_free(duration_str);
+
+          // Read audio file data
+          int audio_size = 0;
+          unsigned char *audio_data = read_file_data(file_path, &audio_size);
+
+          if (audio_data) {
+            // Try to extract album art, fallback to gray icon if not found
+            GdkPixbuf *audio_icon = extract_mp3_album_art(file_path);
+            if (!audio_icon) {
+              // No album art, create gray icon
+              audio_icon = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, 64, 64);
+              gdk_pixbuf_fill(audio_icon, 0x404040FF);  // Dark gray background
+            }
+
+            // Convert pixbuf to PNG for thumbnail
+            GError *error = NULL;
+            gchar *thumbnail_buffer = NULL;
+            gsize thumbnail_size = 0;
+            if (gdk_pixbuf_save_to_buffer(audio_icon, &thumbnail_buffer, &thumbnail_size, "png", &error, NULL)) {
+              ElementPosition position = {
+                .x = canvas_x,
+                .y = canvas_y,
+                .z = data->next_z_index++,
+              };
+              ElementColor bg_color = {
+                .r = 1.0,
+                .g = 1.0,
+                .b = 1.0,
+                .a = 1.0,
+              };
+              ElementColor text_color = {
+                .r = 1.0,
+                .g = 1.0,
+                .b = 1.0,
+                .a = 1.0,
+              };
+              ElementSize size = {
+                .width = 605,
+                .height = 145,
+              };
+
+              // Create ElementMedia structure for audio
+              ElementMedia media = {
+                .type = MEDIA_TYPE_AUDIO,
+                .image_data = (unsigned char*)thumbnail_buffer,  // Thumbnail for display
+                .image_size = thumbnail_size,
+                .video_data = audio_data,  // Audio data in video_data field
+                .video_size = audio_size,
+                .duration = (int)duration_seconds
+              };
+              ElementConnection connection = {
+                .from_element_uuid = NULL,
+                .to_element_uuid = NULL,
+                .from_point = -1,
+                .to_point = -1,
+              };
+              ElementDrawing drawing = {
+                .drawing_points = NULL,
+                .stroke_width = 0,
+              };
+              ElementText text = {
+                .text = combined_text,
+                .text_color = text_color,
+                .font_description = g_strdup("Ubuntu Mono 9"),
+                .alignment = g_strdup("bottom-right"),
+              };
+              ElementConfig config = {
+                .type = ELEMENT_MEDIA_FILE,
+                .bg_color = bg_color,
+                .position = position,
+                .size = size,
+                .media = media,
+                .drawing = drawing,
+                .connection = connection,
+                .text = text,
+              };
+
+              // Create audio note element
+              ModelElement *model_element = model_create_element(data->model, config);
+
+              if (model_element) {
+                model_element->visual_element = create_visual_element(model_element, data);
+                if (model_element->visual_element) {
+                  gtk_widget_queue_draw(data->drawing_area);
+                } else {
+                  g_printerr("Failed to create visual element\n");
+                }
+              } else {
+                g_printerr("Failed to create model element\n");
+              }
+
+              // Note: audio_data is now owned by the model_element, don't free it here
+              // thumbnail_buffer will be freed by model
+            } else {
+              g_printerr("Failed to create audio thumbnail: %s\n", error ? error->message : "Unknown error");
+              if (error) g_error_free(error);
+              g_free(audio_data);
+            }
+
+            g_object_unref(audio_icon);
+          } else {
+            g_printerr("Failed to read audio file: %s\n", file_path);
+          }
+
+          g_free(filename);
         } else if (is_image) {
           // Handle image files (PNG, JPEG)
           GError *error = NULL;

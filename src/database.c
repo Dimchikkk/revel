@@ -69,6 +69,15 @@ int database_create_tables(sqlite3 *db) {
     "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");"
 
+    "CREATE TABLE IF NOT EXISTS audio_refs ("
+    "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "    audio_data BLOB NOT NULL,"          // Audio file data (stored as BLOB)
+    "    audio_size INTEGER NOT NULL,"       // Audio file size in bytes
+    "    duration INTEGER,"                  // Audio duration in seconds
+    "    ref_count INTEGER DEFAULT 1,"
+    "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+    ");"
+
     "CREATE TABLE IF NOT EXISTS position_refs ("
     "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
     "    x INTEGER NOT NULL,"
@@ -134,6 +143,7 @@ int database_create_tables(sqlite3 *db) {
     "    target_space_uuid TEXT,"            // For space elements, UUID of the target space
     "    image_id INTEGER,"                  // Image note related
     "    video_id INTEGER,"                  // Video note related
+    "    audio_id INTEGER,"                  // Audio note related
     "    drawing_points BLOB,"               // For freehand drawings: array of points
     "    stroke_width INTEGER,"              // For freehand drawings and shapes: stroke width
     "    shape_type INTEGER,"                // For shapes: type (circle, rectangle, triangle)
@@ -155,6 +165,7 @@ int database_create_tables(sqlite3 *db) {
     "    FOREIGN KEY (bg_color_id) REFERENCES color_refs(id),"
     "    FOREIGN KEY (image_id) REFERENCES image_refs(id),"
     "    FOREIGN KEY (video_id) REFERENCES video_refs(id),"
+    "    FOREIGN KEY (audio_id) REFERENCES audio_refs(id),"
     "    FOREIGN KEY (from_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (to_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (target_space_uuid) REFERENCES spaces(uuid)"
@@ -761,6 +772,26 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     }
   }
 
+  int audio_id = -1;
+  if (element->audio) {
+    if (element->audio->id == -1) {
+      if (!database_create_audio_ref(db,
+                                     element->audio->audio_data, element->audio->audio_size,
+                                     element->audio->duration,
+                                     &audio_id)) {
+        fprintf(stderr, "Failed to create audio ref for element %s\n", element->uuid);
+        return 0;
+      }
+      element->audio->id = audio_id;
+    } else {
+      if (!database_update_audio_ref(db, element->audio)) {
+        fprintf(stderr, "Failed to update audio ref for element %s\n", element->uuid);
+        return 0;
+      }
+      audio_id = element->audio->id;
+    }
+  }
+
   // Handle color reference (optional)
   if (element->bg_color) {
     if (element->bg_color->id == -1) {
@@ -779,8 +810,8 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
     return 0;
   }
 
-  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, locked) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = "INSERT INTO elements (uuid, space_uuid, type_id, position_id, size_id, text_id, bg_color_id, from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, image_id, video_id, audio_id, drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, locked) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -836,6 +867,12 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 
   if (video_id > 0) {
     sqlite3_bind_int(stmt, param_index++, video_id);
+  } else {
+    sqlite3_bind_null(stmt, param_index++);
+  }
+
+  if (audio_id > 0) {
+    sqlite3_bind_int(stmt, param_index++, audio_id);
   } else {
     sqlite3_bind_null(stmt, param_index++);
   }
@@ -896,7 +933,7 @@ int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *e
 
 int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **element) {
   const char *sql = "SELECT type_id, position_id, size_id, text_id, bg_color_id, "
-    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id, video_id, "
+    "from_element_uuid, to_element_uuid, from_point, to_point, target_space_uuid, space_uuid, image_id, video_id, audio_id, "
     "drawing_points, stroke_width, shape_type, filled, stroke_style, fill_style, stroke_color, connection_type, arrowhead_type, rotation_degrees, description, created_at, locked "
     "FROM elements WHERE uuid = ?";
   sqlite3_stmt *stmt;
@@ -997,6 +1034,15 @@ int database_read_element(sqlite3 *db, const char *element_uuid, ModelElement **
     int video_id = sqlite3_column_int(stmt, col++);
     if (video_id > 0) {
       if (!database_read_video_ref(db, video_id, &elem->video)) {
+        sqlite3_finalize(stmt);
+        model_element_free(elem);
+        return 0; // Error
+      }
+    }
+
+    int audio_id = sqlite3_column_int(stmt, col++);
+    if (audio_id > 0) {
+      if (!database_read_audio_ref(db, audio_id, &elem->audio)) {
         sqlite3_finalize(stmt);
         model_element_free(elem);
         return 0; // Error
@@ -1331,7 +1377,7 @@ int database_load_space(sqlite3 *db, Model *model) {
   const char *sql =
     "SELECT e.uuid, e.type_id, e.position_id, e.size_id, e.text_id, e.bg_color_id, "
     "e.from_element_uuid, e.to_element_uuid, e.from_point, e.to_point, e.target_space_uuid, e.space_uuid, "
-    "e.image_id, e.video_id, "
+    "e.image_id, e.video_id, e.audio_id, "
     "e.drawing_points, e.stroke_width, e.shape_type, e.filled, e.stroke_style, e.fill_style, e.stroke_color, "
     "e.connection_type, e.arrowhead_type, e.rotation_degrees, e.description, e.created_at, e.locked, "
     "t.type, t.ref_count, "
@@ -1372,6 +1418,7 @@ int database_load_space(sqlite3 *db, Model *model) {
     COL_SPACE_UUID,
     COL_IMAGE_ID,
     COL_VIDEO_ID,
+    COL_AUDIO_ID,
     COL_DRAWING_POINTS,
     COL_STROKE_WIDTH,
     COL_SHAPE_TYPE,
@@ -1550,7 +1597,7 @@ int database_load_space(sqlite3 *db, Model *model) {
       element->image = image;
     }
 
-    // Extract image (check if already loaded in model)
+    // Extract video (check if already loaded in model)
     int video_id = sqlite3_column_int(stmt, COL_VIDEO_ID);
     if (video_id > 0) {
       ModelVideo *video = g_hash_table_lookup(model->videos, GINT_TO_POINTER(video_id));
@@ -1565,6 +1612,23 @@ int database_load_space(sqlite3 *db, Model *model) {
         }
       }
       element->video = video;
+    }
+
+    // Extract audio (check if already loaded in model)
+    int audio_id = sqlite3_column_int(stmt, COL_AUDIO_ID);
+    if (audio_id > 0) {
+      ModelAudio *audio = g_hash_table_lookup(model->audios, GINT_TO_POINTER(audio_id));
+      if (!audio) {
+        // Not in cache, load from database
+        if (database_read_audio_ref(db, audio_id, &audio)) {
+          g_hash_table_insert(model->audios, GINT_TO_POINTER(audio_id), audio);
+        } else {
+          fprintf(stderr, "Failed to load audio %d for element %s\n", audio_id, uuid);
+          model_element_free(element);
+          continue;
+        }
+      }
+      element->audio = audio;
     }
 
     const void *drawing_blob = sqlite3_column_blob(stmt, COL_DRAWING_POINTS);
@@ -1706,7 +1770,6 @@ int database_set_space_parent_id(sqlite3 *db, const char *space_uuid, const char
 }
 
 // Remove references with ref_count < 1 from database and return total rows deleted
-// Remove references with ref_count < 1 from database and return total rows deleted
 int cleanup_database_references(sqlite3 *db) {
   int total_deleted = 0;
   char *err_msg = NULL;
@@ -1720,6 +1783,7 @@ int cleanup_database_references(sqlite3 *db) {
     "size_refs",
     "image_refs",
     "video_refs",
+    "audio_refs",
     "text_refs",
     "color_refs",
     NULL
@@ -2293,6 +2357,128 @@ int database_update_video_ref(sqlite3 *db, ModelVideo *video) {
 
   sqlite3_finalize(stmt);
   return 1;
+}
+
+int database_create_audio_ref(sqlite3 *db,
+                             const unsigned char *audio_data, int audio_size,
+                             int duration, int *audio_id) {
+  const char *sql = "INSERT INTO audio_refs (audio_data, audio_size, duration) VALUES (?, ?, ?)";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  int param_index = 1;
+  sqlite3_bind_blob(stmt, param_index++, audio_data, audio_size, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, param_index++, audio_size);
+  sqlite3_bind_int(stmt, param_index++, duration);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    fprintf(stderr, "Failed to create audio: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    return 0;
+  }
+
+  *audio_id = sqlite3_last_insert_rowid(db);
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+int database_read_audio_ref(sqlite3 *db, int audio_id, ModelAudio **audio) {
+  if (audio_id <= 0) {
+    fprintf(stderr, "Error: Invalid audio_id (%d) in database_read_audio_ref\n", audio_id);
+    return 0;
+  }
+
+  const char *sql = "SELECT id, audio_size, duration, ref_count FROM audio_refs WHERE id = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_int(stmt, 1, audio_id);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    *audio = g_new0(ModelAudio, 1);
+    (*audio)->id = sqlite3_column_int(stmt, 0);
+    (*audio)->audio_size = sqlite3_column_int(stmt, 1);
+    (*audio)->duration = sqlite3_column_int(stmt, 2);
+    (*audio)->ref_count = sqlite3_column_int(stmt, 3);
+    (*audio)->audio_data = NULL;  // Audio data not loaded yet
+    (*audio)->is_loaded = FALSE;
+
+    sqlite3_finalize(stmt);
+    return 1;
+  }
+
+  sqlite3_finalize(stmt);
+  return 0;
+}
+
+int database_update_audio_ref(sqlite3 *db, ModelAudio *audio) {
+  if (audio->id <= 0) {
+    fprintf(stderr, "Error: Invalid audio_id (%d) in database_update_audio_ref\n", audio->id);
+    return 0;
+  }
+
+  const char *sql = "UPDATE audio_refs SET audio_size = ?, duration = ?, ref_count = ? WHERE id = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  int param_index = 1;
+  sqlite3_bind_int(stmt, param_index++, audio->audio_size);
+  sqlite3_bind_int(stmt, param_index++, audio->duration);
+  sqlite3_bind_int(stmt, param_index++, audio->ref_count);
+  sqlite3_bind_int(stmt, param_index++, audio->id);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    fprintf(stderr, "Failed to update audio: %s\n", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    return 0;
+  }
+
+  sqlite3_finalize(stmt);
+  return 1;
+}
+
+int database_load_audio_data(sqlite3 *db, int audio_id, unsigned char **audio_data, int *audio_size) {
+  if (audio_id <= 0) {
+    fprintf(stderr, "Error: Invalid audio_id (%d) in database_load_audio_data\n", audio_id);
+    return 0;
+  }
+
+  const char *sql = "SELECT audio_data, audio_size FROM audio_refs WHERE id = ?";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_int(stmt, 1, audio_id);
+
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    const void *blob_data = sqlite3_column_blob(stmt, 0);
+    *audio_size = sqlite3_column_int(stmt, 1);
+
+    if (blob_data && *audio_size > 0) {
+      *audio_data = g_malloc(*audio_size);
+      memcpy(*audio_data, blob_data, *audio_size);
+      sqlite3_finalize(stmt);
+      return 1;
+    }
+  }
+
+  sqlite3_finalize(stmt);
+  return 0;
 }
 
 int database_get_space_background(sqlite3 *db, const char *space_uuid, char **background_color) {

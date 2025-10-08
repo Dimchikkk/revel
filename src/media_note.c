@@ -26,17 +26,15 @@ static ElementVTable media_note_vtable = {
 
 static void need_data_callback(GstElement *appsrc, guint size, gpointer user_data) {
   MediaNote *media_note = (MediaNote*)user_data;
-  static guint8 *current_pos = NULL;
-  static guint remaining = 0;
 
   // Initialize on first call or if reset flag is set
-  if (current_pos == NULL || media_note->reset_video_data) {
-    current_pos = media_note->video_data;
-    remaining = media_note->video_size;
-    media_note->reset_video_data = FALSE; // Reset the flag
+  if (media_note->current_pos == NULL || media_note->reset_media_data) {
+    media_note->current_pos = media_note->media_data;
+    media_note->remaining = media_note->media_size;
+    media_note->reset_media_data = FALSE; // Reset the flag
   }
 
-  if (remaining == 0) {
+  if (media_note->remaining == 0) {
     // End of data - provide proper return value location
     GstFlowReturn ret;
     g_signal_emit_by_name(appsrc, "end-of-stream", &ret);
@@ -45,28 +43,32 @@ static void need_data_callback(GstElement *appsrc, guint size, gpointer user_dat
       g_printerr("End-of-stream failed: %d\n", ret);
     }
 
-    current_pos = NULL; // Reset for next playback
+    media_note->current_pos = NULL; // Reset for next playback
     return;
   }
 
-  guint chunk_size = MIN(size, remaining);
+  // Use a larger chunk size for better typefinding, especially for audio
+  // Typefind needs at least 4KB, but we'll use 64KB for better performance
+  guint chunk_size = MIN(MAX(size, 65536), media_note->remaining);
   GstBuffer *buffer = gst_buffer_new_allocate(NULL, chunk_size, NULL);
   GstMapInfo map;
 
   if (gst_buffer_map(buffer, &map, GST_MAP_WRITE)) {
-    memcpy(map.data, current_pos, chunk_size);
+    memcpy(map.data, media_note->current_pos, chunk_size);
     gst_buffer_unmap(buffer, &map);
 
-    current_pos += chunk_size;
-    remaining -= chunk_size;
+    media_note->current_pos += chunk_size;
+    media_note->remaining -= chunk_size;
 
     GstFlowReturn ret;
     g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
+
     if (ret != GST_FLOW_OK) {
-      g_printerr("Failed to push buffer: %d\n", ret);
+      g_printerr("Failed to push buffer: %d at position %ld, stopping data feed\n",
+                 ret, (long)(media_note->media_size - media_note->remaining));
       // Reset position on error
-      current_pos = NULL;
-      remaining = 0;
+      media_note->current_pos = NULL;
+      media_note->remaining = 0;
     }
   }
 
@@ -74,14 +76,61 @@ static void need_data_callback(GstElement *appsrc, guint size, gpointer user_dat
 }
 
 // Video bus callback to handle messages
-// Video bus callback to handle messages
-static gboolean video_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_data) {
+static gboolean media_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_data) {
   MediaNote *media_note = (MediaNote*)user_data;
 
   switch (GST_MESSAGE_TYPE(msg)) {
   case GST_MESSAGE_EOS:
     // End of stream - normal termination
-    g_print("Video playback finished\n");
+    if (media_note->media_pipeline) {
+      gst_element_set_state(media_note->media_pipeline, GST_STATE_PAUSED);
+      media_note->media_playing = FALSE;
+    }
+
+    // For audio, try to play next connected audio
+    if (media_note->media_type == MEDIA_TYPE_AUDIO && media_note->base.canvas_data) {
+      // Get the model element for this audio
+      ModelElement *current_model = model_get_by_visual(media_note->base.canvas_data->model,
+                                                        (Element*)media_note);
+
+      if (current_model) {
+        // Find outgoing connection from this audio element
+        GHashTableIter iter;
+        gpointer key, value;
+        g_hash_table_iter_init(&iter, media_note->base.canvas_data->model->elements);
+
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+          ModelElement *elem = (ModelElement*)value;
+
+          // Check if this is a connection from the current audio element
+          if (elem->type && elem->type->type == ELEMENT_CONNECTION &&
+              elem->from_element_uuid &&
+              g_strcmp0(elem->from_element_uuid, current_model->uuid) == 0) {
+
+            // Found a connection from current audio, get the target element
+            if (elem->to_element_uuid) {
+              ModelElement *next_elem = g_hash_table_lookup(
+                media_note->base.canvas_data->model->elements,
+                elem->to_element_uuid
+              );
+
+              // Check if target is also an audio element
+              if (next_elem && next_elem->visual_element &&
+                  next_elem->type && next_elem->type->type == ELEMENT_MEDIA_FILE &&
+                  next_elem->audio) {
+
+                // Start playing the next audio
+                MediaNote *next_audio = (MediaNote*)next_elem->visual_element;
+                if (next_audio->media_type == MEDIA_TYPE_AUDIO) {
+                  media_note_toggle_audio_playback((Element*)next_audio);
+                  break; // Only play the first connected audio
+                }
+              }
+            }
+          }
+        }
+      }
+    }
     break;
 
   case GST_MESSAGE_ERROR: {
@@ -93,7 +142,7 @@ static gboolean video_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
     if (g_strrstr(err->message, "Output window was closed") ||
         g_strrstr(err->message, "window close")) {
     } else {
-      g_printerr("Video error: %s\n", err->message);
+      g_printerr("Media error: %s\n", err->message);
       if (debug_info) {
         g_printerr("Debug info: %s\n", debug_info);
       }
@@ -114,7 +163,7 @@ static gboolean video_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
         g_strrstr(err->message, "window close")) {
       // Just ignore these warnings
     } else {
-      g_printerr("Video warning: %s\n", err->message);
+      g_printerr("Media warning: %s\n", err->message);
     }
 
     g_error_free(err);
@@ -129,19 +178,19 @@ static gboolean video_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
   // Always clean up pipeline for EOS or error
   if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS || GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
     // Stop and free pipeline
-    if (media_note->video_pipeline) {
-      gst_element_set_state(media_note->video_pipeline, GST_STATE_NULL);
-      gst_object_unref(media_note->video_pipeline);
-      media_note->video_pipeline = NULL;
+    if (media_note->media_pipeline) {
+      gst_element_set_state(media_note->media_pipeline, GST_STATE_NULL);
+      gst_object_unref(media_note->media_pipeline);
+      media_note->media_pipeline = NULL;
     }
 
     // Reset playback flag
-    media_note->video_playing = FALSE;
+    media_note->media_playing = FALSE;
 
-    // Remove video widget from overlay
-    if (media_note->video_widget) {
-      gtk_widget_unparent(media_note->video_widget);
-      media_note->video_widget = NULL;
+    // Remove media widget from overlay
+    if (media_note->media_widget) {
+      gtk_widget_unparent(media_note->media_widget);
+      media_note->media_widget = NULL;
     }
 
     // Redraw the canvas
@@ -179,9 +228,9 @@ MediaNote* media_note_create(ElementPosition position,
   media_note->text_view = NULL;
   media_note->editing = FALSE;
   media_note->media_type = media.type;
-  media_note->video_playing = FALSE;
-  media_note->video_pipeline = NULL;
-  media_note->video_widget = NULL;
+  media_note->media_playing = FALSE;
+  media_note->media_pipeline = NULL;
+  media_note->media_widget = NULL;
 
   media_note->text_r = text.text_color.r;
   media_note->text_g = text.text_color.g;
@@ -191,7 +240,7 @@ MediaNote* media_note_create(ElementPosition position,
   media_note->strikethrough = text.strikethrough;
   media_note->alignment = g_strdup(text.alignment ? text.alignment : "bottom-right");
 
-  media_note->reset_video_data = FALSE;
+  media_note->reset_media_data = FALSE;
 
   // Always try to create pixbuf from image_data (this is the thumbnail)
   if (media.image_data && media.image_size > 0) {
@@ -204,12 +253,12 @@ MediaNote* media_note_create(ElementPosition position,
     gdk_pixbuf_fill(media_note->pixbuf, 0x303030FF);
   }
 
-  // Store video data for playback
-  if (media.type == MEDIA_TYPE_VIDEO && media.video_data && media.video_size > 0) {
-    media_note->video_data = g_malloc(media.video_size);
-    memcpy(media_note->video_data, media.video_data, media.video_size);
-    media_note->video_size = media.video_size;
-    media_note->reset_video_data = TRUE;
+  // Store media data for playback
+  if ((media.type == MEDIA_TYPE_VIDEO || media.type == MEDIA_TYPE_AUDIO) && media.video_data && media.video_size > 0) {
+    media_note->media_data = g_malloc(media.video_size);
+    memcpy(media_note->media_data, media.video_data, media.video_size);
+    media_note->media_size = media.video_size;
+    media_note->reset_media_data = TRUE;
   }
 
   return media_note;
@@ -250,15 +299,15 @@ void media_note_toggle_video_playback(Element *element) {
       return;
     }
 
-    media_note->video_data = g_malloc(model_element->video->video_size);
-    memcpy(media_note->video_data, model_element->video->video_data, model_element->video->video_size);
-    media_note->video_size = model_element->video->video_size;
+    media_note->media_data = g_malloc(model_element->video->video_size);
+    memcpy(media_note->media_data, model_element->video->video_data, model_element->video->video_size);
+    media_note->media_size = model_element->video->video_size;
   }
 
   // CREATE PIPELINE ON FIRST PLAY
-  if (!media_note->video_pipeline) {
+  if (!media_note->media_pipeline) {
     GError *error = NULL;
-    media_note->video_pipeline = gst_parse_launch(
+    media_note->media_pipeline = gst_parse_launch(
                                                   "appsrc name=source is-live=true format=time ! "
                                                   "queue ! "
                                                   "qtdemux name=demux "
@@ -274,7 +323,7 @@ void media_note_toggle_video_playback(Element *element) {
     }
 
     // Configure appsrc
-    GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->video_pipeline), "source");
+    GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->media_pipeline), "source");
     if (appsrc) {
       GstCaps *caps = gst_caps_new_simple("video/quicktime",
                                           "variant", G_TYPE_STRING, "iso",
@@ -293,24 +342,24 @@ void media_note_toggle_video_playback(Element *element) {
     }
 
     // Set up bus callback
-    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(media_note->video_pipeline));
-    gst_bus_add_watch(bus, video_bus_callback, media_note);
+    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(media_note->media_pipeline));
+    gst_bus_add_watch(bus, media_bus_callback, media_note);
     gst_object_unref(bus);
 
     // Create video widget
-    media_note->video_widget = gtk_drawing_area_new();
-    gtk_widget_set_size_request(media_note->video_widget,
+    media_note->media_widget = gtk_drawing_area_new();
+    gtk_widget_set_size_request(media_note->media_widget,
                                 media_note->base.width,
                                 media_note->base.height);
 
     // Make widget ignore input events so clicks go through
-    gtk_widget_set_sensitive(media_note->video_widget, FALSE);
-    gtk_widget_set_can_focus(media_note->video_widget, FALSE);
-    gtk_widget_set_focusable(media_note->video_widget, FALSE);
+    gtk_widget_set_sensitive(media_note->media_widget, FALSE);
+    gtk_widget_set_can_focus(media_note->media_widget, FALSE);
+    gtk_widget_set_focusable(media_note->media_widget, FALSE);
 
     // Add to overlay
     gtk_overlay_add_overlay(GTK_OVERLAY(media_note->base.canvas_data->overlay),
-                            media_note->video_widget);
+                            media_note->media_widget);
 
     // Position video widget
     int screen_x, screen_y;
@@ -319,29 +368,29 @@ void media_note_toggle_video_playback(Element *element) {
                             media_note->base.y,
                             &screen_x, &screen_y);
 
-    gtk_widget_set_margin_start(media_note->video_widget, screen_x);
-    gtk_widget_set_margin_top(media_note->video_widget, screen_y);
+    gtk_widget_set_margin_start(media_note->media_widget, screen_x);
+    gtk_widget_set_margin_top(media_note->media_widget, screen_y);
   }
 
-  if (media_note->video_playing) {
+  if (media_note->media_playing) {
     // Pause playback
-    gst_element_set_state(media_note->video_pipeline, GST_STATE_PAUSED);
-    media_note->video_playing = FALSE;
+    gst_element_set_state(media_note->media_pipeline, GST_STATE_PAUSED);
+    media_note->media_playing = FALSE;
 
-    if (media_note->video_widget) {
-      gtk_widget_hide(media_note->video_widget);
+    if (media_note->media_widget) {
+      gtk_widget_hide(media_note->media_widget);
     }
   } else {
     // If pipeline was in NULL state (after EOS), we need to reset it
     GstState state;
-    gst_element_get_state(media_note->video_pipeline, &state, NULL, 0);
+    gst_element_get_state(media_note->media_pipeline, &state, NULL, 0);
 
     if (state == GST_STATE_NULL) {
       // Reset the pipeline to READY state first
-      gst_element_set_state(media_note->video_pipeline, GST_STATE_READY);
+      gst_element_set_state(media_note->media_pipeline, GST_STATE_READY);
 
       // Reset appsrc to prepare for new data
-      GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->video_pipeline), "source");
+      GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->media_pipeline), "source");
       if (appsrc) {
         // Reset appsrc properties
         g_object_set(appsrc, "block", TRUE, NULL);
@@ -350,12 +399,12 @@ void media_note_toggle_video_playback(Element *element) {
     }
 
     // Start playback from beginning
-    media_note->reset_video_data = TRUE;
-    gst_element_set_state(media_note->video_pipeline, GST_STATE_PLAYING);
-    media_note->video_playing = TRUE;
+    media_note->reset_media_data = TRUE;
+    gst_element_set_state(media_note->media_pipeline, GST_STATE_PLAYING);
+    media_note->media_playing = TRUE;
 
-    if (media_note->video_widget) {
-      gtk_widget_show(media_note->video_widget);
+    if (media_note->media_widget) {
+      gtk_widget_show(media_note->media_widget);
 
       // Return focus to main window after showing video
       GtkWindow *main_window = GTK_WINDOW(
@@ -365,6 +414,121 @@ void media_note_toggle_video_playback(Element *element) {
         g_timeout_add(100, (GSourceFunc)return_focus_to_main, main_window);
       }
     }
+  }
+
+  // Redraw main canvas
+  gtk_widget_queue_draw(GTK_WIDGET(media_note->base.canvas_data->drawing_area));
+}
+
+void media_note_toggle_audio_playback(Element *element) {
+  MediaNote *media_note = (MediaNote*)element;
+
+  if (media_note->media_type != MEDIA_TYPE_AUDIO) {
+    return;
+  }
+
+  if (!gst_initialized) {
+    GError *error = NULL;
+    if (!gst_init_check(NULL, NULL, &error)) {
+      g_printerr("Failed to initialize GStreamer: %s\n", error->message);
+      g_error_free(error);
+      return;
+    }
+    gst_initialized = TRUE;
+  }
+
+  ModelElement *model_element = model_get_by_visual(media_note->base.canvas_data->model, element);
+  if (!model_element || !model_element->audio) {
+    return;
+  }
+
+  // Load audio data if not loaded
+  if (!model_element->audio->is_loaded) {
+    if (!model_load_audio_data(media_note->base.canvas_data->model, model_element->audio)) {
+      g_printerr("Failed to load audio data\n");
+      return;
+    }
+
+    media_note->media_data = g_malloc(model_element->audio->audio_size);
+    memcpy(media_note->media_data, model_element->audio->audio_data, model_element->audio->audio_size);
+    media_note->media_size = model_element->audio->audio_size;
+  }
+
+  // CREATE PIPELINE ON FIRST PLAY
+  if (!media_note->media_pipeline) {
+    GError *error = NULL;
+    media_note->media_pipeline = gst_parse_launch(
+                                                  "appsrc name=source is-live=true format=time ! "
+                                                  "queue ! "
+                                                  "decodebin ! audioconvert ! autoaudiosink",
+                                                  &error
+                                                  );
+
+    if (error) {
+      g_printerr("Failed to create audio pipeline: %s\n", error->message);
+      g_error_free(error);
+      return;
+    }
+
+    // Configure appsrc
+    GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->media_pipeline), "source");
+    if (appsrc) {
+      GstCaps *caps = gst_caps_new_simple("audio/mpeg",
+                                          "mpegversion", G_TYPE_INT, 1,
+                                          "layer", G_TYPE_INT, 3,
+                                          NULL);
+      // Set appsrc properties - limit buffering so we don't push all data at once
+      g_object_set(appsrc,
+                   "caps", caps,
+                   "stream-type", 0, // GST_APP_STREAM_TYPE_STREAM
+                   "format", GST_FORMAT_TIME,
+                   "is-live", FALSE,
+                   "max-bytes", (guint64)(1 * 1024 * 1024), // Buffer max 1MB - controls backpressure
+                   NULL);
+      gst_caps_unref(caps);
+
+      g_signal_connect(appsrc, "need-data", G_CALLBACK(need_data_callback), media_note);
+      gst_object_unref(appsrc);
+    }
+
+    // Set up bus callback
+    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(media_note->media_pipeline));
+    gst_bus_add_watch(bus, media_bus_callback, media_note);
+    gst_object_unref(bus);
+  }
+
+  if (media_note->media_playing) {
+    // Pause playback
+    gst_element_set_state(media_note->media_pipeline, GST_STATE_PAUSED);
+    media_note->media_playing = FALSE;
+  } else {
+    // If pipeline was in NULL state (after EOS), we need to reset it
+    GstState state;
+    gst_element_get_state(media_note->media_pipeline, &state, NULL, 0);
+
+    if (state == GST_STATE_NULL) {
+      // Reset the pipeline to READY state first
+      gst_element_set_state(media_note->media_pipeline, GST_STATE_READY);
+
+      // Reset appsrc to prepare for new data
+      GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->media_pipeline), "source");
+      if (appsrc) {
+        g_object_set(appsrc, "block", TRUE, NULL);
+        gst_object_unref(appsrc);
+      }
+    }
+
+    // Start playback from beginning
+    media_note->reset_media_data = TRUE;
+
+    GstStateChangeReturn ret = gst_element_set_state(media_note->media_pipeline, GST_STATE_PLAYING);
+
+    if (ret == GST_STATE_CHANGE_FAILURE) {
+      g_printerr("Failed to start audio playback\n");
+      return;
+    }
+
+    media_note->media_playing = TRUE;
   }
 
   // Redraw main canvas
@@ -427,8 +591,8 @@ void media_note_finish_editing(Element *element) {
 void media_note_start_editing(Element *element, GtkWidget *overlay) {
   MediaNote *media_note = (MediaNote*)element;
 
-  // Don't allow editing while video is playing
-  if (media_note->media_type == MEDIA_TYPE_VIDEO && media_note->video_playing) {
+  // Don't allow editing while media is playing
+  if (media_note->media_type == MEDIA_TYPE_VIDEO && media_note->media_playing) {
     return;
   }
 
@@ -548,13 +712,13 @@ void media_note_update_position(Element *element, int x, int y, int z) {
     }
   }
 
-  // Update video widget position if it exists
-  if (media_note->video_widget) {
+  // Update media widget position if it exists
+  if (media_note->media_widget) {
     int screen_x, screen_y;
     canvas_canvas_to_screen(element->canvas_data, x, y, &screen_x, &screen_y);
 
-    gtk_widget_set_margin_start(media_note->video_widget, screen_x);
-    gtk_widget_set_margin_top(media_note->video_widget, screen_y);
+    gtk_widget_set_margin_start(media_note->media_widget, screen_x);
+    gtk_widget_set_margin_top(media_note->media_widget, screen_y);
   }
 
   // Update model
@@ -603,9 +767,9 @@ void media_note_update_size(Element *element, int width, int height) {
     }
   }
 
-  // Update video widget size if it exists
-  if (media_note->video_widget) {
-    gtk_widget_set_size_request(media_note->video_widget, width, height);
+  // Update media widget size if it exists
+  if (media_note->media_widget) {
+    gtk_widget_set_size_request(media_note->media_widget, width, height);
   }
 
   // Update model
@@ -660,9 +824,9 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   // Draw the pixbuf at the origin (since we already translated)
   gdk_cairo_set_source_pixbuf(cr, media_note->pixbuf, 0, 0);
 
-  // If video is playing, draw with some transparency
-  if (media_note->media_type == MEDIA_TYPE_VIDEO && media_note->video_playing) {
-    cairo_paint_with_alpha(cr, 0.3); // Semi-transparent when video is playing
+  // If media is playing, draw with some transparency
+  if (media_note->media_type == MEDIA_TYPE_VIDEO && media_note->media_playing) {
+    cairo_paint_with_alpha(cr, 0.3); // Semi-transparent when media is playing
   } else {
     cairo_paint(cr); // Opaque when not playing
   }
@@ -670,12 +834,12 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   // Restore the state (back to original coordinate system)
   cairo_restore(cr);
 
-  // Draw play icon for video elements
-  if (media_note->media_type == MEDIA_TYPE_VIDEO) {
+  // Draw play icon for video and audio elements
+  if (media_note->media_type == MEDIA_TYPE_VIDEO || media_note->media_type == MEDIA_TYPE_AUDIO) {
     cairo_save(cr);
 
-    if (media_note->video_playing) {
-      // Draw pause icon when video is playing
+    if (media_note->media_playing) {
+      // Draw pause icon when media is playing
       cairo_set_source_rgba(cr, 0, 0, 0, 0.7);
       cairo_arc(cr, element->x + element->width/2, element->y + element->height/2,
                 MIN(element->width, element->height)/4, 0, 2 * G_PI);
@@ -687,7 +851,7 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_rectangle(cr, element->x + element->width/2 + 6, element->y + element->height/2 - 15, 6, 30);
       cairo_fill(cr);
     } else {
-      // Draw play icon when video is not playing
+      // Draw play icon when media is not playing
       cairo_set_source_rgba(cr, 0, 0, 0, 0.7);
       cairo_arc(cr, element->x + element->width/2, element->y + element->height/2,
                 MIN(element->width, element->height)/4, 0, 2 * G_PI);
@@ -703,9 +867,9 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_restore(cr);
   }
 
-  // Draw text or duration (if not editing and not video playing)
+  // Draw text or duration (if not editing and not media playing)
   if (!media_note->editing &&
-      !(media_note->media_type == MEDIA_TYPE_VIDEO && media_note->video_playing)) {
+      !(media_note->media_type == MEDIA_TYPE_VIDEO && media_note->media_playing)) {
     cairo_save(cr);
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *font_desc = pango_font_description_from_string(media_note->font_description);
@@ -979,28 +1143,28 @@ void media_note_free(Element *element) {
   if (media_note->font_description) g_free(media_note->font_description);
   if (media_note->alignment) g_free(media_note->alignment);
 
-  // Free video data
-  if (media_note->video_data) {
-    g_free(media_note->video_data);
-    media_note->video_data = NULL;
-    media_note->video_size = 0;
+  // Free media data
+  if (media_note->media_data) {
+    g_free(media_note->media_data);
+    media_note->media_data = NULL;
+    media_note->media_size = 0;
   }
 
   if (media_note->text_view && GTK_IS_WIDGET(media_note->text_view) && gtk_widget_get_parent(media_note->text_view)) {
     gtk_widget_unparent(media_note->text_view);
   }
 
-  if (media_note->video_pipeline) {
-    gst_element_set_state(media_note->video_pipeline, GST_STATE_NULL);
-    gst_object_unref(media_note->video_pipeline);
-    media_note->video_pipeline = NULL;
+  if (media_note->media_pipeline) {
+    gst_element_set_state(media_note->media_pipeline, GST_STATE_NULL);
+    gst_object_unref(media_note->media_pipeline);
+    media_note->media_pipeline = NULL;
   }
 
-  if (media_note->video_widget && GTK_IS_WIDGET(media_note->video_widget)) {
-    gtk_widget_unparent(media_note->video_widget);
+  if (media_note->media_widget && GTK_IS_WIDGET(media_note->media_widget)) {
+    gtk_widget_unparent(media_note->media_widget);
   }
 
-  media_note->video_playing = FALSE;
+  media_note->media_playing = FALSE;
 
   g_free(media_note);
 }

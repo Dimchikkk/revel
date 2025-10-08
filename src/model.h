@@ -22,6 +22,7 @@ typedef struct _ModelElement ModelElement;
 typedef struct _Model Model;
 typedef struct _ModelImage ModelImage;
 typedef struct _ModelVideo ModelVideo;
+typedef struct _ModelAudio ModelAudio;
 
 struct _ModelVideo {
   gint id;
@@ -33,6 +34,15 @@ struct _ModelVideo {
   int video_size;                 // Video file size in bytes
   gint duration;                  // Video duration in seconds
   gboolean is_loaded;             // Flag to track if video data is loaded
+  gint ref_count;
+};
+
+struct _ModelAudio {
+  gint id;
+  unsigned char *audio_data;      // Audio file data (NULL until loaded)
+  int audio_size;                 // Audio file size in bytes
+  gint duration;                  // Audio duration in seconds
+  gboolean is_loaded;             // Flag to track if audio data is loaded
   gint ref_count;
 };
 
@@ -91,6 +101,7 @@ struct _ModelElement {
   ModelText* text;            // Shared text
   ModelColor* bg_color;       // Shared bg_color
   ModelVideo* video;          // Shared video
+  ModelAudio* audio;          // Shared audio
   ModelImage* image;
   Element* visual_element;    // Pointer to visual representation
   ModelState state;
@@ -140,6 +151,7 @@ struct _Model {
   GHashTable *colors;         // bg_color_id -> ModelColor* (shared color)
   GHashTable *images;         // image_id -> ModelImage (shared image)
   GHashTable *videos;         // video_id -> ModelVideo (shared video)
+  GHashTable *audios;         // audio_id -> ModelAudio (shared audio)
   sqlite3 *db;
 
   // Cached space settings
@@ -222,6 +234,7 @@ int model_get_all_spaces(Model *model, GList **spaces);
 void model_free_space_info(ModelSpaceInfo *space);
 
 int model_load_video_data(Model *model, ModelVideo *video);
+int model_load_audio_data(Model *model, ModelAudio *audio);
 
 // Space background and grid operations
 void model_load_space_settings(Model *model, const char *space_uuid);

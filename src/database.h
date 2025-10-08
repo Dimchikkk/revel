@@ -68,6 +68,14 @@ int database_read_video_ref(sqlite3 *db, int video_id, ModelVideo **video);
 // This method doesn't update video data (it needs to be like that since video data is loaded lazyly).
 int database_update_video_ref(sqlite3 *db, ModelVideo *video);
 
+// Audio reference operations
+int database_create_audio_ref(sqlite3 *db,
+                             const unsigned char *audio_data, int audio_size,
+                             int duration, int *audio_id);
+int database_read_audio_ref(sqlite3 *db, int audio_id, ModelAudio **audio);
+int database_update_audio_ref(sqlite3 *db, ModelAudio *audio);
+int database_load_audio_data(sqlite3 *db, int audio_id, unsigned char **audio_data, int *audio_size);
+
 // Element operations
 int database_create_element(sqlite3 *db, const char *space_uuid, ModelElement *element);
 // Read element can be used to check whether element exists in table, if model element is NULL it doesn't exist
