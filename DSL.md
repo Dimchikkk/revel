@@ -5,11 +5,12 @@ Complete reference for Revel's Domain Specific Language (DSL) for creating compl
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Canvas Settings](#canvas-settings)
-3. [Element Creation](#element-creation)
-4. [Connections](#connections)
-5. [Animation System](#animation-system)
-6. [Variables & Events](#variables--events)
+2. [Tutorial: Rule 110 Cellular Automaton](#tutorial-rule-110-cellular-automaton)
+3. [Canvas Settings](#canvas-settings)
+4. [Element Creation](#element-creation)
+5. [Connections](#connections)
+6. [Animation System](#animation-system)
+7. [Variables & Events](#variables--events)
 
 ---
 
@@ -28,6 +29,224 @@ Revel DSL allows you to programmatically create complex layouts with notes, shap
 - Position/size format: `(x,y)` or `(width,height)` in pixels
 - Text strings: Use `"quotes"` for multi-word text
 - Escape sequences in text: `\n` (newline), `\t` (tab), `\"` (quote), `\\` (backslash)
+
+---
+
+## Tutorial: Rule 110 Cellular Automaton
+
+Let's build a complete program from scratch using `examples/rule110.dsl`. This tutorial demonstrates variables, arrays, loops, event handlers, and dynamic visualization. Rule 110 is a **Turing-complete** cellular automaton - meaning it can theoretically compute anything a traditional computer can!
+
+### What We're Building
+
+A 500×500 cellular automaton simulator that:
+- Displays 500 cells across 500 generations
+- Each cell is either alive (white) or dead (black)
+- Updates based on Rule 110 pattern matching
+- Runs interactively when you click START
+
+### Step 1: Setup the Canvas
+
+```dsl
+# Dark background, no grid
+canvas_background (0.05,0.05,0.08,1.0) false
+```
+
+**What you learned:**
+- `canvas_background` sets background color and grid visibility
+- Colors use `(r,g,b,a)` format with values 0.0-1.0
+- `false` disables the grid for cleaner visualization
+
+### Step 2: Declare Variables and Arrays
+
+```dsl
+# 500 cells - start with rightmost = 1
+int c[500] 0
+set c[499] 1
+```
+
+**What you learned:**
+- `int c[500] 0` creates an integer array with 500 elements, all initialized to 0
+- Arrays hold the current state: `c[i]` is 1 (alive) or 0 (dead)
+- `set c[499] 1` sets the last cell alive (our starting seed)
+
+```dsl
+int next[500] 0
+int gen 0
+int step 0
+int i 0
+int left 0
+int right 0
+int pattern 0
+```
+
+**What you learned:**
+- Declare all variables before use
+- `next[500]` holds the next generation while computing
+- `gen` tracks generation count (0-500)
+- `step` controls our state machine (1=draw, 2=compute, 3=copy)
+- `i`, `left`, `right`, `pattern` are temporary work variables
+
+### Step 3: Create UI Elements
+
+```dsl
+shape_create btn rectangle "START" (400,20) (150,50) filled true bg (0.2,0.6,0.9,1.0) text_color (1.0,1.0,1.0,1.0) font "Ubuntu Bold 20"
+text_create lbl "Gen: 0 / 500" (570,30) (150,30) text_color (0.8,0.8,0.8,1.0) font "Ubuntu 16"
+text_create title "Rule 110 - 500x500" (50,75) (500,40) text_color (1.0,1.0,1.0,1.0) font "Ubuntu Bold 24"
+```
+
+**What you learned:**
+- `shape_create ID TYPE "text" (x,y) (w,h)` creates shapes with optional text
+- `filled true` fills the shape with background color
+- `text_color` sets the label color inside shapes
+- `text_create` makes standalone text without background
+- Position elements using pixel coordinates
+
+### Step 4: Make the Button Interactive
+
+```dsl
+on click btn
+  set step 1
+end
+```
+
+**What you learned:**
+- `on click ELEMENT_ID` runs when element is clicked (not dragged)
+- `set VARIABLE VALUE` assigns values
+- Setting `step` to 1 triggers our state machine
+
+### Step 5: Draw Current Generation (Step 1)
+
+```dsl
+on variable step == 1
+  set gen {gen + 1}
+  for i 0 499
+    shape_create r${gen}c${i} rectangle "" ({10+i*6},{120+gen*6}) (5,5) filled true bg {c[i],c[i],c[i],1.0}
+  end
+  text_update lbl "Gen: ${gen} / 500"
+  for i 0 499
+    set next[i] 0
+  end
+  set step 2
+end
+```
+
+**What you learned:**
+- `on variable VAR == VALUE` runs every time variable equals that value
+- `{expr}` evaluates expressions: `{gen + 1}`, `{10+i*6}`
+- `for i START END` loops from START to END (inclusive)
+- `${var}` interpolates variables in strings and element IDs
+- Dynamic element IDs: `r${gen}c${i}` creates unique IDs like `r1c0`, `r1c1`, etc.
+- Each cell is a 5×5 square at position `(10+i*6, 120+gen*6)`
+- Grayscale color trick: `bg {c[i],c[i],c[i],1.0}` creates black (0,0,0) or white (1,1,1)
+- `text_update` changes text of existing elements
+- Clear `next` array before computing
+
+### Step 6: Apply Rule 110 Logic (Step 2)
+
+Rule 110 checks each cell and its neighbors to determine next state:
+
+| Pattern | 111 | 110 | 101 | 100 | 011 | 010 | 001 | 000 |
+|---------|-----|-----|-----|-----|-----|-----|-----|-----|
+| Binary  | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
+| Result  | 0   | 1   | 1   | 0   | 1   | 1   | 1   | 0   |
+
+Rule 110 = `01101110` binary = produces 1 for patterns 1,2,3,5,6
+
+```dsl
+on variable step == 2
+  # Cell 0 (left edge) - assume left neighbor is 0
+  set left 0
+  set right {c[1]}
+  set pattern {left * 4 + c[0] * 2 + right}
+  set next[0] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
+```
+
+**What you learned:**
+- Handle edge cases separately (cell 0 has no left neighbor)
+- `pattern = left*4 + center*2 + right` converts 3-bit binary to decimal
+- Boolean trick: `(pattern == 1) + (pattern == 2) + ...` evaluates to 1 if any match, 0 otherwise
+- This implements Rule 110 lookup without conditional statements
+
+```dsl
+  # Cells 1-498 (middle)
+  for i 1 498
+    set left {c[i - 1]}
+    set right {c[i + 1]}
+    set pattern {left * 4 + c[i] * 2 + right}
+    set next[i] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
+  end
+```
+
+**What you learned:**
+- Loop through middle cells that have both neighbors
+- Expressions in array indices: `c[i - 1]`, `c[i + 1]`
+- Same Rule 110 logic for all middle cells
+
+```dsl
+  # Cell 499 (right edge) - assume right neighbor is 0
+  set left {c[498]}
+  set right 0
+  set pattern {left * 4 + c[499] * 2 + right}
+  set next[499] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
+
+  set step 3
+end
+```
+
+**What you learned:**
+- Handle right edge (no right neighbor)
+- Move to step 3 when computation complete
+
+### Step 7: Copy and Continue (Step 3)
+
+```dsl
+on variable step == 3
+  for i 0 499
+    set c[i] {next[i]}
+  end
+  set step {(gen < 500) * 1}
+end
+```
+
+**What you learned:**
+- Copy `next` array back to `c` for next iteration
+- Clever continuation: `{(gen < 500) * 1}` evaluates to 1 if gen < 500, else 0
+- When step becomes 1 again, the cycle repeats (draw → compute → copy)
+- When gen reaches 500, step becomes 0 and simulation stops
+
+### The Complete State Machine
+
+```
+Click START → step=1
+              ↓
+         Draw cells (step 1) → increment gen → step=2
+                                                  ↓
+                                        Compute Rule 110 (step 2) → step=3
+                                                                       ↓
+                                                       Copy next→c (step 3) → step=1 or 0
+                                                                                ↓
+                                                                          (repeat or stop)
+```
+
+### Key Concepts Summary
+
+1. **Arrays**: `int c[500] 0` declares and initializes array
+2. **Loops**: `for i 0 499` iterates with inclusive bounds
+3. **Expressions**: `{gen + 1}`, `{10+i*6}` compute values dynamically
+4. **Interpolation**: `${gen}` in strings, `r${gen}c${i}` in IDs
+5. **Event Handlers**: `on click`, `on variable` trigger actions
+6. **State Machine**: Use integer variable to control program flow
+7. **Boolean Math**: `(condition) + (condition)` counts true conditions
+8. **Dynamic Creation**: Generate elements in loops with unique IDs
+9. **Array Access**: Use variables as indices: `c[i]`, `next[i]`
+
+### Running the Example
+
+```bash
+./revel --dsl examples/rule110.dsl
+```
+
+Click START and watch Rule 110 generate 500 generations of Turing-complete patterns!
 
 ---
 

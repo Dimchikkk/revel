@@ -1,6 +1,5 @@
 # Rule 110 - 500 cells × 500 generations
 # Square cells for proper visualization
-
 canvas_background (0.05,0.05,0.08,1.0) false
 
 # 500 cells - start with rightmost = 1
