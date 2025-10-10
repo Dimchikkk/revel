@@ -1112,6 +1112,12 @@ gboolean dsl_runtime_handle_click(CanvasData *data, const gchar *element_id) {
   return handled;
 }
 
+GHashTable* dsl_runtime_get_click_handlers(CanvasData *data) {
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime) return NULL;
+  return runtime->click_handlers;
+}
+
 void dsl_runtime_prepare_animation_engine(CanvasData *data) {
   if (!data) return;
 

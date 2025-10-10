@@ -63,6 +63,7 @@ void dsl_runtime_add_click_handler(CanvasData *data, const gchar *element_id, gc
 void dsl_runtime_add_variable_handler(CanvasData *data, const gchar *var_name, gchar *block_source);
 void dsl_runtime_add_variable_handler_conditional(CanvasData *data, const gchar *var_name, gchar *block_source, DSLConditionType condition_type, double condition_value);
 gboolean dsl_runtime_handle_click(CanvasData *data, const gchar *element_id);
+GHashTable* dsl_runtime_get_click_handlers(CanvasData *data);
 
 void dsl_runtime_prepare_animation_engine(CanvasData *data);
 void dsl_runtime_add_move_animation(CanvasData *data, ModelElement *model_element,

@@ -82,6 +82,7 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   data->move_cursor = gdk_cursor_new_from_name("move", NULL);
   data->resize_cursor = gdk_cursor_new_from_name("nwse-resize", NULL);
   data->connect_cursor = gdk_cursor_new_from_name("crosshair", NULL);
+  data->pointer_cursor = gdk_cursor_new_from_name("pointer", NULL);
   data->current_cursor = NULL;
 
   data->panning = FALSE;
@@ -346,6 +347,7 @@ void canvas_data_free(CanvasData *data) {
   if (data->move_cursor) g_object_unref(data->move_cursor);
   if (data->resize_cursor) g_object_unref(data->resize_cursor);
   if (data->connect_cursor) g_object_unref(data->connect_cursor);
+  if (data->pointer_cursor) g_object_unref(data->pointer_cursor);
 
   g_list_free(data->selected_elements);
 

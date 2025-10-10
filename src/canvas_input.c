@@ -23,6 +23,8 @@
 #include "font_dialog.h"
 #include "clone_dialog.h"
 #include <graphene.h>
+#include "dsl/dsl_runtime.h"
+
 
 typedef struct {
   const char *shortcut;
@@ -370,6 +372,22 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
         canvas_set_cursor(data, gdk_cursor_new_from_name("crosshair", NULL));
       }
       return;
+    }
+
+    // Check for DSL click handlers
+    ModelElement *model_element = model_get_by_visual(data->model, element);
+    if (model_element) {
+      const gchar *element_id = dsl_runtime_lookup_element_id(data, model_element);
+      if (element_id) {
+        GHashTable *click_handlers = dsl_runtime_get_click_handlers(data);
+        if (click_handlers) {
+          GPtrArray *handlers = (GPtrArray *)g_hash_table_lookup(click_handlers, element_id);
+          if (handlers && handlers->len > 0) {
+            canvas_set_cursor(data, data->pointer_cursor);
+            return;
+          }
+        }
+      }
     }
 
     canvas_set_cursor(data, gdk_cursor_new_from_name("move", NULL));

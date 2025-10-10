@@ -39,6 +39,7 @@ struct _CanvasData {
   GdkCursor *move_cursor;
   GdkCursor *resize_cursor;
   GdkCursor *connect_cursor;
+  GdkCursor *pointer_cursor;
   GdkCursor *current_cursor;
 
   gboolean panning;
