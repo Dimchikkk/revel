@@ -22,11 +22,11 @@ shape_create down_btn circle "▼" (640,360) (90,90) bg #f97316 filled true font
 
 # Button interactions
 on click up_btn
-  add current_temp 1
+  set current_temp {current_temp + 1}
 end
 
 on click down_btn
-  add current_temp -1
+  set current_temp {current_temp - 1}
 end
 
 # Clamp and feedback when temperature changes

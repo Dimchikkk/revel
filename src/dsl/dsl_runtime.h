@@ -16,6 +16,7 @@ typedef enum {
   DSL_VAR_REAL,
   DSL_VAR_BOOL,
   DSL_VAR_STRING,
+  DSL_VAR_ARRAY,
 } DSLVarType;
 
 typedef struct {
@@ -25,6 +26,9 @@ typedef struct {
   gchar *expression;
   gboolean evaluating;
   gboolean is_global;
+  // Array support
+  double *array_values;
+  int array_size;
 } DSLVariable;
 
 DSLRuntime* dsl_runtime_get(CanvasData *data);
@@ -34,6 +38,8 @@ DSLVariable* dsl_runtime_ensure_variable(CanvasData *data, const gchar *name);
 
 gboolean dsl_runtime_set_variable(CanvasData *data, const gchar *name, double value, gboolean trigger_watchers);
 gboolean dsl_runtime_set_string_variable(CanvasData *data, const gchar *name, const gchar *value, gboolean trigger_watchers);
+gboolean dsl_runtime_set_array_element(CanvasData *data, const gchar *name, int index, double value, gboolean trigger_watchers);
+double dsl_runtime_get_array_element(CanvasData *data, const gchar *name, int index);
 
 gboolean dsl_runtime_recompute_expressions(CanvasData *data);
 
@@ -43,8 +49,19 @@ void dsl_runtime_register_element(CanvasData *data, const gchar *id, ModelElemen
 ModelElement* dsl_runtime_lookup_element(CanvasData *data, const gchar *id);
 const gchar* dsl_runtime_lookup_element_id(CanvasData *data, ModelElement *element);
 
+typedef enum {
+  DSL_COND_NONE,
+  DSL_COND_EQUAL,
+  DSL_COND_NOT_EQUAL,
+  DSL_COND_LESS_THAN,
+  DSL_COND_LESS_EQUAL,
+  DSL_COND_GREATER_THAN,
+  DSL_COND_GREATER_EQUAL,
+} DSLConditionType;
+
 void dsl_runtime_add_click_handler(CanvasData *data, const gchar *element_id, gchar *block_source);
 void dsl_runtime_add_variable_handler(CanvasData *data, const gchar *var_name, gchar *block_source);
+void dsl_runtime_add_variable_handler_conditional(CanvasData *data, const gchar *var_name, gchar *block_source, DSLConditionType condition_type, double condition_value);
 gboolean dsl_runtime_handle_click(CanvasData *data, const gchar *element_id);
 
 void dsl_runtime_prepare_animation_engine(CanvasData *data);

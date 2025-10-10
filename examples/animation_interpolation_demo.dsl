@@ -18,7 +18,7 @@ shape_create start_btn roundedrect "START" (400,450) (300,100) bg #10b981 text_c
 text_create instruction "Click START to begin the demo" (400,600) (500,40) text_color #f8fafc font "Ubuntu 18" align center
 
 on click start_btn
-  add ready 1
+  set ready {ready + 1}
 end
 
 on variable ready

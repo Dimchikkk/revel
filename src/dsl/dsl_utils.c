@@ -403,7 +403,9 @@ gchar** tokenize_line(const gchar *line, int *token_count) {
     }
   }
 
-  *token_count = tokens->len;
+  if (token_count) {
+    *token_count = tokens->len;
+  }
   gchar *null_token = NULL;
   g_array_append_val(tokens, null_token);
   return (gchar**)g_array_free(tokens, FALSE);

@@ -30,24 +30,24 @@ shape_create option_jupiter roundedrect "Jupiter" (360,440) (280,60) bg #3b82f6 
 
 text_create feedback "Select your answer" (360,540) (440,40) text_color #6b7280 font "Ubuntu Italic 16"
 
-add planet_done -planet_done
+set planet_done {planet_done - planet_done}
 
 on click option_mars
   text_update feedback "✓ Correct! Mars is the Red Planet."
-  add correct_total 1 - planet_done
+  set correct_total {correct_total + 1 - planet_done}
   text_update q1_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
-  add planet_done 1 - planet_done
+  set planet_done {planet_done + 1 - planet_done}
 end
 on click option_venus
   text_update feedback "✗ Incorrect. Try again."
-  add correct_total -planet_done
-  add incorrect_total 1
+  set correct_total {correct_total - planet_done}
+  set incorrect_total {incorrect_total + 1}
   text_update q1_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
 end
 on click option_jupiter
   text_update feedback "✗ Incorrect. Try again."
-  add correct_total -planet_done
-  add incorrect_total 1
+  set correct_total {correct_total - planet_done}
+  set incorrect_total {incorrect_total + 1}
   text_update q1_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
 end
 
@@ -90,21 +90,21 @@ shape_create card_food roundedrect "Food supply is constant" (760,340) (180,80) 
 
 text_create data_feedback "Select your answer" (360,460) (480,40) text_color #6b7280 font "Ubuntu Italic 16"
 
-add data_done -data_done
+set data_done {data_done - data_done}
 
 on click card_rain
-  add correct_total 1 - data_done
-  add data_done 1 - data_done
+  set correct_total {correct_total + 1 - data_done}
+  set data_done {data_done + 1 - data_done}
   text_update data_feedback "✓ Correct! Consistent rainfall maintains water sources."
   text_update q3_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
 end
 on click card_altitude
-  add incorrect_total 1
+  set incorrect_total {incorrect_total + 1}
   text_update data_feedback "✗ Incorrect. Altitude wasn't the primary factor."
   text_update q3_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
 end
 on click card_food
-  add incorrect_total 1
+  set incorrect_total {incorrect_total + 1}
   text_update data_feedback "✗ Incorrect. Food supply fluctuates weekly."
   text_update q3_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
 end

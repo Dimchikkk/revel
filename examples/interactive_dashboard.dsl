@@ -17,19 +17,19 @@ shape_create bar4 rectangle "Q4" (540,{600 - data_q4/5}) (80,{data_q4/5}) bg #f5
 
 # Make bars clickable to add sales
 on click bar1
-  add data_q1 100
+  set data_q1 {data_q1 + 100}
 end
 
 on click bar2
-  add data_q2 100
+  set data_q2 {data_q2 + 100}
 end
 
 on click bar3
-  add data_q3 100
+  set data_q3 {data_q3 + 100}
 end
 
 on click bar4
-  add data_q4 100
+  set data_q4 {data_q4 + 100}
 end
 
 # Update visualizations

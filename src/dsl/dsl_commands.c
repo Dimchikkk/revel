@@ -39,14 +39,73 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
       continue;
     }
 
-    if (g_strcmp0(tokens[0], "add") == 0 && token_count >= 3) {
-      const gchar *var_name = tokens[1];
+    if (g_strcmp0(tokens[0], "set") == 0 && token_count >= 3) {
+      const gchar *var_token = tokens[1];
+      gchar *var_name = NULL;
+      int array_index = -1;
+
+      // Check for array access: var[index]
+      const gchar *bracket = strchr(var_token, '[');
+      if (bracket) {
+        size_t name_len = bracket - var_token;
+        var_name = g_strndup(var_token, name_len);
+        const gchar *index_start = bracket + 1;
+        const gchar *bracket_end = strchr(index_start, ']');
+        if (bracket_end) {
+          gchar *index_expr = g_strndup(index_start, bracket_end - index_start);
+          double index_val = 0.0;
+          if (dsl_evaluate_expression(data, index_expr, &index_val)) {
+            array_index = (int)index_val;
+          }
+          g_free(index_expr);
+        }
+      } else {
+        var_name = g_strdup(var_token);
+      }
+
       DSLVariable *var = dsl_runtime_lookup_variable(data, var_name);
       if (!var) {
-        g_print("DSL: add references unknown variable '%s'\n", var_name);
+        g_print("DSL: set references unknown variable '%s'\n", var_name);
+        g_free(var_name);
         success = FALSE;
+      } else if (array_index >= 0) {
+        // Array element assignment
+        if (var->type != DSL_VAR_ARRAY) {
+          g_print("DSL: Variable '%s' is not an array\n", var_name);
+          g_free(var_name);
+          success = FALSE;
+        } else {
+          GString *expr_builder = g_string_new(NULL);
+          for (int t = 2; t < token_count; t++) {
+            if (expr_builder->len > 0) {
+              g_string_append_c(expr_builder, ' ');
+            }
+            g_string_append(expr_builder, tokens[t]);
+          }
+
+          gchar *expr = g_string_free(expr_builder, FALSE);
+          gchar *clean_expr = expr;
+          gsize expr_len = strlen(expr);
+          if (expr_len >= 2 && expr[0] == '{' && expr[expr_len - 1] == '}') {
+            clean_expr = g_strndup(expr + 1, expr_len - 2);
+            g_free(expr);
+            expr = clean_expr;
+          }
+
+          double value = 0.0;
+          if (!dsl_evaluate_expression(data, expr, &value)) {
+            g_print("DSL: Failed to evaluate set expression '%s'\n", expr);
+            success = FALSE;
+          } else {
+            dsl_runtime_set_array_element(data, var_name, array_index, value, TRUE);
+            variables_changed = TRUE;
+          }
+          g_free(expr);
+          g_free(var_name);
+        }
       } else if (var->type != DSL_VAR_INT && var->type != DSL_VAR_REAL && var->type != DSL_VAR_UNSET) {
-        g_print("DSL: add only supports numeric variables (attempted on '%s')\n", var_name);
+        g_print("DSL: set only supports numeric variables (attempted on '%s')\n", var_name);
+        g_free(var_name);
         success = FALSE;
       } else {
         GString *expr_builder = g_string_new(NULL);
@@ -58,24 +117,29 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         }
 
         gchar *expr = g_string_free(expr_builder, FALSE);
-        double delta = 0.0;
-        if (!dsl_evaluate_expression(data, expr, &delta)) {
-          g_print("DSL: Failed to evaluate add expression '%s'\n", expr);
+
+        // Strip braces if present
+        gchar *clean_expr = expr;
+        gsize expr_len = strlen(expr);
+        if (expr_len >= 2 && expr[0] == '{' && expr[expr_len - 1] == '}') {
+          clean_expr = g_strndup(expr + 1, expr_len - 2);
+          g_free(expr);
+          expr = clean_expr;
+        }
+
+        double value = 0.0;
+        if (!dsl_evaluate_expression(data, expr, &value)) {
+          g_print("DSL: Failed to evaluate set expression '%s'\n", expr);
           success = FALSE;
         } else {
-          double current = var->numeric_value;
-          if (var->type == DSL_VAR_INT) {
-            dsl_runtime_set_variable(data, var_name, current + delta, TRUE);
-          } else {
-            if (var->type == DSL_VAR_UNSET) {
-              var->type = DSL_VAR_REAL;
-              var->numeric_value = 0.0;
-            }
-            dsl_runtime_set_variable(data, var_name, current + delta, TRUE);
+          if (var->type == DSL_VAR_UNSET) {
+            var->type = DSL_VAR_REAL;
           }
+          dsl_runtime_set_variable(data, var_name, value, TRUE);
           variables_changed = TRUE;
         }
         g_free(expr);
+        g_free(var_name);
       }
     }
     else if (g_strcmp0(tokens[0], "animate_move") == 0 && token_count >= 4) {
@@ -392,6 +456,213 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         }
         dsl_runtime_register_auto_next(data, var_name, is_string, is_string ? value_token : NULL, expected_value);
       }
+    }
+    else if (g_strcmp0(tokens[0], "shape_create") == 0 && token_count >= 6) {
+      // shape_create ID SHAPE_TYPE "Text" (x,y) (width,height) [options...]
+      const gchar *id = tokens[1];
+      const gchar *shape_type_str = tokens[2];
+      const gchar *text_token = tokens[3];
+
+      int shape_type;
+      if (!parse_shape_type(shape_type_str, &shape_type)) {
+        g_print("DSL: Invalid shape type '%s'\n", shape_type_str);
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      // Parse text with interpolation
+      gchar *clean_text = NULL;
+      if (text_token[0] == '"' && text_token[strlen(text_token)-1] == '"') {
+        gchar *quoted = g_strndup(text_token + 1, strlen(text_token) - 2);
+        clean_text = dsl_unescape_text(quoted);
+        g_free(quoted);
+      } else {
+        clean_text = dsl_unescape_text(text_token);
+      }
+      gchar *interpolated = dsl_interpolate_text(data, clean_text);
+      g_free(clean_text);
+
+      int x, y, width, height;
+      if (!dsl_parse_point_token(data, tokens[4], &x, &y) ||
+          !dsl_parse_point_token(data, tokens[5], &width, &height)) {
+        g_print("DSL: Failed to parse position/size for shape_create\n");
+        g_free(interpolated);
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      // Defaults
+      double bg_r = 0.95, bg_g = 0.95, bg_b = 0.98, bg_a = 1.0;
+      double text_r = 0.1, text_g = 0.1, text_b = 0.1, text_a = 1.0;
+      double stroke_r = 0.95, stroke_g = 0.95, stroke_b = 0.98, stroke_a = 1.0;
+      int stroke_width = 2;
+      gboolean filled = FALSE;
+      gchar *font_override = NULL;
+      double rotation_degrees = 0.0;
+
+      // Parse optional parameters
+      for (int t = 6; t < token_count; t++) {
+        if (g_strcmp0(tokens[t], "bg") == 0 && (t+1) < token_count) {
+          gchar *resolved = dsl_resolve_numeric_token(data, tokens[++t]);
+          parse_color_token(resolved, &bg_r, &bg_g, &bg_b, &bg_a);
+          g_free(resolved);
+        } else if (g_strcmp0(tokens[t], "text_color") == 0 && (t+1) < token_count) {
+          gchar *resolved = dsl_resolve_numeric_token(data, tokens[++t]);
+          parse_color_token(resolved, &text_r, &text_g, &text_b, &text_a);
+          g_free(resolved);
+        } else if (g_strcmp0(tokens[t], "stroke") == 0 && (t+1) < token_count) {
+          parse_int_value(tokens[++t], &stroke_width);
+        } else if (g_strcmp0(tokens[t], "filled") == 0 && (t+1) < token_count) {
+          parse_bool_value(tokens[++t], &filled);
+        } else if (g_strcmp0(tokens[t], "font") == 0 && (t+1) < token_count) {
+          parse_font_value(tokens[++t], &font_override);
+        } else if (g_strcmp0(tokens[t], "rotation") == 0 && (t+1) < token_count) {
+          parse_double_value(tokens[++t], &rotation_degrees);
+        }
+      }
+
+      // Create element
+      ElementPosition position = { .x = x, .y = y, .z = data->next_z_index++ };
+      ElementColor bg_color = { .r = bg_r, .g = bg_g, .b = bg_b, .a = bg_a };
+      ElementColor text_color = { .r = text_r, .g = text_g, .b = text_b, .a = text_a };
+      ElementSize size = { .width = width, .height = height };
+      ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0,
+                             .video_data = NULL, .video_size = 0, .duration = 0 };
+      ElementConnection connection = {
+        .from_element_uuid = NULL, .to_element_uuid = NULL,
+        .from_point = -1, .to_point = -1,
+      };
+      ElementDrawing drawing = {
+        .drawing_points = NULL,
+        .stroke_width = stroke_width,
+      };
+
+      ElementText text_elem = {
+        .text = interpolated,
+        .text_color = text_color,
+        .font_description = font_override ? font_override : g_strdup("Ubuntu Bold 14"),
+        .alignment = NULL,
+      };
+      ElementShape shape_elem = {
+        .shape_type = shape_type,
+        .stroke_width = stroke_width,
+        .filled = filled,
+        .stroke_style = STROKE_STYLE_SOLID,
+        .fill_style = FILL_STYLE_SOLID,
+        .stroke_color = { .r = stroke_r, .g = stroke_g, .b = stroke_b, .a = stroke_a },
+      };
+
+      ElementConfig config = {
+        .type = ELEMENT_SHAPE,
+        .bg_color = bg_color,
+        .position = position,
+        .size = size,
+        .media = media,
+        .drawing = drawing,
+        .connection = connection,
+        .text = text_elem,
+        .shape = shape_elem,
+      };
+
+      ModelElement *model_element = model_create_element(data->model, config);
+      if (model_element) {
+        if (rotation_degrees != 0.0) {
+          model_element->rotation_degrees = rotation_degrees;
+        }
+        dsl_runtime_register_element(data, id, model_element);
+
+        // Create visual element and add to canvas
+        if (!model_element->visual_element) {
+          model_element->visual_element = create_visual_element(model_element, data);
+        }
+      } else {
+        success = FALSE;
+      }
+
+      g_free(text_elem.font_description);
+      g_free(interpolated);
+    }
+    else if (g_strcmp0(tokens[0], "for") == 0 && token_count >= 4) {
+      // For loop: for var start end
+      const gchar *loop_var = tokens[1];
+      double start_val = 0.0, end_val = 0.0;
+
+      if (!dsl_evaluate_expression(data, tokens[2], &start_val) ||
+          !dsl_evaluate_expression(data, tokens[3], &end_val)) {
+        g_print("DSL: Failed to evaluate for loop bounds in event block\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      // Create loop variable if it doesn't exist
+      DSLVariable *loop_variable = dsl_runtime_ensure_variable(data, loop_var);
+      if (!loop_variable) {
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+      if (loop_variable->type == DSL_VAR_UNSET) {
+        loop_variable->type = DSL_VAR_INT;
+      }
+
+      // Collect loop body with nesting depth tracking
+      GString *loop_body = g_string_new(NULL);
+      gboolean found_end = FALSE;
+      int nesting_depth = 0;
+
+      for (int j = i + 1; lines[j] != NULL; j++) {
+        gchar *body_line = trim_whitespace(lines[j]);
+        if (body_line[0] == '#' || body_line[0] == '\0') {
+          continue;
+        }
+
+        // Check for nested for loops
+        gchar **nested_tokens = tokenize_line(body_line, NULL);
+        if (nested_tokens && nested_tokens[0]) {
+          if (g_strcmp0(nested_tokens[0], "for") == 0) {
+            nesting_depth++;
+          } else if (g_strcmp0(nested_tokens[0], "end") == 0) {
+            if (nesting_depth > 0) {
+              nesting_depth--;
+            } else {
+              // This is the end for our loop
+              g_strfreev(nested_tokens);
+              i = j;  // Skip to end marker
+              found_end = TRUE;
+              break;
+            }
+          }
+        }
+        g_strfreev(nested_tokens);
+
+        if (loop_body->len > 0) {
+          g_string_append_c(loop_body, '\n');
+        }
+        g_string_append(loop_body, body_line);
+      }
+
+      if (!found_end) {
+        g_print("DSL: Missing 'end' for for loop in event block\n");
+        g_string_free(loop_body, TRUE);
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      gchar *body_source = g_string_free(loop_body, FALSE);
+
+      // Execute loop
+      int start_int = (int)start_val;
+      int end_int = (int)end_val;
+      for (int loop_i = start_int; loop_i <= end_int; loop_i++) {
+        dsl_runtime_set_variable(data, loop_var, (double)loop_i, FALSE);
+        dsl_execute_command_block(data, body_source);
+      }
+
+      g_free(body_source);
     }
     else {
       g_print("DSL: Unsupported command in event block: %s\n", tokens[0]);

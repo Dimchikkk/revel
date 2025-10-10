@@ -447,6 +447,8 @@ int    NAME VALUE
 real   NAME VALUE
 bool   NAME true|false
 string NAME "Text"
+int    NAME[SIZE] INITIAL_VALUE
+real   NAME[SIZE] INITIAL_VALUE
 global int    NAME VALUE
 global real   NAME VALUE
 global bool   NAME true|false
@@ -455,11 +457,15 @@ global string NAME "Text"
 int total_sales {q1 + q2 + q3 + q4}
 bool is_hot {current_temp - target_temp}
 string status "Total: ${total_sales}"
+int cells[60] 0
+real prices[10] 99.99
 ```
 
 - Numeric declarations (`int`, `real`) accept literal values or expressions inside `{ ... }`
 - Boolean declarations accept literals (`true`, `false`, `yes`, `no`, `1`, `0`) or expressions (non-zero evaluates to `true`)
 - Strings use quoted text; `${ ... }` interpolation works when rendering
+- **Arrays**: Declare with `int NAME[SIZE] INITIAL_VALUE` or `real NAME[SIZE] INITIAL_VALUE` - all elements initialized to the same value
+- Array access: Use `NAME[index]` where index can be a literal, variable, or expression `{expr}`
 - Prefix declarations with `global` when the value should persist across presentation slides; globals keep their value between `animation_next_slide` executions and are not cleared when moving forward/backward.
 
 ### Interpolate Values
@@ -470,24 +476,52 @@ text_create total "Total: ${total_sales}" (400,120) (320,40)
 
 - `${ ... }` in strings evaluates expressions when the element is created or when refreshed by events
 
+### Control Flow (inside event blocks)
+
+```
+for VARIABLE START END
+  # commands
+end
+```
+
+- Loops from START to END (inclusive)
+- VARIABLE is automatically created as `int` if not declared
+- START and END can be literals, variables, or expressions
+- Can be nested (for within for)
+- Supported inside `on click` and `on variable` event blocks
+
+**Example:**
+```
+for i 0 59
+  set cells[i] 0
+end
+
+for row 0 9
+  for col 0 9
+    shape_create cell${row}${col} rectangle "" ({col*50},{row*50}) (48,48) filled true
+  end
+end
+```
+
 ### Runtime Commands (inside event blocks)
 
 ```
-add VARIABLE EXPRESSION        # numeric variables only (variable must be declared beforehand)
+set VARIABLE VALUE_EXPR         # set variable to expression result
+set ARRAY[INDEX] VALUE_EXPR     # set array element
 animate_move ELEMENT (to_x,to_y) START DURATION [interp]
 animate_resize ELEMENT (to_w,to_h) START DURATION [interp]
 text_update ELEMENT "New text with ${expr}"
 text_bind ELEMENT_ID VARIABLE   # bind a text element to a string variable
 position_bind ELEMENT_ID VARIABLE # store element position as "x,y" string
 presentation_next               # advance presentation to next slide
-# presentation_auto_next_if VARIABLE VALUE  # command renamed; see presentation_auto_next_if command documentation
+presentation_auto_next_if VARIABLE VALUE  # auto-advance when variable reaches value
 ```
 
 `text_bind` keeps the element text and string variable in sync - when the user finishes editing the bound element, the variable is updated and any `on variable` handlers run. `position_bind` updates the referenced string variable with the element's canvas coordinates (e.g. `"420,180"`) whenever the element is moved, which is useful for drag/match activities.
 
 `presentation_auto_next_if` lets you automatically advance to the next presentation slide once a variable reaches a target value (numeric or string). This is handy for quizzes - set a counter or status variable in response to user actions, then register the auto-advance trigger.
 
-`add` updates an existing numeric variable; declare all variables with `int` or `real` before using them in commands or interpolations.
+`set` assigns values to variables or array elements. Declare all variables with `int`, `real`, `bool`, `string`, or array types before using them.
 
 ### Event Handlers
 
@@ -499,8 +533,31 @@ end
 on variable counter
   text_update label "Clicks: ${counter}"
 end
+
+on variable step == 5
+  set next_step {step + 1}
+end
+
+on variable temp < 60
+  text_update status "Too cold!"
+end
+
+on variable temp > 80
+  text_update status "Too hot!"
+end
 ```
 
-- `on click` runs when the element is clicked (and not dragged)
-- `on variable` runs after the named variable changes
-- Handlers may contain multiple commands; animations are queued automatically
+- `on click ELEMENT_ID` runs when the element is clicked (and not dragged)
+- `on variable VAR_NAME` runs **every time** the named variable changes (any change triggers)
+- `on variable VAR_NAME == VALUE` runs **every time** variable equals VALUE when it changes
+- `on variable VAR_NAME < VALUE` runs **every time** variable is less than VALUE when it changes
+- `on variable VAR_NAME > VALUE` runs **every time** variable is greater than VALUE when it changes
+- `on variable VAR_NAME <= VALUE` runs **every time** variable is less than or equal to VALUE when it changes
+- `on variable VAR_NAME >= VALUE` runs **every time** variable is greater than or equal to VALUE when it changes
+- `on variable VAR_NAME != VALUE` runs **every time** variable is not equal to VALUE when it changes
+- Handlers may contain multiple commands including `for` loops
+- Animations are queued automatically
+- **IMPORTANT**:
+  - Cannot nest `on variable` inside another `on variable` - all event handlers must be top-level
+  - Handlers execute **every time** the condition is met, not just once
+  - If `set step {step + 1}` triggers `on variable step == 4`, that handler runs every time step becomes 4

@@ -105,6 +105,17 @@ static void dsl_type_collect_identifiers(const gchar *expr, GPtrArray *out) {
         p++;
       }
       g_ptr_array_add(out, g_strndup(start, p - start));
+
+      // Skip array access: var[...]
+      if (*p == '[') {
+        int depth = 1;
+        p++;
+        while (*p && depth > 0) {
+          if (*p == '[') depth++;
+          else if (*p == ']') depth--;
+          p++;
+        }
+      }
     } else {
       p++;
     }
@@ -222,14 +233,14 @@ static void dsl_type_check_string_interpolations(DSLTypeCheckerContext *ctx, con
   }
 }
 
-static void dsl_type_check_add_expression(DSLTypeCheckerContext *ctx, gchar **tokens, int start_index, int token_count, int line) {
+static void dsl_type_check_set_expression(DSLTypeCheckerContext *ctx, gchar **tokens, int start_index, int token_count, int line) {
   if (start_index >= token_count) return;
   GString *expr = g_string_new(NULL);
   for (int t = start_index; t < token_count; t++) {
     if (expr->len > 0) g_string_append_c(expr, ' ');
     g_string_append(expr, tokens[t]);
   }
-  dsl_type_check_expression(ctx, expr->str, line, "add expression");
+  dsl_type_check_expression(ctx, expr->str, line, "set expression");
   g_string_free(expr, TRUE);
 }
 
@@ -540,18 +551,29 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
   if (token_count < 1) return;
   const gchar *command = tokens[0];
 
-  if (g_strcmp0(command, "add") == 0) {
+  if (g_strcmp0(command, "set") == 0) {
     if (token_count < 3) {
-      dsl_type_add_error(ctx, line, "add requires a variable and a value");
+      dsl_type_add_error(ctx, line, "set requires a variable and a value");
       return;
     }
-    if (dsl_type_require_variable(ctx, tokens[1], line, "add")) {
-      DSLVarType var_type = dsl_type_lookup_variable_type(ctx, tokens[1]);
-      if (var_type != DSL_VAR_INT && var_type != DSL_VAR_REAL) {
-        dsl_type_add_error(ctx, line, "add only supports numeric variables (found '%s')", tokens[1]);
+    // Extract variable name (handle array access)
+    const gchar *var_token = tokens[1];
+    gchar *var_name = NULL;
+    const gchar *bracket = strchr(var_token, '[');
+    if (bracket) {
+      var_name = g_strndup(var_token, bracket - var_token);
+    } else {
+      var_name = g_strdup(var_token);
+    }
+
+    if (dsl_type_require_variable(ctx, var_name, line, "set")) {
+      DSLVarType var_type = dsl_type_lookup_variable_type(ctx, var_name);
+      if (var_type != DSL_VAR_INT && var_type != DSL_VAR_REAL && var_type != DSL_VAR_ARRAY) {
+        dsl_type_add_error(ctx, line, "set only supports numeric variables (found '%s')", var_name);
       }
     }
-    dsl_type_check_add_expression(ctx, tokens, 2, token_count, line);
+    g_free(var_name);
+    dsl_type_check_set_expression(ctx, tokens, 2, token_count, line);
   } else if (g_strcmp0(command, "animate_move") == 0 ||
              g_strcmp0(command, "animate_resize") == 0 ||
              g_strcmp0(command, "animate_color") == 0 ||
@@ -656,6 +678,37 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
   } else if (g_strcmp0(command, "canvas_background") == 0 ||
              g_strcmp0(command, "animation_mode") == 0) {
     // No additional checks needed inside event
+  } else if (g_strcmp0(command, "shape_create") == 0 ||
+             g_strcmp0(command, "note_create") == 0 ||
+             g_strcmp0(command, "text_create") == 0 ||
+             g_strcmp0(command, "paper_note_create") == 0) {
+    // Allow shape/note/text creation in event handlers
+    // Basic validation: needs ID, text/type, position, size
+    if (token_count < 5) {
+      dsl_type_add_error(ctx, line, "%s requires at least id, type/text, position, and size", command);
+      return;
+    }
+    // Register the element ID being created
+    const gchar *element_id = tokens[1];
+    if (element_id && element_id[0] != '\0') {
+      dsl_type_register_element(ctx, element_id, line);
+    }
+  } else if (g_strcmp0(command, "for") == 0) {
+    // For loops are allowed in event blocks
+    if (token_count < 4) {
+      dsl_type_add_error(ctx, line, "for loop requires variable, start, and end values");
+      return;
+    }
+    const gchar *loop_var = tokens[1];
+    // Register loop variable as int type if not exists
+    if (!g_hash_table_contains(ctx->variables, loop_var)) {
+      dsl_type_register_variable(ctx, loop_var, line, DSL_VAR_INT);
+    }
+    // Check loop bounds are valid expressions
+    dsl_type_check_expression(ctx, tokens[2], line, "for loop start");
+    dsl_type_check_expression(ctx, tokens[3], line, "for loop end");
+    // Note: nested for loop body validation would require recursion here
+    // For now we just validate the loop header
   } else {
     // Unrecognized command inside block - flag but continue
     dsl_type_add_error(ctx, line, "Unknown command '%s' inside event block", command);
@@ -743,13 +796,25 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
       else if (g_strcmp0(type_token, "bool") == 0) var_type = DSL_VAR_BOOL;
       else if (g_strcmp0(type_token, "string") == 0) var_type = DSL_VAR_STRING;
 
-      const gchar *var_name = tokens[type_token_index + 1];
+      const gchar *var_name_token = tokens[type_token_index + 1];
+      gchar *var_name = NULL;
+
+      // Check for array declaration: name[size]
+      const gchar *bracket = strchr(var_name_token, '[');
+      if (bracket) {
+        var_name = g_strndup(var_name_token, bracket - var_name_token);
+        var_type = DSL_VAR_ARRAY;  // Override to array type
+      } else {
+        var_name = g_strdup(var_name_token);
+      }
+
       gboolean already_defined = g_hash_table_contains(ctx.variables, var_name);
       if (!already_defined) {
         dsl_type_register_variable(&ctx, var_name, line_no, var_type);
       } else if (!is_global_decl) {
         dsl_type_add_error(&ctx, line_no, "Variable '%s' already defined", var_name);
       }
+      g_free(var_name);
 
       int expr_start = type_token_index + 2;
 
@@ -822,6 +887,28 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
         dsl_type_require_variable(&ctx, target, line_no, "on variable");
       }
       dsl_type_check_event_block(&ctx, lines, &i, event_type, target, line_no);
+    } else if (g_strcmp0(cmd, "for") == 0 && token_count >= 4) {
+      const gchar *loop_var = tokens[1];
+      // Register loop variable as int type if not exists
+      if (!g_hash_table_contains(ctx.variables, loop_var)) {
+        dsl_type_register_variable(&ctx, loop_var, line_no, DSL_VAR_INT);
+      }
+      // Check loop bounds are valid expressions
+      dsl_type_check_expression(&ctx, tokens[2], line_no, "for loop start");
+      dsl_type_check_expression(&ctx, tokens[3], line_no, "for loop end");
+      // Skip to end
+      gboolean found_end = FALSE;
+      for (int j = i + 1; lines[j] != NULL; j++) {
+        gchar *check_line = trim_whitespace(lines[j]);
+        if (check_line[0] != '\0' && check_line[0] != '#' && g_strcmp0(check_line, "end") == 0) {
+          i = j;
+          found_end = TRUE;
+          break;
+        }
+      }
+      if (!found_end) {
+        dsl_type_add_error(&ctx, line_no, "for loop missing matching 'end'");
+      }
     } else if (g_strcmp0(cmd, "animation_next_slide") == 0 ||
                g_strcmp0(cmd, "animation_mode") == 0 ||
                g_strcmp0(cmd, "animation_mode") == 0) {

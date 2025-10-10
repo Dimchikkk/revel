@@ -714,8 +714,6 @@ static gboolean on_animation_tick(GtkWidget *widget, GdkFrameClock *clock,
     bool completed = animation_engine_tick(engine, delta);
 
     if (completed && !engine->cycled && engine->count > 0) {
-        g_print("Animation engine completed all animations (count=%d, elapsed=%.2f)\n",
-                engine->count, engine->elapsed_time);
         CanvasData *data = (CanvasData *)engine->user_data;
         if (data) {
             extern gboolean canvas_is_presentation_mode(CanvasData *data);

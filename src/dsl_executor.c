@@ -208,10 +208,29 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
          g_strcmp0(type_token, "real") == 0 ||
          g_strcmp0(type_token, "bool") == 0 ||
          g_strcmp0(type_token, "string") == 0) && token_count >= (type_token_index + 2)) {
-      const gchar *var_name = tokens[type_token_index + 1];
+      const gchar *var_name_token = tokens[type_token_index + 1];
+      gchar *var_name = NULL;
+      int array_size = 0;
+
+      // Check for array declaration: name[size]
+      const gchar *bracket = strchr(var_name_token, '[');
+      if (bracket) {
+        size_t name_len = bracket - var_name_token;
+        var_name = g_strndup(var_name_token, name_len);
+        const gchar *size_start = bracket + 1;
+        const gchar *bracket_end = strchr(size_start, ']');
+        if (bracket_end) {
+          gchar *size_str = g_strndup(size_start, bracket_end - size_start);
+          array_size = atoi(size_str);
+          g_free(size_str);
+        }
+      } else {
+        var_name = g_strdup(var_name_token);
+      }
 
       DSLVariable *var = dsl_runtime_ensure_variable(data, var_name);
       if (!var) {
+        g_free(var_name);
         g_strfreev(tokens);
         continue;
       }
@@ -221,7 +240,9 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
       }
 
       DSLVarType target_type = DSL_VAR_REAL;
-      if (g_strcmp0(type_token, "int") == 0) target_type = DSL_VAR_INT;
+      if (array_size > 0) {
+        target_type = DSL_VAR_ARRAY;
+      } else if (g_strcmp0(type_token, "int") == 0) target_type = DSL_VAR_INT;
       else if (g_strcmp0(type_token, "real") == 0) target_type = DSL_VAR_REAL;
       else if (g_strcmp0(type_token, "bool") == 0) target_type = DSL_VAR_BOOL;
       else if (g_strcmp0(type_token, "string") == 0) target_type = DSL_VAR_STRING;
@@ -254,9 +275,34 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
       var->string_value = NULL;
       var->evaluating = FALSE;
 
+      // Initialize array if needed
+      if (target_type == DSL_VAR_ARRAY) {
+        if (!var->array_values) {
+          var->array_values = g_malloc0(array_size * sizeof(double));
+          var->array_size = array_size;
+        }
+      }
+
       int expr_start = type_token_index + 2;
 
-      if (target_type == DSL_VAR_STRING) {
+      if (target_type == DSL_VAR_ARRAY) {
+        // Initialize all array elements with the provided value (or 0)
+        double init_value = 0.0;
+        if (token_count > expr_start) {
+          gchar *value_token = tokens[expr_start];
+          if (!dsl_type_is_number_literal(value_token)) {
+            // Try to evaluate as expression
+            if (!dsl_evaluate_expression(data, value_token, &init_value)) {
+              init_value = 0.0;
+            }
+          } else {
+            init_value = g_ascii_strtod(value_token, NULL);
+          }
+        }
+        for (int j = 0; j < array_size; j++) {
+          var->array_values[j] = init_value;
+        }
+      } else if (target_type == DSL_VAR_STRING) {
         const gchar *literal = (token_count > expr_start) ? tokens[expr_start] : "";
         gchar *clean_text = dsl_unescape_text(literal);
         dsl_runtime_set_string_variable(data, var_name, clean_text ? clean_text : "", FALSE);
@@ -350,6 +396,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         }
       }
 
+      g_free(var_name);
       for (int j = 0; j < token_count; j++)
         g_free(tokens[j]);
       g_free(tokens);
@@ -419,8 +466,45 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
       const gchar *event_type = tokens[1];
       const gchar *target = tokens[2];
 
+      // Check for optional condition (e.g., "on variable gen < 256" or "on variable p0 == 1")
+      DSLConditionType condition_type = DSL_COND_NONE;
+      double condition_value = 0.0;
+      if (g_ascii_strcasecmp(event_type, "variable") == 0 && token_count >= 4) {
+        // Check if token[3] is a comparison operator
+        const gchar *op = tokens[3];
+        int value_token_idx = 4;
+
+        if (g_strcmp0(op, "==") == 0) {
+          condition_type = DSL_COND_EQUAL;
+        } else if (g_strcmp0(op, "!=") == 0) {
+          condition_type = DSL_COND_NOT_EQUAL;
+        } else if (g_strcmp0(op, "<") == 0) {
+          condition_type = DSL_COND_LESS_THAN;
+        } else if (g_strcmp0(op, "<=") == 0) {
+          condition_type = DSL_COND_LESS_EQUAL;
+        } else if (g_strcmp0(op, ">") == 0) {
+          condition_type = DSL_COND_GREATER_THAN;
+        } else if (g_strcmp0(op, ">=") == 0) {
+          condition_type = DSL_COND_GREATER_EQUAL;
+        } else {
+          // No operator, check if token[3] is a value (old syntax: "on variable p0 1")
+          value_token_idx = 3;
+          condition_type = DSL_COND_EQUAL;
+        }
+
+        // Parse the value
+        if (value_token_idx < token_count) {
+          if (dsl_parse_double_token(data, tokens[value_token_idx], &condition_value)) {
+            // Successfully parsed condition value
+          } else {
+            condition_type = DSL_COND_NONE; // Failed to parse, no condition
+          }
+        }
+      }
+
       GString *block = g_string_new(NULL);
       gboolean found_end = FALSE;
+      int nesting_depth = 0;
 
       for (int j = i + 1; lines[j] != NULL; j++) {
         gchar *block_line = trim_whitespace(lines[j]);
@@ -428,11 +512,24 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
           continue;
         }
 
-        if (g_strcmp0(block_line, "end") == 0) {
-          i = j;
-          found_end = TRUE;
-          break;
+        // Check for nested for loops
+        gchar **check_tokens = tokenize_line(block_line, NULL);
+        if (check_tokens && check_tokens[0]) {
+          if (g_strcmp0(check_tokens[0], "for") == 0) {
+            nesting_depth++;
+          } else if (g_strcmp0(check_tokens[0], "end") == 0) {
+            if (nesting_depth > 0) {
+              nesting_depth--;
+            } else {
+              // This is the end for our event block
+              g_strfreev(check_tokens);
+              i = j;
+              found_end = TRUE;
+              break;
+            }
+          }
         }
+        g_strfreev(check_tokens);
 
         if (block->len > 0) {
           g_string_append_c(block, '\n');
@@ -448,7 +545,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         if (g_ascii_strcasecmp(event_type, "click") == 0) {
           dsl_runtime_add_click_handler(data, target, block_source);
         } else if (g_ascii_strcasecmp(event_type, "variable") == 0) {
-          dsl_runtime_add_variable_handler(data, target, block_source);
+          dsl_runtime_add_variable_handler_conditional(data, target, block_source, condition_type, condition_value);
         } else {
           g_print("DSL: Unknown event type '%s'\n", event_type);
           g_free(block_source);
@@ -458,6 +555,165 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
       for (int j = 0; j < token_count; j++)
         g_free(tokens[j]);
       g_free(tokens);
+      continue;
+    }
+
+    // Set command: set var value or set arr[index] value
+    if (g_strcmp0(tokens[0], "set") == 0 && token_count >= 3) {
+      const gchar *var_token = tokens[1];
+      gchar *var_name = NULL;
+      int array_index = -1;
+
+      // Check for array access: var[index]
+      const gchar *bracket = strchr(var_token, '[');
+      if (bracket) {
+        size_t name_len = bracket - var_token;
+        var_name = g_strndup(var_token, name_len);
+        const gchar *index_start = bracket + 1;
+        const gchar *bracket_end = strchr(index_start, ']');
+        if (bracket_end) {
+          gchar *index_expr = g_strndup(index_start, bracket_end - index_start);
+          double index_val = 0.0;
+          if (dsl_evaluate_expression(data, index_expr, &index_val)) {
+            array_index = (int)index_val;
+          }
+          g_free(index_expr);
+        }
+      } else {
+        var_name = g_strdup(var_token);
+      }
+
+      DSLVariable *var = dsl_runtime_lookup_variable(data, var_name);
+      if (!var) {
+        g_print("DSL: set references unknown variable '%s'\n", var_name);
+        g_free(var_name);
+        g_strfreev(tokens);
+        continue;
+      }
+
+      if (array_index >= 0) {
+        // Array element assignment
+        GString *expr_builder = g_string_new(NULL);
+        for (int t = 2; t < token_count; t++) {
+          if (expr_builder->len > 0) {
+            g_string_append_c(expr_builder, ' ');
+          }
+          g_string_append(expr_builder, tokens[t]);
+        }
+
+        gchar *expr = g_string_free(expr_builder, FALSE);
+        gchar *clean_expr = expr;
+        gsize expr_len = strlen(expr);
+        if (expr_len >= 2 && expr[0] == '{' && expr[expr_len - 1] == '}') {
+          clean_expr = g_strndup(expr + 1, expr_len - 2);
+          g_free(expr);
+          expr = clean_expr;
+        }
+
+        double value = 0.0;
+        if (!dsl_evaluate_expression(data, expr, &value)) {
+          g_print("DSL: Failed to evaluate set expression '%s'\n", expr);
+        } else {
+          dsl_runtime_set_array_element(data, var_name, array_index, value, FALSE);
+        }
+        g_free(expr);
+        g_free(var_name);
+      } else {
+        // Regular variable assignment
+        GString *expr_builder = g_string_new(NULL);
+        for (int t = 2; t < token_count; t++) {
+          if (expr_builder->len > 0) {
+            g_string_append_c(expr_builder, ' ');
+          }
+          g_string_append(expr_builder, tokens[t]);
+        }
+
+        gchar *expr = g_string_free(expr_builder, FALSE);
+        gchar *clean_expr = expr;
+        gsize expr_len = strlen(expr);
+        if (expr_len >= 2 && expr[0] == '{' && expr[expr_len - 1] == '}') {
+          clean_expr = g_strndup(expr + 1, expr_len - 2);
+          g_free(expr);
+          expr = clean_expr;
+        }
+
+        double value = 0.0;
+        if (!dsl_evaluate_expression(data, expr, &value)) {
+          g_print("DSL: Failed to evaluate set expression '%s'\n", expr);
+        } else {
+          dsl_runtime_set_variable(data, var_name, value, FALSE);
+        }
+        g_free(expr);
+        g_free(var_name);
+      }
+
+      g_strfreev(tokens);
+      continue;
+    }
+
+    // For loop: for var start end
+    if (g_strcmp0(tokens[0], "for") == 0 && token_count >= 4) {
+      const gchar *loop_var = tokens[1];
+      double start_val = 0.0, end_val = 0.0;
+
+      if (!dsl_evaluate_expression(data, tokens[2], &start_val) ||
+          !dsl_evaluate_expression(data, tokens[3], &end_val)) {
+        g_print("DSL: Failed to evaluate for loop bounds\n");
+        g_strfreev(tokens);
+        continue;
+      }
+
+      // Create loop variable if it doesn't exist
+      DSLVariable *loop_variable = dsl_runtime_ensure_variable(data, loop_var);
+      if (!loop_variable) {
+        g_strfreev(tokens);
+        continue;
+      }
+      if (loop_variable->type == DSL_VAR_UNSET) {
+        loop_variable->type = DSL_VAR_INT;
+      }
+
+      // Collect loop body
+      GString *loop_body = g_string_new(NULL);
+      gboolean found_end = FALSE;
+      int loop_end_line = i;
+
+      for (int j = i + 1; lines[j] != NULL; j++) {
+        gchar *body_line = trim_whitespace(lines[j]);
+        if (body_line[0] == '#' || body_line[0] == '\0') {
+          continue;
+        }
+        if (g_strcmp0(body_line, "end") == 0) {
+          loop_end_line = j;
+          found_end = TRUE;
+          break;
+        }
+        if (loop_body->len > 0) {
+          g_string_append_c(loop_body, '\n');
+        }
+        g_string_append(loop_body, body_line);
+      }
+
+      if (!found_end) {
+        g_print("DSL: Missing 'end' for for loop\n");
+        g_string_free(loop_body, TRUE);
+        g_strfreev(tokens);
+        continue;
+      }
+
+      gchar *body_source = g_string_free(loop_body, FALSE);
+
+      // Execute loop
+      int start_int = (int)start_val;
+      int end_int = (int)end_val;
+      for (int loop_i = start_int; loop_i <= end_int; loop_i++) {
+        dsl_runtime_set_variable(data, loop_var, (double)loop_i, FALSE);
+        dsl_execute_command_block(data, body_source);
+      }
+
+      g_free(body_source);
+      i = loop_end_line;
+      g_strfreev(tokens);
       continue;
     }
 
