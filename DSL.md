@@ -221,18 +221,29 @@ Both work in:
    - Variable declarations (int, real, bool, string, arrays, global)
    - Element creation (all types)
    - Connections
-   - Canvas configuration
-   - Animation setup
-   - Event handler registration
-   - For loops (full DSL commands in body)
+   - Canvas configuration (`canvas_background`)
+   - Animation mode setup (`animation_mode`, `animation_mode cycled`)
+   - **Animation commands** (`animate_*`) - **ONLY if `animation_mode` declared first**
+   - Presentation slide separators (`animation_next_slide`)
+   - Event handler registration (`on click`, `on variable`)
+   - For loops (full DSL commands in body, supports nesting)
 
 2. **Event handler context**: Runtime commands only
-   - `set` for variable assignment
-   - `animate_*` for animations
-   - `text_update` for dynamic text
-   - Element creation (limited)
-   - For loops (runtime commands in body)
-   - Cannot nest event handlers
+   - `set` for variable assignment (variables, arrays)
+   - `animate_*` for queued animations (automatically scheduled)
+   - `text_update` for dynamic text content
+   - `text_bind`, `position_bind` for element-variable bindings
+   - `presentation_next`, `presentation_auto_next_if` for slide control
+   - Element creation (all types - creates immediately)
+   - For loops (runtime commands in body, supports nesting)
+   - **Cannot nest event handlers** (no `on` inside `on`)
+
+### Key Differences
+
+- **Top-level `animate_*`**: Requires `animation_mode` first, defines animation timeline
+- **Event handler `animate_*`**: Always available, queues animations on-demand
+- **Top-level `for`**: Can contain ANY command including variable declarations
+- **Event handler `for`**: Can contain runtime commands and element creation
 
 ---
 

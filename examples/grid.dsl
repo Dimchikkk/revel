@@ -4,8 +4,6 @@ int N 100
 int grid_size N
 int max_index {N-1}
 
-int row 0
-int col 0
 int step 0
 
 shape_create btn rectangle "Create Grid" (10,10) (150,40) filled true bg (0.3,0.6,0.9,1.0) text_color (1.0,1.0,1.0,1.0)
