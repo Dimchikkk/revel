@@ -217,33 +217,76 @@ Both work in:
 
 ### Execution Contexts
 
-1. **Top-level context**: Full DSL support
-   - Variable declarations (int, real, bool, string, arrays, global)
-   - Element creation (all types)
-   - Connections
-   - Canvas configuration (`canvas_background`)
-   - Animation mode setup (`animation_mode`, `animation_mode cycled`)
-   - **Animation commands** (`animate_*`) - **ONLY if `animation_mode` declared first**
-   - Presentation slide separators (`animation_next_slide`)
-   - Event handler registration (`on click`, `on variable`)
-   - For loops (full DSL commands in body, supports nesting)
+**Commands available in BOTH contexts:**
+- `set` - Variable/array assignment
+- `animate_*` - All animation commands (move, resize, rotate, color, appear, disappear)
+- `text_update` - Update element text dynamically
+- `text_bind`, `position_bind` - Bind elements to variables
+- `presentation_next`, `presentation_auto_next_if` - Slide navigation
+- `for` loops - Iteration with nesting support
 
-2. **Event handler context**: Runtime commands only
-   - `set` for variable assignment (variables, arrays)
-   - `animate_*` for queued animations (automatically scheduled)
-   - `text_update` for dynamic text content
-   - `text_bind`, `position_bind` for element-variable bindings
-   - `presentation_next`, `presentation_auto_next_if` for slide control
-   - Element creation (all types - creates immediately)
-   - For loops (runtime commands in body, supports nesting)
-   - **Cannot nest event handlers** (no `on` inside `on`)
+#### 1. **Top-level context** (Main script)
 
-### Key Differences
+**Available commands:**
+- Variable declarations (`int`, `real`, `bool`, `string`, arrays with `[SIZE]`, `global` prefix)
+- **All element types:** `note_create`, `paper_note_create`, `text_create`, `shape_create`, `image_create`, `video_create`, `audio_create`, `space_create`
+- `connect` - Create arrow connections between elements
+- `canvas_background` - Set canvas colors and grid
+- `animation_mode` [cycled] - Enable animation timeline mode
+- `animation_next_slide` - Mark presentation slide boundaries
+- `on click`/`on variable` - Register event handlers
+- All runtime commands listed above
 
-- **Top-level `animate_*`**: Requires `animation_mode` first, defines animation timeline
-- **Event handler `animate_*`**: Always available, queues animations on-demand
-- **Top-level `for`**: Can contain ANY command including variable declarations
-- **Event handler `for`**: Can contain runtime commands and element creation
+**Animation behavior:**
+- `animate_*` commands **require `animation_mode` first**
+- Defines a declarative animation timeline
+- Animations play automatically when script loads
+
+**For loop behavior:**
+- Can contain **ANY command** including variable declarations
+- Full recursion through top-level script processor
+
+#### 2. **Event handler context** (`on click`, `on variable` blocks)
+
+**Available commands:**
+- `set` - Modify existing variables/arrays
+- `animate_*` - Queue animations dynamically (no `animation_mode` needed)
+- `text_update` - Update text content
+- `text_bind`, `position_bind` - Register bindings
+- `presentation_next`, `presentation_auto_next_if` - Control slides
+- **ONLY `shape_create`** - Limited element creation (no notes, text, media, spaces)
+- `for` loops - Iteration (same commands as parent context)
+
+**NOT available:**
+- Variable **declarations** (`int`, `real`, `bool`, `string`) - must declare at top level
+- `note_create`, `paper_note_create`, `text_create` - use top-level or shape as workaround
+- `image_create`, `video_create`, `audio_create` - media elements
+- `space_create` - nested workspaces
+- `connect` - connections
+- `canvas_background` - canvas settings
+- `animation_mode` - animation setup
+- `on click`/`on variable` - **Cannot nest event handlers**
+
+**Animation behavior:**
+- `animate_*` works **without `animation_mode`**
+- Queues animations imperatively in response to events
+- Animations scheduled and executed when event handler completes
+
+**For loop behavior:**
+- Recursively calls event handler context
+- Cannot contain variable declarations
+- Can contain `shape_create` and all runtime commands
+
+### Key Differences Summary
+
+| Feature | Top-Level | Event Handler |
+|---------|-----------|---------------|
+| Variable declarations | Yes - All types | No - Must pre-declare |
+| Element creation | Yes - All types | Limited - **Only shapes** |
+| Connections | Yes - `connect` | No |
+| Animations | Yes - Requires `animation_mode` | Yes - Always available |
+| For loops | Yes - Full DSL support | Limited - Runtime commands only |
+| Event handlers | Yes - Can register | No - Cannot nest |
 
 ---
 
