@@ -798,8 +798,11 @@ gchar* dsl_resolve_numeric_token(CanvasData *data, const gchar *token) {
         if (!dsl_evaluate_expression(data, expr, &value)) {
           value = 0.0;
         }
-        gint rounded = (gint)lround(value);
-        g_string_append_printf(resolved, "%d", rounded);
+        if (fabs(value - round(value)) < 1e-9) {
+          g_string_append_printf(resolved, "%.0f", value);
+        } else {
+          g_string_append_printf(resolved, "%.6f", value);
+        }
       }
       g_free(expr);
 

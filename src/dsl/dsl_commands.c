@@ -406,6 +406,140 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
                                        start_time, duration, interp);
       animations_scheduled = TRUE;
     }
+    else if (g_strcmp0(tokens[0], "animate_color") == 0 && token_count >= 5) {
+      const gchar *elem_id = tokens[1];
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: animate_color target '%s' not found\n", elem_id);
+        g_strfreev(tokens);
+        continue;
+      }
+
+      const gchar *from_color = tokens[2];
+      const gchar *to_color = tokens[3];
+
+      if ((4 + 1) >= token_count) {
+        g_print("DSL: animate_color missing timing arguments\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      double start_time = 0.0;
+      double duration = 0.0;
+      if (!dsl_parse_double_token(data, tokens[4], &start_time) ||
+          !dsl_parse_double_token(data, tokens[5], &duration)) {
+        g_print("DSL: animate_color timing parse error\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+      if (6 < token_count) {
+        const gchar *type_token = tokens[6];
+        if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
+        else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
+        else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
+      }
+
+      if (!animation_prepared) {
+        dsl_runtime_prepare_animation_engine(data);
+        animation_prepared = TRUE;
+      }
+
+      animation_add_color(data->anim_engine, model_element->uuid,
+                         start_time, duration, interp,
+                         from_color, to_color);
+      animations_scheduled = TRUE;
+    }
+    else if (g_strcmp0(tokens[0], "animate_appear") == 0 && token_count >= 4) {
+      const gchar *elem_id = tokens[1];
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: animate_appear target '%s' not found\n", elem_id);
+        g_strfreev(tokens);
+        continue;
+      }
+
+      double start_time = 0.0;
+      double duration = 0.0;
+      if (!dsl_parse_double_token(data, tokens[2], &start_time) ||
+          !dsl_parse_double_token(data, tokens[3], &duration)) {
+        g_print("DSL: animate_appear timing parse error\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+      if (4 < token_count) {
+        const gchar *type_token = tokens[4];
+        if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
+        else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
+        else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
+      }
+
+      if (!animation_prepared) {
+        dsl_runtime_prepare_animation_engine(data);
+        animation_prepared = TRUE;
+      }
+
+      animation_add_create(data->anim_engine, model_element->uuid,
+                          start_time, duration, interp);
+      animations_scheduled = TRUE;
+    }
+    else if (g_strcmp0(tokens[0], "animate_disappear") == 0 && token_count >= 4) {
+      const gchar *elem_id = tokens[1];
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: animate_disappear target '%s' not found\n", elem_id);
+        g_strfreev(tokens);
+        continue;
+      }
+
+      double start_time = 0.0;
+      double duration = 0.0;
+      if (!dsl_parse_double_token(data, tokens[2], &start_time) ||
+          !dsl_parse_double_token(data, tokens[3], &duration)) {
+        g_print("DSL: animate_disappear timing parse error\n");
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
+      AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+      if (4 < token_count) {
+        const gchar *type_token = tokens[4];
+        if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
+        else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
+        else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
+      }
+
+      if (!animation_prepared) {
+        dsl_runtime_prepare_animation_engine(data);
+        animation_prepared = TRUE;
+      }
+
+      animation_add_delete(data->anim_engine, model_element->uuid,
+                          start_time, duration, interp);
+      animations_scheduled = TRUE;
+    }
     else if (g_strcmp0(tokens[0], "text_update") == 0 && token_count >= 3) {
       const gchar *elem_id = tokens[1];
       const gchar *text_token = tokens[2];

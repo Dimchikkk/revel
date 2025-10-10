@@ -50,17 +50,21 @@ static double bounce(double t) {
 
 // Elastic: spring-like effect
 static double elastic(double t) {
-    if (t == 0.0 || t == 1.0) return t;
+    const double c4 = (2 * M_PI) / 3;
 
-    double p = 0.3;
-    double s = p / 4.0;
-    return pow(2.0, -10.0 * t) * sin((t - s) * (2.0 * M_PI) / p) + 1.0;
+    return t == 0
+      ? 0
+      : t == 1
+      ? 1
+      : pow(2, -10 * t) * sin((t * 10 - 0.75) * c4) + 1;
 }
 
 // Back: overshoots then returns
 static double back(double t) {
-    double s = 1.70158; // Overshoot amount
-    return t * t * ((s + 1.0) * t - s);
+    const double c1 = 1.70158;
+    const double c3 = c1 + 1;
+
+    return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2);
 }
 
 // Parse color string to RGBA components
