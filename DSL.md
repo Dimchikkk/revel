@@ -2,16 +2,21 @@
 
 Complete reference for Revel's Domain Specific Language (DSL) for creating complex layouts, presentations, and animations.
 
+## Execution
+
+DSL scripts can be executed in two ways:
+- **DSL Executor window**: Press **Ctrl+E** to open the interactive executor
+- **Command line**: `./revel --dsl path/to/script.dsl` to run scripts directly on startup
+
 ## Table of Contents
 
 1. [Grammar Reference](#grammar-reference)
-2. [Overview](#overview)
-3. [Tutorial: Rule 110 Cellular Automaton](#tutorial-rule-110-cellular-automaton)
-4. [Canvas Settings](#canvas-settings)
-5. [Element Creation](#element-creation)
-6. [Connections](#connections)
-7. [Animation System](#animation-system)
-8. [Variables & Events](#variables--events)
+2. [Tutorial: Rule 110 Cellular Automaton](#tutorial-rule-110-cellular-automaton)
+3. [Canvas Settings](#canvas-settings)
+4. [Element Creation](#element-creation)
+5. [Connections](#connections)
+6. [Animation System](#animation-system)
+7. [Variables & Events](#variables--events)
 
 ---
 
@@ -144,7 +149,8 @@ OnVariable ::= 'on' 'variable' IDENTIFIER [Comparator Value]
 
 Comparator ::= '==' | '!=' | '<' | '>' | '<=' | '>='
 
-RuntimeCommand ::= SetCommand
+RuntimeCommand ::= VariableDecl
+                | SetCommand
                 | AnimateCommand
                 | TextCommand
                 | BindCommand
@@ -217,96 +223,66 @@ Both work in:
 
 ### Execution Contexts
 
-**Commands available in BOTH contexts:**
-- `set` - Variable/array assignment
-- `animate_*` - All animation commands (move, resize, rotate, color, appear, disappear)
-- `text_update` - Update element text dynamically
-- `text_bind`, `position_bind` - Bind elements to variables
-- `presentation_next`, `presentation_auto_next_if` - Slide navigation
-- `for` loops - Iteration with nesting support
+Revel DSL has two execution contexts with nearly identical capabilities:
 
 #### 1. **Top-level context** (Main script)
 
-**Available commands:**
-- Variable declarations (`int`, `real`, `bool`, `string`, arrays with `[SIZE]`, `global` prefix)
-- **All element types:** `note_create`, `paper_note_create`, `text_create`, `shape_create`, `image_create`, `video_create`, `audio_create`, `space_create`
-- `connect` - Create arrow connections between elements
-- `canvas_background` - Set canvas colors and grid
-- `animation_mode` [cycled] - Enable animation timeline mode
-- `animation_next_slide` - Mark presentation slide boundaries
-- `on click`/`on variable` - Register event handlers
-- All runtime commands listed above
+**All DSL commands available:**
+- Variable declarations (`int`, `real`, `bool`, `string`, arrays, `global`)
+- Element creation (all types: notes, text, shapes, images, videos, audio, spaces)
+- `connect` - Arrow connections
+- `canvas_background` - Canvas configuration
+- `animation_mode` [cycled] - Animation timeline mode
+- `animation_next_slide` - Presentation slide markers
+- `on click`/`on variable` - Event handler registration
+- `set` - Variable assignment
+- `animate_*` - Animation commands (**requires `animation_mode` first**)
+- `text_update`, `text_bind`, `position_bind` - Text manipulation
+- `presentation_next`, `presentation_auto_next_if` - Slide control
+- `for` loops - Full DSL support including variable declarations
 
 **Animation behavior:**
-- `animate_*` commands **require `animation_mode` first**
-- Defines a declarative animation timeline
-- Animations play automatically when script loads
-
-**For loop behavior:**
-- Can contain **ANY command** including variable declarations
-- Full recursion through top-level script processor
+- Requires `animation_mode` declaration before using `animate_*`
+- Creates declarative timeline that plays on script load
 
 #### 2. **Event handler context** (`on click`, `on variable` blocks)
 
-**Available commands:**
-- `set` - Modify existing variables/arrays
-- `animate_*` - Queue animations dynamically (no `animation_mode` needed)
-- `text_update` - Update text content
-- `text_bind`, `position_bind` - Register bindings
-- `presentation_next`, `presentation_auto_next_if` - Control slides
-- **ONLY `shape_create`** - Limited element creation (no notes, text, media, spaces)
-- `for` loops - Iteration (same commands as parent context)
+**Nearly all DSL commands available:**
+- **Full DSL support** - Uses same script processor as top-level
+- **Variable declarations** (`int`, `real`, `bool`, `string`, arrays) - **Can declare new variables inside handlers**
+- Element creation (all types: notes, text, shapes, images, videos, audio, spaces)
+- `connect` - Arrow connections
+- `set` - Variable assignment (existing or new variables)
+- `animate_*` - Animation commands (**works without `animation_mode`**)
+- `text_update`, `text_bind`, `position_bind` - Text manipulation
+- `presentation_next`, `presentation_auto_next_if` - Slide control
+- `for` loops - Full DSL support including variable declarations and element creation
 
-**NOT available:**
-- Variable **declarations** (`int`, `real`, `bool`, `string`) - must declare at top level
-- `note_create`, `paper_note_create`, `text_create` - use top-level or shape as workaround
-- `image_create`, `video_create`, `audio_create` - media elements
-- `space_create` - nested workspaces
-- `connect` - connections
-- `canvas_background` - canvas settings
-- `animation_mode` - animation setup
+**Only 4 restrictions:**
+- `canvas_background` - Must be set at top level (canvas is already initialized)
+- `animation_mode` - Must be declared at top level (animation timeline is declarative)
+- `animation_next_slide` - Presentation structure defined at top level
 - `on click`/`on variable` - **Cannot nest event handlers**
 
 **Animation behavior:**
-- `animate_*` works **without `animation_mode`**
-- Queues animations imperatively in response to events
-- Animations scheduled and executed when event handler completes
-
-**For loop behavior:**
-- Recursively calls event handler context
-- Cannot contain variable declarations
-- Can contain `shape_create` and all runtime commands
+- Works **without** `animation_mode` declaration
+- Queues animations dynamically in response to events
+- Animations execute when event handler completes
 
 ### Key Differences Summary
 
 | Feature | Top-Level | Event Handler |
 |---------|-----------|---------------|
-| Variable declarations | Yes - All types | No - Must pre-declare |
-| Element creation | Yes - All types | Limited - **Only shapes** |
-| Connections | Yes - `connect` | No |
-| Animations | Yes - Requires `animation_mode` | Yes - Always available |
-| For loops | Yes - Full DSL support | Limited - Runtime commands only |
-| Event handlers | Yes - Can register | No - Cannot nest |
+| Variable declarations | Yes | Yes |
+| Element creation (all types) | Yes | Yes |
+| Connections | Yes | Yes |
+| Animations | Yes - Requires `animation_mode` | Yes - No requirement |
+| For loops | Yes - Full DSL | Yes - Full DSL |
+| Canvas configuration | Yes | No - Top-level only |
+| Event registration | Yes | No - Cannot nest |
+| Presentation slides | Yes | No - Top-level only |
 
----
-
-## Overview
-
-Revel DSL allows you to programmatically create complex layouts with notes, shapes, media, and connections. DSL scripts can be executed in two ways:
-- **DSL Executor window**: Press **Ctrl+E** to open the interactive executor
-- **Command line**: `./revel --dsl path/to/script.dsl` to run scripts directly on startup
-
-### General Syntax Rules
-
-- One command per line
-- Lines starting with `#` are comments
-- Empty lines are ignored
-- Color formats: `(r,g,b,a)`, `#RRGGBB`, `#RRGGBBAA`, or `color(r,g,b,a)`
-  - RGB values: 0.0-1.0 for `(r,g,b,a)` format, 0-255 for hex
-  - Alpha: 0.0-1.0 (optional, defaults to 1.0)
-- Position/size format: `(x,y)` or `(width,height)` in pixels
-- Text strings: Use `"quotes"` for multi-word text
-- Escape sequences in text: `\n` (newline), `\t` (tab), `\"` (quote), `\\` (backslash)
+**Summary:** Event handlers support the full DSL except for meta-configuration (canvas settings, animation/presentation mode setup, nested event handlers).
 
 ---
 

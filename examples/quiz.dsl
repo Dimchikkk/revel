@@ -94,9 +94,9 @@ set data_done {data_done - data_done}
 
 on click card_rain
   set correct_total {correct_total + 1 - data_done}
-  set data_done {data_done + 1 - data_done}
   text_update data_feedback "✓ Correct! Consistent rainfall maintains water sources."
   text_update q3_score "Score: ${correct_total} correct • ${incorrect_total} incorrect"
+  set data_done {data_done + 1 - data_done}
 end
 on click card_altitude
   set incorrect_total {incorrect_total + 1}

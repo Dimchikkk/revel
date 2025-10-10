@@ -200,9 +200,9 @@ shape_create process rectangle "Process" (400,250) (140,100) bg #3b82f6 text_col
 shape_create end circle "End" (700,280) (100,100) bg #ef4444 text_color #FFFFFF font "Ubuntu Bold 18" filled true
 connect start process straight single #94a3b8
 connect process end straight single #94a3b8
-# Pulsing animation that loops - keeping the circle smaller so it doesn't overlap arrow
-animate_resize start (100,100) (115,115) 0.0 0.8 bezier
-animate_resize start (115,115) (100,100) 0.8 0.8 bezier
+# Pulsing glow animation - color pulse doesn't affect arrow position
+animate_color start #10b981 #34d399 0.0 0.8 bezier
+animate_color start #34d399 #10b981 0.8 0.8 bezier
 
 animation_next_slide
 

@@ -17,6 +17,9 @@
 #include "dsl/dsl_utils.h"
 #include "dsl/dsl_commands.h"
 
+// Forward declaration for recursive script execution
+extern void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename, gboolean skip_type_check);
+
 gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) {
   if (!data || !block_source) return FALSE;
 

@@ -47,7 +47,7 @@ static void determine_optimal_connection_points(ModelElement *from, ModelElement
   connection_determine_optimal_points(from_rect, to_rect, from_point, to_point);
 }
 
-static void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename, gboolean skip_type_check) {
+void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename, gboolean skip_type_check) {
   if (!data || !script) {
     g_print("Error: No data or script provided\n");
     return;

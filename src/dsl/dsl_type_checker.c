@@ -619,6 +619,40 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
   if (token_count < 1) return;
   const gchar *command = tokens[0];
 
+  // Check for variable declarations (event handlers now support full DSL)
+  gboolean is_global_decl = g_strcmp0(command, "global") == 0;
+  int type_token_index = is_global_decl ? 1 : 0;
+  const gchar *type_token = tokens[type_token_index];
+
+  if ((g_strcmp0(type_token, "int") == 0 ||
+       g_strcmp0(type_token, "real") == 0 ||
+       g_strcmp0(type_token, "bool") == 0 ||
+       g_strcmp0(type_token, "string") == 0) && token_count >= (type_token_index + 2)) {
+    // Variable declaration in event handler - allowed since handlers use full script processor
+    DSLVarType var_type = DSL_VAR_REAL;
+    if (g_strcmp0(type_token, "int") == 0) var_type = DSL_VAR_INT;
+    else if (g_strcmp0(type_token, "real") == 0) var_type = DSL_VAR_REAL;
+    else if (g_strcmp0(type_token, "bool") == 0) var_type = DSL_VAR_BOOL;
+    else if (g_strcmp0(type_token, "string") == 0) var_type = DSL_VAR_STRING;
+
+    const gchar *var_name_token = tokens[type_token_index + 1];
+    gchar *var_name = NULL;
+    const gchar *bracket = strchr(var_name_token, '[');
+    if (bracket) {
+      var_name = g_strndup(var_name_token, bracket - var_name_token);
+      var_type = DSL_VAR_ARRAY;
+    } else {
+      var_name = g_strdup(var_name_token);
+    }
+
+    gboolean already_defined = g_hash_table_contains(ctx->variables, var_name);
+    if (!already_defined) {
+      dsl_type_register_variable(ctx, var_name, line, var_type);
+    }
+    g_free(var_name);
+    return;
+  }
+
   if (g_strcmp0(command, "set") == 0) {
     if (token_count < 3) {
       dsl_type_add_error(ctx, line, "set requires a variable and a value");
