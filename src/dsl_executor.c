@@ -47,7 +47,7 @@ static void determine_optimal_connection_points(ModelElement *from, ModelElement
   connection_determine_optimal_points(from_rect, to_rect, from_point, to_point);
 }
 
-static void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename) {
+static void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename, gboolean skip_type_check) {
   if (!data || !script) {
     g_print("Error: No data or script provided\n");
     return;
@@ -56,7 +56,7 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
   // Check if this is a presentation script (has animation_next_slide commands)
   gboolean is_presentation = (strstr(script, "animation_next_slide") != NULL);
 
-  if (!dsl_type_check_script(data, script, filename)) {
+  if (!skip_type_check && !dsl_type_check_script(data, script, filename)) {
     extern void canvas_show_notification(CanvasData *data, const char *message);
     canvas_show_notification(data, "DSL type check failed");
     return;
@@ -154,8 +154,10 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
     g_print("Animation mode: %s\n", is_cycled ? "cycled" : "single");
   }
 
-  // Reset DSL runtime state for fresh execution
-  dsl_runtime_reset(data);
+  // Reset DSL runtime state for fresh execution (but not for loop bodies)
+  if (!skip_type_check) {
+    dsl_runtime_reset(data);
+  }
 
   GHashTable *element_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   GList *connections = NULL;
@@ -673,21 +675,37 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
         loop_variable->type = DSL_VAR_INT;
       }
 
-      // Collect loop body
+      // Collect loop body with proper nesting tracking
       GString *loop_body = g_string_new(NULL);
       gboolean found_end = FALSE;
       int loop_end_line = i;
+      int nesting_depth = 0;
 
       for (int j = i + 1; lines[j] != NULL; j++) {
         gchar *body_line = trim_whitespace(lines[j]);
         if (body_line[0] == '#' || body_line[0] == '\0') {
           continue;
         }
-        if (g_strcmp0(body_line, "end") == 0) {
-          loop_end_line = j;
-          found_end = TRUE;
-          break;
+
+        // Check for nested for loops
+        gchar **check_tokens = tokenize_line(body_line, NULL);
+        if (check_tokens && check_tokens[0]) {
+          if (g_strcmp0(check_tokens[0], "for") == 0) {
+            nesting_depth++;
+          } else if (g_strcmp0(check_tokens[0], "end") == 0) {
+            if (nesting_depth > 0) {
+              nesting_depth--;
+            } else {
+              // This is the end for our loop
+              g_strfreev(check_tokens);
+              loop_end_line = j;
+              found_end = TRUE;
+              break;
+            }
+          }
         }
+        g_strfreev(check_tokens);
+
         if (loop_body->len > 0) {
           g_string_append_c(loop_body, '\n');
         }
@@ -703,12 +721,14 @@ static void canvas_execute_script_internal(CanvasData *data, const gchar *script
 
       gchar *body_source = g_string_free(loop_body, FALSE);
 
-      // Execute loop
+      // Execute loop by recursively calling canvas_execute_script_internal
+      // Skip type checking since the loop body was already validated
+      // This allows full DSL commands (variable declarations, element creation, nested loops, etc.)
       int start_int = (int)start_val;
       int end_int = (int)end_val;
       for (int loop_i = start_int; loop_i <= end_int; loop_i++) {
         dsl_runtime_set_variable(data, loop_var, (double)loop_i, FALSE);
-        dsl_execute_command_block(data, body_source);
+        canvas_execute_script_internal(data, body_source, NULL, TRUE);
       }
 
       g_free(body_source);
@@ -3888,10 +3908,10 @@ void canvas_show_script_dialog(GtkButton *button, gpointer user_data) {
 
 // Public wrapper function without filename (for interactive use)
 void canvas_execute_script(CanvasData *data, const gchar *script) {
-  canvas_execute_script_internal(data, script, NULL);
+  canvas_execute_script_internal(data, script, NULL, FALSE);
 }
 
 // Public wrapper function with filename (for file-based DSL execution)
 void canvas_execute_script_file(CanvasData *data, const gchar *script, const gchar *filename) {
-  canvas_execute_script_internal(data, script, filename);
+  canvas_execute_script_internal(data, script, filename, FALSE);
 }

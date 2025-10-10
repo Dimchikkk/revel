@@ -547,6 +547,74 @@ static void dsl_type_check_options(DSLTypeCheckerContext *ctx, gchar **tokens, i
   }
 }
 
+static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tokens, int token_count, int line);
+
+static void dsl_type_check_loop_body_command(DSLTypeCheckerContext *ctx, gchar **tokens, int token_count, int line) {
+  if (token_count < 1) return;
+  const gchar *command = tokens[0];
+
+  // Allow variable declarations inside for loops
+  gboolean is_global_decl = g_strcmp0(command, "global") == 0;
+  int type_token_index = is_global_decl ? 1 : 0;
+  const gchar *type_token = tokens[type_token_index];
+
+  if ((g_strcmp0(type_token, "int") == 0 ||
+       g_strcmp0(type_token, "real") == 0 ||
+       g_strcmp0(type_token, "bool") == 0 ||
+       g_strcmp0(type_token, "string") == 0) && token_count >= (type_token_index + 2)) {
+    DSLVarType var_type = DSL_VAR_REAL;
+    if (g_strcmp0(type_token, "int") == 0) var_type = DSL_VAR_INT;
+    else if (g_strcmp0(type_token, "real") == 0) var_type = DSL_VAR_REAL;
+    else if (g_strcmp0(type_token, "bool") == 0) var_type = DSL_VAR_BOOL;
+    else if (g_strcmp0(type_token, "string") == 0) var_type = DSL_VAR_STRING;
+
+    const gchar *var_name_token = tokens[type_token_index + 1];
+    gchar *var_name = NULL;
+
+    // Check for array declaration: name[size]
+    const gchar *bracket = strchr(var_name_token, '[');
+    if (bracket) {
+      var_name = g_strndup(var_name_token, bracket - var_name_token);
+      var_type = DSL_VAR_ARRAY;
+    } else {
+      var_name = g_strdup(var_name_token);
+    }
+
+    gboolean already_defined = g_hash_table_contains(ctx->variables, var_name);
+    if (!already_defined) {
+      dsl_type_register_variable(ctx, var_name, line, var_type);
+    }
+    g_free(var_name);
+
+    int expr_start = type_token_index + 2;
+    if (var_type != DSL_VAR_STRING && token_count > expr_start) {
+      GString *expr = g_string_new(NULL);
+      for (int t = expr_start; t < token_count; t++) {
+        if (expr->len > 0) g_string_append_c(expr, ' ');
+        g_string_append(expr, tokens[t]);
+      }
+      if (var_type == DSL_VAR_BOOL) {
+        const gchar *literal = tokens[expr_start];
+        if (!(g_ascii_strcasecmp(literal, "true") == 0 ||
+              g_ascii_strcasecmp(literal, "false") == 0 ||
+              g_ascii_strcasecmp(literal, "yes") == 0 ||
+              g_ascii_strcasecmp(literal, "no") == 0 ||
+              strcmp(literal, "1") == 0 ||
+              strcmp(literal, "0") == 0)) {
+          dsl_type_check_expression(ctx, expr->str, line, "bool assignment");
+        }
+      } else {
+        dsl_type_check_expression(ctx, expr->str, line, "variable assignment");
+      }
+      g_string_free(expr, TRUE);
+    }
+    return;
+  }
+
+  // Fall back to regular event command checking
+  dsl_type_check_event_command(ctx, tokens, token_count, line);
+}
+
 static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tokens, int token_count, int line) {
   if (token_count < 1) return;
   const gchar *command = tokens[0];
@@ -896,16 +964,50 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
       // Check loop bounds are valid expressions
       dsl_type_check_expression(&ctx, tokens[2], line_no, "for loop start");
       dsl_type_check_expression(&ctx, tokens[3], line_no, "for loop end");
-      // Skip to end
+
+      // Validate loop body commands (similar to event block validation)
       gboolean found_end = FALSE;
+      int nesting_depth = 0;
+
       for (int j = i + 1; lines[j] != NULL; j++) {
         gchar *check_line = trim_whitespace(lines[j]);
-        if (check_line[0] != '\0' && check_line[0] != '#' && g_strcmp0(check_line, "end") == 0) {
-          i = j;
-          found_end = TRUE;
-          break;
+        if (check_line[0] == '\0' || check_line[0] == '#') {
+          continue;
         }
+
+        int body_token_count = 0;
+        gchar **body_tokens = tokenize_line(check_line, &body_token_count);
+
+        if (body_token_count > 0) {
+          if (g_strcmp0(body_tokens[0], "for") == 0) {
+            nesting_depth++;
+            // Validate nested for loop header
+            if (body_token_count >= 4) {
+              const gchar *nested_var = body_tokens[1];
+              if (!g_hash_table_contains(ctx.variables, nested_var)) {
+                dsl_type_register_variable(&ctx, nested_var, j + 1, DSL_VAR_INT);
+              }
+              dsl_type_check_expression(&ctx, body_tokens[2], j + 1, "for loop start");
+              dsl_type_check_expression(&ctx, body_tokens[3], j + 1, "for loop end");
+            }
+          } else if (g_strcmp0(body_tokens[0], "end") == 0) {
+            if (nesting_depth > 0) {
+              nesting_depth--;
+            } else {
+              i = j;
+              found_end = TRUE;
+              g_strfreev(body_tokens);
+              break;
+            }
+          } else {
+            // Validate command in loop body (allows variable declarations)
+            dsl_type_check_loop_body_command(&ctx, body_tokens, body_token_count, j + 1);
+          }
+        }
+
+        g_strfreev(body_tokens);
       }
+
       if (!found_end) {
         dsl_type_add_error(&ctx, line_no, "for loop missing matching 'end'");
       }

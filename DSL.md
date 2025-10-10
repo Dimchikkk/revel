@@ -4,13 +4,235 @@ Complete reference for Revel's Domain Specific Language (DSL) for creating compl
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Tutorial: Rule 110 Cellular Automaton](#tutorial-rule-110-cellular-automaton)
-3. [Canvas Settings](#canvas-settings)
-4. [Element Creation](#element-creation)
-5. [Connections](#connections)
-6. [Animation System](#animation-system)
-7. [Variables & Events](#variables--events)
+1. [Grammar Reference](#grammar-reference)
+2. [Overview](#overview)
+3. [Tutorial: Rule 110 Cellular Automaton](#tutorial-rule-110-cellular-automaton)
+4. [Canvas Settings](#canvas-settings)
+5. [Element Creation](#element-creation)
+6. [Connections](#connections)
+7. [Animation System](#animation-system)
+8. [Variables & Events](#variables--events)
+
+---
+
+## Grammar Reference
+
+Complete formal syntax reference for Revel DSL.
+
+### Lexical Structure
+
+```
+COMMENT    ::= '#' .* NEWLINE
+WHITESPACE ::= ' ' | '\t'
+NEWLINE    ::= '\n'
+IDENTIFIER ::= [a-zA-Z_][a-zA-Z0-9_]*
+NUMBER     ::= [0-9]+ ('.' [0-9]+)?
+STRING     ::= '"' (CHAR | ESCAPE)* '"'
+ESCAPE     ::= '\n' | '\t' | '\"' | '\\'
+POINT      ::= '(' EXPR ',' EXPR ')'
+COLOR      ::= '(' EXPR ',' EXPR ',' EXPR ',' EXPR ')'
+            | '#' [0-9A-Fa-f]{6,8}
+EXPR       ::= '{' EXPRESSION '}'
+TEXT_INTERP::= '${' EXPRESSION '}'
+```
+
+### Top-Level Declarations
+
+```
+Program ::= (Statement | Comment | EmptyLine)*
+
+Statement ::= VariableDecl
+           | ElementCreate
+           | Connection
+           | CanvasConfig
+           | AnimationConfig
+           | ForLoop
+           | EventHandler
+
+VariableDecl ::= ['global'] VarType IDENTIFIER Value
+              | ['global'] VarType IDENTIFIER '[' NUMBER ']' Value
+
+VarType ::= 'int' | 'real' | 'bool' | 'string'
+Value   ::= NUMBER | EXPR | STRING | BoolLiteral
+BoolLiteral ::= 'true' | 'false' | 'yes' | 'no' | '1' | '0'
+```
+
+### Element Creation
+
+```
+ElementCreate ::= NoteCreate
+               | ShapeCreate
+               | MediaCreate
+               | SpaceCreate
+
+NoteCreate ::= ('note_create' | 'paper_note_create' | 'text_create')
+               IDENTIFIER STRING POINT POINT [Options]*
+
+ShapeCreate ::= 'shape_create' IDENTIFIER ShapeType STRING
+                POINT POINT [Options]*
+
+ShapeType ::= 'circle' | 'rectangle' | 'roundedrect' | 'triangle'
+           | 'diamond' | 'vcylinder' | 'hcylinder'
+           | 'line' | 'arrow' | 'bezier'
+
+MediaCreate ::= ('image_create' | 'video_create' | 'audio_create')
+                IDENTIFIER PATH POINT POINT ['rotation' NUMBER]
+
+SpaceCreate ::= 'space_create' IDENTIFIER STRING POINT POINT
+                ['rotation' NUMBER]
+
+Options ::= 'bg' COLOR
+         | 'text_color' COLOR
+         | 'font' STRING
+         | 'align' Alignment
+         | 'rotation' NUMBER
+         | 'filled' BoolLiteral
+         | 'stroke' NUMBER
+         | 'stroke_color' COLOR
+         | 'stroke_style' StrokeStyle
+         | 'fill_style' FillStyle
+         | 'line_start' POINT
+         | 'line_end' POINT
+         | 'p0' POINT | 'p1' POINT | 'p2' POINT | 'p3' POINT
+
+Alignment ::= 'top-left' | 'top-center' | 'top-right'
+           | 'center' | 'bottom-left' | 'bottom-right'
+
+StrokeStyle ::= 'solid' | 'dashed' | 'dotted'
+FillStyle   ::= 'solid' | 'hachure' | 'crosshatch'
+```
+
+### Connections
+
+```
+Connection ::= 'connect' IDENTIFIER IDENTIFIER
+               [ConnType] [ArrowHead] [COLOR]
+
+ConnType   ::= 'parallel' | 'straight'
+ArrowHead  ::= 'none' | 'single' | 'double'
+```
+
+### Canvas & Animation Configuration
+
+```
+CanvasConfig ::= 'canvas_background' COLOR BoolLiteral [COLOR]
+
+AnimationConfig ::= 'animation_mode' ['cycled']
+                 | 'animation_next_slide'
+```
+
+### Control Flow
+
+```
+ForLoop ::= 'for' IDENTIFIER EXPR EXPR
+            Statement*
+            'end'
+```
+
+### Event Handlers
+
+```
+EventHandler ::= OnClick | OnVariable
+
+OnClick ::= 'on' 'click' IDENTIFIER
+            RuntimeCommand*
+            'end'
+
+OnVariable ::= 'on' 'variable' IDENTIFIER [Comparator Value]
+               RuntimeCommand*
+               'end'
+
+Comparator ::= '==' | '!=' | '<' | '>' | '<=' | '>='
+
+RuntimeCommand ::= SetCommand
+                | AnimateCommand
+                | TextCommand
+                | BindCommand
+                | PresentationCommand
+                | ForLoop
+                | ElementCreate
+
+SetCommand ::= 'set' VarAccess EXPR
+VarAccess  ::= IDENTIFIER ['[' EXPR ']']
+
+AnimateCommand ::= 'animate_move' IDENTIFIER [POINT] POINT NUMBER NUMBER [InterpType]
+                | 'animate_resize' IDENTIFIER [POINT] POINT NUMBER NUMBER [InterpType]
+                | 'animate_color' IDENTIFIER COLOR COLOR NUMBER NUMBER [InterpType]
+                | 'animate_rotate' IDENTIFIER [NUMBER] NUMBER NUMBER NUMBER [InterpType]
+                | 'animate_appear' IDENTIFIER NUMBER NUMBER [InterpType]
+                | 'animate_disappear' IDENTIFIER NUMBER NUMBER [InterpType]
+
+InterpType ::= 'immediate' | 'linear' | 'bezier' | 'ease-in' | 'ease-out'
+            | 'bounce' | 'elastic' | 'back'
+
+TextCommand ::= 'text_update' IDENTIFIER STRING
+
+BindCommand ::= 'text_bind' IDENTIFIER IDENTIFIER
+             | 'position_bind' IDENTIFIER IDENTIFIER
+
+PresentationCommand ::= 'presentation_next'
+                     | 'presentation_auto_next_if' IDENTIFIER Value
+```
+
+### Expression Language
+
+```
+EXPRESSION ::= Primary
+            | EXPRESSION BinOp EXPRESSION
+            | UnaryOp EXPRESSION
+            | '(' EXPRESSION ')'
+            | FunctionCall
+
+Primary ::= NUMBER
+         | IDENTIFIER
+         | IDENTIFIER '[' EXPRESSION ']'  # Array access
+
+BinOp ::= '+' | '-' | '*' | '/' | '%'
+       | '==' | '!=' | '<' | '>' | '<=' | '>='
+       | '&&' | '||'
+
+UnaryOp ::= '-' | '!'
+
+FunctionCall ::= IDENTIFIER '(' [EXPRESSION (',' EXPRESSION)*] ')'
+```
+
+### String Interpolation
+
+Strings support two forms of interpolation:
+- `${variable}` - Variable reference (can be string or numeric)
+- `${expression}` - Numeric expression evaluation
+
+Both work in:
+- Element text content
+- Element IDs (creates dynamic IDs like `cell${row}${col}`)
+- Text update commands
+- Variable declarations
+
+### Scoping Rules
+
+- **Top-level variables**: Visible in entire script including event handlers
+- **Loop variables**: Created automatically as `int`, visible in loop body and nested loops
+- **Global variables**: Marked with `global`, persist across presentation slides
+- **Arrays**: Declared with size, all elements initialized to same value
+
+### Execution Contexts
+
+1. **Top-level context**: Full DSL support
+   - Variable declarations (int, real, bool, string, arrays, global)
+   - Element creation (all types)
+   - Connections
+   - Canvas configuration
+   - Animation setup
+   - Event handler registration
+   - For loops (full DSL commands in body)
+
+2. **Event handler context**: Runtime commands only
+   - `set` for variable assignment
+   - `animate_*` for animations
+   - `text_update` for dynamic text
+   - Element creation (limited)
+   - For loops (runtime commands in body)
+   - Cannot nest event handlers
 
 ---
 
@@ -588,7 +810,7 @@ text_create total "Total: ${total_sales}" (400,120) (320,40)
 
 - `${ ... }` in strings evaluates expressions when the element is created or when refreshed by events
 
-### Control Flow (inside event blocks)
+### Control Flow
 
 ```
 for VARIABLE START END
@@ -600,17 +822,22 @@ end
 - VARIABLE is automatically created as `int` if not declared
 - START and END can be literals, variables, or expressions
 - Can be nested (for within for)
-- Supported inside `on click` and `on variable` event blocks
+- Works at **top level** (main script) AND inside event blocks (`on click`, `on variable`)
+- **Top-level loops** support ALL DSL commands: variable declarations, element creation, connections, nested loops, etc.
+- **Event block loops** support runtime commands: `set`, `animate_*`, `text_update`, element creation, nested loops
 
 **Example:**
 ```
+# Top-level loops - full DSL support
 for i 0 59
   set cells[i] 0
 end
 
+# Nested loops with variable declarations and dynamic IDs
 for row 0 9
   for col 0 9
-    shape_create cell${row}${col} rectangle "" ({col*50},{row*50}) (48,48) filled true
+    int color {(row + col) % 3}
+    shape_create cell${row}${col} rectangle "" ({col*50},{row*50}) (48,48) filled true bg {color,color,color,1.0}
   end
 end
 ```

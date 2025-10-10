@@ -1,7 +1,8 @@
 canvas_background (0.1,0.1,0.15,1.0) false
 
-int grid_size 100
-int max_index 99
+int N 100
+int grid_size N
+int max_index {N-1}
 
 int row 0
 int col 0
