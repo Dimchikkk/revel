@@ -16,7 +16,9 @@ Complete reference for Revel's Domain Specific Language (DSL) for creating compl
 
 ## Overview
 
-Revel DSL allows you to programmatically create complex layouts with notes, shapes, media, and connections. All DSL scripts can be executed via the DSL Executor window (**Ctrl+E**).
+Revel DSL allows you to programmatically create complex layouts with notes, shapes, media, and connections. DSL scripts can be executed in two ways:
+- **DSL Executor window**: Press **Ctrl+E** to open the interactive executor
+- **Command line**: `./revel --dsl path/to/script.dsl` to run scripts directly on startup
 
 ### General Syntax Rules
 
@@ -34,87 +36,43 @@ Revel DSL allows you to programmatically create complex layouts with notes, shap
 
 ## Tutorial: Rule 110 Cellular Automaton
 
-Let's build a complete program from scratch using `examples/rule110.dsl`. This tutorial demonstrates variables, arrays, loops, event handlers, and dynamic visualization. Rule 110 is a **Turing-complete** cellular automaton - meaning it can theoretically compute anything a traditional computer can!
+Let's build something wild - a **Turing-complete** cellular automaton that can theoretically compute anything! We'll use `examples/rule110.dsl` to create a 500×500 simulator where simple rules produce complex, beautiful patterns.
 
-### What We're Building
+### The Big Picture
 
-A 500×500 cellular automaton simulator that:
-- Displays 500 cells across 500 generations
-- Each cell is either alive (white) or dead (black)
-- Updates based on Rule 110 pattern matching
-- Runs interactively when you click START
+Click START → 500 generations of black/white cells evolve based on Rule 110's pattern matching. Each generation is a row of pixels spawning the next generation below it.
 
-### Step 1: Setup the Canvas
+### Part 1: Setup & Data Structures
 
 ```dsl
-# Dark background, no grid
 canvas_background (0.05,0.05,0.08,1.0) false
+
+int c[500] 0        # Current generation: 500 cells (0=dead, 1=alive)
+set c[499] 1        # Seed: rightmost cell starts alive
+
+int next[500] 0     # Next generation buffer
+int gen 0           # Generation counter
+int step 0          # State machine: 0=idle, 1=draw, 2=compute, 3=copy
 ```
 
-**What you learned:**
-- `canvas_background` sets background color and grid visibility
-- Colors use `(r,g,b,a)` format with values 0.0-1.0
-- `false` disables the grid for cleaner visualization
+Two arrays do double-buffering: compute `next` from `c`, then swap. The `step` variable drives our three-phase loop.
 
-### Step 2: Declare Variables and Arrays
+### Part 2: UI & Interaction
 
 ```dsl
-# 500 cells - start with rightmost = 1
-int c[500] 0
-set c[499] 1
-```
+shape_create btn rectangle "START" (400,20) (150,50) filled true bg (0.2,0.6,0.9,1.0)
+text_create lbl "Gen: 0 / 500" (570,30) (150,30) text_color (0.8,0.8,0.8,1.0)
 
-**What you learned:**
-- `int c[500] 0` creates an integer array with 500 elements, all initialized to 0
-- Arrays hold the current state: `c[i]` is 1 (alive) or 0 (dead)
-- `set c[499] 1` sets the last cell alive (our starting seed)
-
-```dsl
-int next[500] 0
-int gen 0
-int step 0
-int i 0
-int left 0
-int right 0
-int pattern 0
-```
-
-**What you learned:**
-- Declare all variables before use
-- `next[500]` holds the next generation while computing
-- `gen` tracks generation count (0-500)
-- `step` controls our state machine (1=draw, 2=compute, 3=copy)
-- `i`, `left`, `right`, `pattern` are temporary work variables
-
-### Step 3: Create UI Elements
-
-```dsl
-shape_create btn rectangle "START" (400,20) (150,50) filled true bg (0.2,0.6,0.9,1.0) text_color (1.0,1.0,1.0,1.0) font "Ubuntu Bold 20"
-text_create lbl "Gen: 0 / 500" (570,30) (150,30) text_color (0.8,0.8,0.8,1.0) font "Ubuntu 16"
-text_create title "Rule 110 - 500x500" (50,75) (500,40) text_color (1.0,1.0,1.0,1.0) font "Ubuntu Bold 24"
-```
-
-**What you learned:**
-- `shape_create ID TYPE "text" (x,y) (w,h)` creates shapes with optional text
-- `filled true` fills the shape with background color
-- `text_color` sets the label color inside shapes
-- `text_create` makes standalone text without background
-- Position elements using pixel coordinates
-
-### Step 4: Make the Button Interactive
-
-```dsl
 on click btn
-  set step 1
+  set step 1        # Kick off the state machine!
 end
 ```
 
-**What you learned:**
-- `on click ELEMENT_ID` runs when element is clicked (not dragged)
-- `set VARIABLE VALUE` assigns values
-- Setting `step` to 1 triggers our state machine
+One click launches the whole simulation. Notice how `on click` makes any element interactive.
 
-### Step 5: Draw Current Generation (Step 1)
+### Part 3: The State Machine
+
+**Phase 1 - Draw** (when `step == 1`)
 
 ```dsl
 on variable step == 1
@@ -123,130 +81,65 @@ on variable step == 1
     shape_create r${gen}c${i} rectangle "" ({10+i*6},{120+gen*6}) (5,5) filled true bg {c[i],c[i],c[i],1.0}
   end
   text_update lbl "Gen: ${gen} / 500"
-  for i 0 499
-    set next[i] 0
-  end
   set step 2
 end
 ```
 
-**What you learned:**
-- `on variable VAR == VALUE` runs every time variable equals that value
-- `{expr}` evaluates expressions: `{gen + 1}`, `{10+i*6}`
-- `for i START END` loops from START to END (inclusive)
-- `${var}` interpolates variables in strings and element IDs
-- Dynamic element IDs: `r${gen}c${i}` creates unique IDs like `r1c0`, `r1c1`, etc.
-- Each cell is a 5×5 square at position `(10+i*6, 120+gen*6)`
-- Grayscale color trick: `bg {c[i],c[i],c[i],1.0}` creates black (0,0,0) or white (1,1,1)
-- `text_update` changes text of existing elements
-- Clear `next` array before computing
+The magic: `r${gen}c${i}` creates unique IDs like `r1c0`, `r1c1`... dynamically! Color `{c[i],c[i],c[i],1.0}` maps 0→black, 1→white. Each generation is drawn 6 pixels below the last.
 
-### Step 6: Apply Rule 110 Logic (Step 2)
+**Phase 2 - Compute** (when `step == 2`)
 
-Rule 110 checks each cell and its neighbors to determine next state:
-
-| Pattern | 111 | 110 | 101 | 100 | 011 | 010 | 001 | 000 |
-|---------|-----|-----|-----|-----|-----|-----|-----|-----|
-| Binary  | 7   | 6   | 5   | 4   | 3   | 2   | 1   | 0   |
-| Result  | 0   | 1   | 1   | 0   | 1   | 1   | 1   | 0   |
-
-Rule 110 = `01101110` binary = produces 1 for patterns 1,2,3,5,6
+Rule 110's lookup table says: if you see patterns 1,2,3,5,6 in binary (like `010` or `110`), the center cell lives. Otherwise it dies.
 
 ```dsl
 on variable step == 2
-  # Cell 0 (left edge) - assume left neighbor is 0
-  set left 0
-  set right {c[1]}
-  set pattern {left * 4 + c[0] * 2 + right}
-  set next[0] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
-```
+  # Convert 3 neighbors to binary: left*4 + center*2 + right
+  set pattern {left * 4 + c[i] * 2 + right}
 
-**What you learned:**
-- Handle edge cases separately (cell 0 has no left neighbor)
-- `pattern = left*4 + center*2 + right` converts 3-bit binary to decimal
-- Boolean trick: `(pattern == 1) + (pattern == 2) + ...` evaluates to 1 if any match, 0 otherwise
-- This implements Rule 110 lookup without conditional statements
-
-```dsl
-  # Cells 1-498 (middle)
-  for i 1 498
-    set left {c[i - 1]}
-    set right {c[i + 1]}
-    set pattern {left * 4 + c[i] * 2 + right}
-    set next[i] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
-  end
-```
-
-**What you learned:**
-- Loop through middle cells that have both neighbors
-- Expressions in array indices: `c[i - 1]`, `c[i + 1]`
-- Same Rule 110 logic for all middle cells
-
-```dsl
-  # Cell 499 (right edge) - assume right neighbor is 0
-  set left {c[498]}
-  set right 0
-  set pattern {left * 4 + c[499] * 2 + right}
-  set next[499] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
-
-  set step 3
+  # Check if pattern is 1,2,3,5, or 6 (boolean math trick!)
+  set next[i] {(pattern == 1) + (pattern == 2) + (pattern == 3) + (pattern == 5) + (pattern == 6)}
 end
 ```
 
-**What you learned:**
-- Handle right edge (no right neighbor)
-- Move to step 3 when computation complete
+The boolean trick: each comparison is 0 or 1, summing them gives 1 if any match! No if-statements needed. The code handles edges (cells 0 and 499) by assuming dead neighbors outside bounds.
 
-### Step 7: Copy and Continue (Step 3)
+**Phase 3 - Copy & Loop** (when `step == 3`)
 
 ```dsl
 on variable step == 3
   for i 0 499
-    set c[i] {next[i]}
+    set c[i] {next[i]}          # Swap buffers
   end
-  set step {(gen < 500) * 1}
+  set step {(gen < 500) * 1}    # Continue or stop
 end
 ```
 
-**What you learned:**
-- Copy `next` array back to `c` for next iteration
-- Clever continuation: `{(gen < 500) * 1}` evaluates to 1 if gen < 500, else 0
-- When step becomes 1 again, the cycle repeats (draw → compute → copy)
-- When gen reaches 500, step becomes 0 and simulation stops
+Clever continuation: `{(gen < 500) * 1}` evaluates to 1 (repeat) or 0 (done). When `step` becomes 1 again, the whole cycle repeats!
 
-### The Complete State Machine
+### The Flow
 
 ```
-Click START → step=1
-              ↓
-         Draw cells (step 1) → increment gen → step=2
-                                                  ↓
-                                        Compute Rule 110 (step 2) → step=3
-                                                                       ↓
-                                                       Copy next→c (step 3) → step=1 or 0
-                                                                                ↓
-                                                                          (repeat or stop)
+Click START → step=1 → Draw → step=2 → Compute → step=3 → Copy → step=1 (or 0 if done)
 ```
 
-### Key Concepts Summary
+Each phase triggers the next by changing `step`, and `on variable step == N` handlers react instantly. It's event-driven programming!
 
-1. **Arrays**: `int c[500] 0` declares and initializes array
-2. **Loops**: `for i 0 499` iterates with inclusive bounds
-3. **Expressions**: `{gen + 1}`, `{10+i*6}` compute values dynamically
-4. **Interpolation**: `${gen}` in strings, `r${gen}c${i}` in IDs
-5. **Event Handlers**: `on click`, `on variable` trigger actions
-6. **State Machine**: Use integer variable to control program flow
-7. **Boolean Math**: `(condition) + (condition)` counts true conditions
-8. **Dynamic Creation**: Generate elements in loops with unique IDs
-9. **Array Access**: Use variables as indices: `c[i]`, `next[i]`
+### Cool Tricks You Just Learned
 
-### Running the Example
+- **Dynamic IDs**: `r${gen}c${i}` creates thousands of unique element names
+- **Boolean arithmetic**: `{(pattern == 1) + (pattern == 2) + ...}` = no if-statements needed
+- **Expression syntax**: `{expr}` for math, `${var}` for text/IDs
+- **State machines**: One variable (`step`) orchestrates complex behavior
+- **Double buffering**: Two arrays prevent read-while-writing bugs
+- **Event chains**: Variable changes trigger handlers which trigger more handlers
+
+### Try It
 
 ```bash
 ./revel --dsl examples/rule110.dsl
 ```
 
-Click START and watch Rule 110 generate 500 generations of Turing-complete patterns!
+Click START and watch Turing completeness unfold!
 
 ---
 
