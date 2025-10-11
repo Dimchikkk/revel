@@ -13,6 +13,33 @@
 
 gboolean gst_initialized = FALSE;
 
+// Helper function to get the actual visual bounds of the media content
+static void media_note_get_visual_bounds(MediaNote *media_note,
+                                         int *out_x, int *out_y,
+                                         int *out_width, int *out_height) {
+  Element *element = (Element*)media_note;
+
+  if (media_note->pixbuf) {
+    int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
+    int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+
+    double scale_x = element->width / (double)pixbuf_width;
+    double scale_y = element->height / (double)pixbuf_height;
+    double scale = MIN(scale_x, scale_y);
+
+    *out_width = pixbuf_width * scale;
+    *out_height = pixbuf_height * scale;
+    *out_x = element->x + (element->width - *out_width) / 2;
+    *out_y = element->y + (element->height - *out_height) / 2;
+  } else {
+    // Fallback to element bounds if no pixbuf
+    *out_x = element->x;
+    *out_y = element->y;
+    *out_width = element->width;
+    *out_height = element->height;
+  }
+}
+
 static ElementVTable media_note_vtable = {
   .draw = media_note_draw,
   .get_connection_point = media_note_get_connection_point,
@@ -628,47 +655,21 @@ void media_note_start_editing(Element *element, GtkWidget *overlay) {
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(media_note->text_view));
   gtk_text_buffer_set_text(buffer, media_note->text, -1);
 
-  // Position the text view in the bottom right corner of the actual image
-  if (media_note->pixbuf) {
-    int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-    int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+  int draw_x, draw_y, draw_width, draw_height;
+  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
-    double scale_x = element->width / (double)pixbuf_width;
-    double scale_y = element->height / (double)pixbuf_height;
-    double scale = MIN(scale_x, scale_y);
+  int text_view_width, text_view_height;
+  gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
 
-    int draw_width = (int) pixbuf_width * scale;
-    int draw_height = (int) pixbuf_height * scale;
-    int draw_x = element->x + (element->width - draw_width) / 2;
-    int draw_y = element->y + (element->height - draw_height) / 2;
+  // Convert canvas coordinates to screen coordinates
+  int screen_x, screen_y;
+  canvas_canvas_to_screen(element->canvas_data,
+                          draw_x + draw_width - text_view_width - 10,
+                          draw_y + draw_height - text_view_height - 10,
+                          &screen_x, &screen_y);
 
-    int text_view_width, text_view_height;
-    gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
-
-    // Convert canvas coordinates to screen coordinates
-    int screen_x, screen_y;
-    canvas_canvas_to_screen(element->canvas_data,
-                            draw_x + draw_width - text_view_width - 10,
-                            draw_y + draw_height - text_view_height - 10,
-                            &screen_x, &screen_y);
-
-    gtk_widget_set_margin_start(media_note->text_view, screen_x);
-    gtk_widget_set_margin_top(media_note->text_view, screen_y);
-  } else {
-    // Fallback to element bounds if no pixbuf
-    int text_view_width, text_view_height;
-    gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
-
-    // Convert canvas coordinates to screen coordinates
-    int screen_x, screen_y;
-    canvas_canvas_to_screen(element->canvas_data,
-                            element->x + element->width - text_view_width - 10,
-                            element->y + element->height - text_view_height - 10,
-                            &screen_x, &screen_y);
-
-    gtk_widget_set_margin_start(media_note->text_view, screen_x);
-    gtk_widget_set_margin_top(media_note->text_view, screen_y);
-  }
+  gtk_widget_set_margin_start(media_note->text_view, screen_x);
+  gtk_widget_set_margin_top(media_note->text_view, screen_y);
 
   gtk_widget_show(media_note->text_view);
   gtk_widget_grab_focus(media_note->text_view);
@@ -682,43 +683,19 @@ void media_note_update_position(Element *element, int x, int y, int z) {
 
   // Update text view position if editing
   if (media_note->text_view && media_note->editing) {
-    if (media_note->pixbuf) {
-      int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-      int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+    int draw_x, draw_y, draw_width, draw_height;
+    media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
-      double scale_x = element->width / (double)pixbuf_width;
-      double scale_y = element->height / (double)pixbuf_height;
-      double scale = MIN(scale_x, scale_y);
+    int text_view_width, text_view_height;
+    gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
 
-      int draw_width = pixbuf_width * scale;
-      int draw_height = pixbuf_height * scale;
-      int draw_x = element->x + (element->width - draw_width) / 2;
-      int draw_y = element->y + (element->height - draw_height) / 2;
+    int screen_draw_x, screen_draw_y;
+    canvas_canvas_to_screen(element->canvas_data, draw_x, draw_y, &screen_draw_x, &screen_draw_y);
 
-      int text_view_width, text_view_height;
-      gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
-
-      int screen_draw_x, screen_draw_y;
-      canvas_canvas_to_screen(element->canvas_data, draw_x, draw_y, &screen_draw_x, &screen_draw_y);
-
-      gtk_widget_set_margin_start(media_note->text_view,
-                                  screen_draw_x + draw_width - text_view_width - 10);
-      gtk_widget_set_margin_top(media_note->text_view,
-                                screen_draw_y + draw_height - text_view_height - 10);
-    } else {
-      // Fallback to element bounds if no pixbuf
-      int text_view_width, text_view_height;
-      gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
-
-      int screen_x, screen_y;
-      canvas_canvas_to_screen(element->canvas_data,
-                              element->x + element->width - text_view_width - 10,
-                              element->y + element->height - text_view_height - 10,
-                              &screen_x, &screen_y);
-
-      gtk_widget_set_margin_start(media_note->text_view, screen_x);
-      gtk_widget_set_margin_top(media_note->text_view, screen_y);
-    }
+    gtk_widget_set_margin_start(media_note->text_view,
+                                screen_draw_x + draw_width - text_view_width - 10);
+    gtk_widget_set_margin_top(media_note->text_view,
+                              screen_draw_y + draw_height - text_view_height - 10);
   }
 
   // Update media widget position if it exists
@@ -747,32 +724,14 @@ void media_note_update_size(Element *element, int width, int height) {
 
     // Reposition text view if editing
     if (media_note->editing) {
-      if (media_note->pixbuf) {
-        int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-        int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+      int draw_x, draw_y, draw_width, draw_height;
+      media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
-        double scale_x = element->width / (double)pixbuf_width;
-        double scale_y = element->height / (double)pixbuf_height;
-        double scale = MIN(scale_x, scale_y);
+      int text_view_width, text_view_height;
+      gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
 
-        int draw_width = pixbuf_width * scale;
-        int draw_height = pixbuf_height * scale;
-        int draw_x = element->x + (element->width - draw_width) / 2;
-        int draw_y = element->y + (element->height - draw_height) / 2;
-
-        int text_view_width, text_view_height;
-        gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
-
-        gtk_widget_set_margin_start(media_note->text_view, draw_x + draw_width - text_view_width - 10);
-        gtk_widget_set_margin_top(media_note->text_view, draw_y + draw_height - text_view_height - 10);
-      } else {
-        // Fallback to element bounds if no pixbuf
-        int text_view_width, text_view_height;
-        gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
-
-        gtk_widget_set_margin_start(media_note->text_view, element->x + element->width - text_view_width - 10);
-        gtk_widget_set_margin_top(media_note->text_view, element->y + element->height - text_view_height - 10);
-      }
+      gtk_widget_set_margin_start(media_note->text_view, draw_x + draw_width - text_view_width - 10);
+      gtk_widget_set_margin_top(media_note->text_view, draw_y + draw_height - text_view_height - 10);
     }
   }
 
@@ -790,9 +749,6 @@ void media_note_update_size(Element *element, int width, int height) {
 void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   MediaNote *media_note = (MediaNote*)element;
 
-  // Always draw the element, even when video is playing
-  if (!media_note->pixbuf) return;
-
   // Save cairo state and apply rotation if needed
   cairo_save(cr);
   if (element->rotation_degrees != 0.0) {
@@ -803,45 +759,33 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     cairo_translate(cr, -center_x, -center_y);
   }
 
-  // Draw the image scaled to fit the entire element
-  int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-  int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+  int draw_x, draw_y, draw_width, draw_height;
+  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
-  // Calculate scaling to fit the entire element
-  double scale_x = element->width / (double)pixbuf_width;
-  double scale_y = element->height / (double)pixbuf_height;
-  double scale = MIN(scale_x, scale_y);
+  if (media_note->pixbuf) {
+    // Draw the image scaled to fit the entire element
+    cairo_save(cr);
+    cairo_rectangle(cr, draw_x, draw_y, draw_width, draw_height);
+    cairo_clip(cr);
+    cairo_translate(cr, draw_x, draw_y);
+    double scale_x = (double)draw_width / gdk_pixbuf_get_width(media_note->pixbuf);
+    double scale_y = (double)draw_height / gdk_pixbuf_get_height(media_note->pixbuf);
+    cairo_scale(cr, scale_x, scale_y);
+    gdk_cairo_set_source_pixbuf(cr, media_note->pixbuf, 0, 0);
 
-  int draw_width = pixbuf_width * scale;
-  int draw_height = pixbuf_height * scale;
-  int draw_x = element->x + (element->width - draw_width) / 2;
-  int draw_y = element->y + (element->height - draw_height) / 2;
-
-  // Save the current state
-  cairo_save(cr);
-
-  // Create a rectangle for the image and clip to it
-  cairo_rectangle(cr, draw_x, draw_y, draw_width, draw_height);
-  cairo_clip(cr);
-
-  // Translate to the draw position
-  cairo_translate(cr, draw_x, draw_y);
-
-  // Scale the image
-  cairo_scale(cr, scale, scale);
-
-  // Draw the pixbuf at the origin (since we already translated)
-  gdk_cairo_set_source_pixbuf(cr, media_note->pixbuf, 0, 0);
-
-  // If media is playing, draw with some transparency
-  if (media_note->media_type == MEDIA_TYPE_VIDEO && media_note->media_playing) {
-    cairo_paint_with_alpha(cr, 0.3); // Semi-transparent when media is playing
+    if (media_note->media_type == MEDIA_TYPE_VIDEO && media_note->media_playing) {
+      cairo_paint_with_alpha(cr, 0.3); // Semi-transparent when media is playing
+    } else {
+      cairo_paint(cr); // Opaque when not playing
+    }
+    cairo_restore(cr);
   } else {
-    cairo_paint(cr); // Opaque when not playing
+    // Fallback to element bounds if no pixbuf
+    // Draw a simple rectangle to represent the element
+    cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
+    cairo_rectangle(cr, draw_x, draw_y, draw_width, draw_height);
+    cairo_fill(cr);
   }
-
-  // Restore the state (back to original coordinate system)
-  cairo_restore(cr);
 
   // Draw play icon for video and audio elements
   if (media_note->media_type == MEDIA_TYPE_VIDEO || media_note->media_type == MEDIA_TYPE_AUDIO) {
@@ -974,15 +918,8 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
     for (int i = 0; i < 4; i++) {
       int cx, cy;
       // Get unrotated connection point on image
-      int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-      int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
-      double scale_x = element->width / (double)pixbuf_width;
-      double scale_y = element->height / (double)pixbuf_height;
-      double scale = MIN(scale_x, scale_y);
-      int conn_draw_width = pixbuf_width * scale;
-      int conn_draw_height = pixbuf_height * scale;
-      int conn_draw_x = element->x + (element->width - conn_draw_width) / 2;
-      int conn_draw_y = element->y + (element->height - conn_draw_height) / 2;
+      int conn_draw_x, conn_draw_y, conn_draw_width, conn_draw_height;
+      media_note_get_visual_bounds(media_note, &conn_draw_x, &conn_draw_y, &conn_draw_width, &conn_draw_height);
 
       switch(i) {
       case 0: cx = conn_draw_x + conn_draw_width/2; cy = conn_draw_y; break;
@@ -1008,37 +945,29 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 
 void media_note_get_connection_point(Element *element, int point, int *cx, int *cy) {
   MediaNote *media_note = (MediaNote*)element;
-  int unrotated_x, unrotated_y;
+  int draw_x, draw_y, draw_width, draw_height;
+  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
-  if (!media_note->pixbuf) {
-    // Fallback to element bounds if no pixbuf
-    switch(point) {
-    case 0: unrotated_x = element->x + element->width/2; unrotated_y = element->y; break;
-    case 1: unrotated_x = element->x + element->width; unrotated_y = element->y + element->height/2; break;
-    case 2: unrotated_x = element->x + element->width/2; unrotated_y = element->y + element->height; break;
-    case 3: unrotated_x = element->x; unrotated_y = element->y + element->height/2; break;
-    }
-  } else {
-    // Calculate actual image position and size
-    int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-    int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
+  int unrotated_x = 0, unrotated_y = 0;
 
-    double scale_x = element->width / (double)pixbuf_width;
-    double scale_y = element->height / (double)pixbuf_height;
-    double scale = MIN(scale_x, scale_y);
-
-    int draw_width = pixbuf_width * scale;
-    int draw_height = pixbuf_height * scale;
-    int draw_x = element->x + (element->width - draw_width) / 2;
-    int draw_y = element->y + (element->height - draw_height) / 2;
-
-    // Return connection points on the actual image borders
-    switch(point) {
-    case 0: unrotated_x = draw_x + draw_width/2; unrotated_y = draw_y; break;                    // top center
-    case 1: unrotated_x = draw_x + draw_width; unrotated_y = draw_y + draw_height/2; break;      // right center
-    case 2: unrotated_x = draw_x + draw_width/2; unrotated_y = draw_y + draw_height; break;      // bottom center
-    case 3: unrotated_x = draw_x; unrotated_y = draw_y + draw_height/2; break;                   // left center
-    }
+  // Calculate unrotated connection point based on the visual bounds
+  switch(point) {
+  case 0: // Top-center
+    unrotated_x = draw_x + draw_width / 2;
+    unrotated_y = draw_y;
+    break;
+  case 1: // Right-center
+    unrotated_x = draw_x + draw_width;
+    unrotated_y = draw_y + draw_height / 2;
+    break;
+  case 2: // Bottom-center
+    unrotated_x = draw_x + draw_width / 2;
+    unrotated_y = draw_y + draw_height;
+    break;
+  case 3: // Left-center
+    unrotated_x = draw_x;
+    unrotated_y = draw_y + draw_height / 2;
+    break;
   }
 
   if (element->rotation_degrees != 0.0) {
@@ -1058,51 +987,8 @@ void media_note_get_connection_point(Element *element, int point, int *cx, int *
 int media_note_pick_resize_handle(Element *element, int x, int y) {
   MediaNote *media_note = (MediaNote*)element;
 
-  if (!media_note->pixbuf) {
-    // Fallback to element bounds if no pixbuf
-    int size = 8;
-    int unrotated_handles[4][2] = {
-      {element->x, element->y},
-      {element->x + element->width, element->y},
-      {element->x + element->width, element->y + element->height},
-      {element->x, element->y + element->height}
-    };
-
-    // Apply rotation to handles if element is rotated
-    double center_x = element->x + element->width / 2.0;
-    double center_y = element->y + element->height / 2.0;
-
-    for (int i = 0; i < 4; i++) {
-      int handle_x = unrotated_handles[i][0];
-      int handle_y = unrotated_handles[i][1];
-
-      if (element->rotation_degrees != 0.0) {
-        double dx = handle_x - center_x;
-        double dy = handle_y - center_y;
-        double angle_rad = element->rotation_degrees * M_PI / 180.0;
-        handle_x = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
-        handle_y = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
-      }
-
-      if (abs(x - handle_x) <= size && abs(y - handle_y) <= size) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  // Calculate actual image position and size
-  int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
-  int pixbuf_height = gdk_pixbuf_get_height(media_note->pixbuf);
-
-  double scale_x = element->width / (double)pixbuf_width;
-  double scale_y = element->height / (double)pixbuf_height;
-  double scale = MIN(scale_x, scale_y);
-
-  int draw_width = pixbuf_width * scale;
-  int draw_height = pixbuf_height * scale;
-  int draw_x = element->x + (element->width - draw_width) / 2;
-  int draw_y = element->y + (element->height - draw_height) / 2;
+  int draw_x, draw_y, draw_width, draw_height;
+  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
   int size = 8;
   int unrotated_handles[4][2] = {
