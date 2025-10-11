@@ -17,7 +17,8 @@ typedef enum {
   SHAPE_BEZIER,
   SHAPE_CURVED_ARROW,
   SHAPE_CUBE,
-  SHAPE_PLOT
+  SHAPE_PLOT,
+  SHAPE_OVAL
 } ShapeType;
 
 typedef enum {

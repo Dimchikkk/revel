@@ -27,6 +27,7 @@ typedef struct {
   GtkWidget *curved_arrow_btn;
   GtkWidget *cube_btn;
   GtkWidget *plot_btn;
+  GtkWidget *oval_btn;
 } ShapeDialogData;
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
@@ -68,15 +69,25 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_arc(cr, width / 2.0, height / 2.0, radius, 0, 2 * G_PI);
     break;
   }
+  case SHAPE_OVAL: {
+    cairo_save(cr);
+    cairo_translate(cr, width / 2.0, height / 2.0);
+    cairo_scale(cr, draw_width / 2.0, draw_height / 2.0);
+    cairo_arc(cr, 0, 0, 1, 0, 2 * G_PI);
+    cairo_restore(cr);
+    break;
+  }
   case SHAPE_RECTANGLE:
     cairo_rectangle(cr, inset, inset, draw_width, draw_height);
     break;
   case SHAPE_ROUNDED_RECTANGLE: {
-    double radius = MIN(draw_width, draw_height) * 0.25;
-    double x = inset;
+    double width_adjustment = draw_width * 0.2;
+    double adjusted_width = draw_width - width_adjustment;
+    double x = inset + width_adjustment / 2.0;
     double y = inset;
-    double right = x + draw_width;
+    double right = x + adjusted_width;
     double bottom = y + draw_height;
+    double radius = MIN(adjusted_width, draw_height) * 0.25;
 
     cairo_new_sub_path(cr);
     cairo_arc(cr, right - radius, y + radius, radius, -G_PI_2, 0);
@@ -548,6 +559,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
     case GDK_KEY_g:
       button = data->plot_btn;
       break;
+    case GDK_KEY_e:
+      button = data->oval_btn;
+      break;
     default:
       return FALSE; // Let other handlers process this key
   }
@@ -562,6 +576,7 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
 
 static GtkWidget* create_shape_button(const char *label, ShapeType shape_type, ShapeDialogData *data) {
   GtkWidget *button = gtk_button_new();
+  gtk_widget_set_size_request(button, 100, -1);
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
   gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
@@ -571,7 +586,7 @@ static GtkWidget* create_shape_button(const char *label, ShapeType shape_type, S
   gtk_widget_set_margin_bottom(box, 6);
 
   GtkWidget *icon = gtk_drawing_area_new();
-  gtk_widget_set_size_request(icon, 56, 36);
+  gtk_widget_set_size_request(icon, 48, 32);
   ShapeIconData *icon_data = g_new0(ShapeIconData, 1);
   icon_data->dialog_data = data;
   icon_data->shape_type = shape_type;
@@ -711,47 +726,50 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   gtk_widget_set_halign(shapes_grid, GTK_ALIGN_CENTER);
   gtk_box_append(GTK_BOX(vbox), shapes_grid);
 
-  data->circle_btn = create_shape_button("Circle (C)", SHAPE_CIRCLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->circle_btn, 0, 0, 1, 1);
-
   data->rectangle_btn = create_shape_button("Rectangle (R)", SHAPE_RECTANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->rectangle_btn, 1, 0, 1, 1);
-
-  data->triangle_btn = create_shape_button("Triangle (T)", SHAPE_TRIANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->triangle_btn, 2, 0, 1, 1);
-
-  data->vcylinder_btn = create_shape_button("V-Cylinder (V)", SHAPE_CYLINDER_VERTICAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->vcylinder_btn, 0, 1, 1, 1);
-
-  data->hcylinder_btn = create_shape_button("H-Cylinder (H)", SHAPE_CYLINDER_HORIZONTAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->hcylinder_btn, 1, 1, 1, 1);
-
-  data->diamond_btn = create_shape_button("Diamond (D)", SHAPE_DIAMOND, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->diamond_btn, 2, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->rectangle_btn, 0, 0, 1, 1);
 
   data->rounded_rect_btn = create_shape_button("Rounded Rect (O)", SHAPE_ROUNDED_RECTANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->rounded_rect_btn, 0, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->rounded_rect_btn, 1, 0, 1, 1);
+
+  data->oval_btn = create_shape_button("Oval (E)", SHAPE_OVAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->oval_btn, 2, 0, 1, 1);
+
+  data->circle_btn = create_shape_button("Circle (C)", SHAPE_CIRCLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->circle_btn, 3, 0, 1, 1);
+
+  data->triangle_btn = create_shape_button("Triangle (T)", SHAPE_TRIANGLE, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->triangle_btn, 0, 1, 1, 1);
+
+  data->diamond_btn = create_shape_button("Diamond (D)", SHAPE_DIAMOND, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->diamond_btn, 1, 1, 1, 1);
 
   data->trapezoid_btn = create_shape_button("Trapezoid (P)", SHAPE_TRAPEZOID, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->trapezoid_btn, 1, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->trapezoid_btn, 2, 1, 1, 1);
 
   data->line_btn = create_shape_button("Line (L)", SHAPE_LINE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->line_btn, 2, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->line_btn, 0, 2, 1, 1);
 
   data->arrow_btn = create_shape_button("Arrow (A)", SHAPE_ARROW, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->arrow_btn, 0, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->arrow_btn, 1, 2, 1, 1);
 
   data->bezier_btn = create_shape_button("Bezier (B)", SHAPE_BEZIER, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 1, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 2, 2, 1, 1);
 
   data->curved_arrow_btn = create_shape_button("Curved Arrow (U)", SHAPE_CURVED_ARROW, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->curved_arrow_btn, 2, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->curved_arrow_btn, 3, 2, 1, 1);
+
+  data->vcylinder_btn = create_shape_button("V-Cylinder (V)", SHAPE_CYLINDER_VERTICAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->vcylinder_btn, 0, 3, 1, 1);
+
+  data->hcylinder_btn = create_shape_button("H-Cylinder (H)", SHAPE_CYLINDER_HORIZONTAL, data);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->hcylinder_btn, 1, 3, 1, 1);
 
   data->cube_btn = create_shape_button("Cube (K)", SHAPE_CUBE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 0, 4, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 2, 3, 1, 1);
 
   data->plot_btn = create_shape_button("Plot (G)", SHAPE_PLOT, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->plot_btn, 1, 4, 1, 1);
+  gtk_grid_attach(GTK_GRID(shapes_grid), data->plot_btn, 0, 4, 1, 1);
 
   // Add Cancel button
   gtk_dialog_add_button(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL);

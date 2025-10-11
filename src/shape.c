@@ -1034,6 +1034,25 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         }
       }
       break;
+    case SHAPE_OVAL:
+      {
+        double center_x = element->x + element->width / 2.0;
+        double center_y = element->y + element->height / 2.0;
+        double radius_x = element->width / 2.0;
+        double radius_y = element->height / 2.0;
+
+        cairo_save(cr);
+        cairo_translate(cr, center_x, center_y);
+        cairo_scale(cr, radius_x, radius_y);
+        cairo_arc(cr, 0, 0, 1, 0, 2 * M_PI);
+        cairo_restore(cr);
+
+        apply_fill(shape, cr);
+
+        cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
+        cairo_stroke(cr);
+      }
+      break;
   }
 
   // Restore cairo state before drawing selection UI
