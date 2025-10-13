@@ -18,7 +18,8 @@ typedef enum {
   SHAPE_CURVED_ARROW,
   SHAPE_CUBE,
   SHAPE_PLOT,
-  SHAPE_OVAL
+  SHAPE_OVAL,
+  SHAPE_TEXT_OUTLINE
 } ShapeType;
 
 typedef enum {
@@ -80,5 +81,16 @@ Shape* shape_create(ElementPosition position,
 void shape_free(Element *element);
 
 void shape_finish_editing(Element *element);
+
+void shape_render_text_outline_sample(cairo_t *cr,
+                                      const char *text,
+                                      double x,
+                                      double y,
+                                      double width,
+                                      double height,
+                                      double stroke_r,
+                                      double stroke_g,
+                                      double stroke_b,
+                                      double stroke_a);
 
 #endif

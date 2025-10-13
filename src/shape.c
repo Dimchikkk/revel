@@ -2,10 +2,878 @@
 #include <cairo.h>
 #include <math.h>
 #include <pango/pangocairo.h>
+#include <glib.h>
+#include <stdint.h>
 #include "model.h"
 #include "canvas_core.h"
 #include "undo_manager.h"
 #include <graphene.h>
+
+typedef struct {
+  double x;
+  double y;
+} BrushPoint;
+
+typedef struct {
+  const BrushPoint *points;
+  guint8 point_count;
+  double width;
+  double jitter;
+  gboolean closed;
+} BrushStroke;
+
+typedef struct {
+  gunichar codepoint;
+  double advance;
+  const BrushStroke *strokes;
+  guint8 stroke_count;
+} BrushGlyph;
+
+#define BRUSH_STROKE(points_array, width_val, jitter_val, closed_val) \
+  { points_array, (guint8)G_N_ELEMENTS(points_array), width_val, jitter_val, closed_val }
+
+#define BRUSH_GLYPH_ENTRY(ch, adv, strokes_array) \
+  { ch, adv, strokes_array, (guint8)G_N_ELEMENTS(strokes_array) }
+
+static const BrushPoint BRUSH_A_STROKE1[] = {
+  {0.08, 0.98}, {0.28, 0.55}, {0.38, 0.05}
+};
+static const BrushPoint BRUSH_A_STROKE2[] = {
+  {0.92, 0.96}, {0.70, 0.50}, {0.55, 0.05}
+};
+static const BrushPoint BRUSH_A_STROKE3[] = {
+  {0.20, 0.55}, {0.40, 0.48}, {0.75, 0.58}
+};
+static const BrushStroke BRUSH_A_STROKES[] = {
+  BRUSH_STROKE(BRUSH_A_STROKE1, 0.26, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_A_STROKE2, 0.24, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_A_STROKE3, 0.20, 0.10, FALSE)
+};
+
+static const BrushPoint BRUSH_B_STROKE1[] = {
+  {0.12, 0.02}, {0.12, 0.52}, {0.10, 0.98}
+};
+static const BrushPoint BRUSH_B_STROKE2[] = {
+  {0.10, 0.05}, {0.52, 0.02}, {0.63, 0.20}, {0.18, 0.38}
+};
+static const BrushPoint BRUSH_B_STROKE3[] = {
+  {0.18, 0.44}, {0.60, 0.40}, {0.70, 0.62}, {0.15, 0.94}
+};
+static const BrushStroke BRUSH_B_STROKES[] = {
+  BRUSH_STROKE(BRUSH_B_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_B_STROKE2, 0.22, 0.14, FALSE),
+  BRUSH_STROKE(BRUSH_B_STROKE3, 0.22, 0.14, FALSE)
+};
+
+static const BrushPoint BRUSH_C_STROKE1[] = {
+  {0.78, 0.10}, {0.52, 0.02}, {0.24, 0.18}, {0.12, 0.48}, {0.30, 0.78}, {0.62, 0.92}
+};
+static const BrushStroke BRUSH_C_STROKES[] = {
+  BRUSH_STROKE(BRUSH_C_STROKE1, 0.26, 0.15, FALSE)
+};
+
+static const BrushPoint BRUSH_D_STROKE1[] = {
+  {0.12, 0.02}, {0.10, 0.98}
+};
+static const BrushPoint BRUSH_D_STROKE2[] = {
+  {0.12, 0.05}, {0.52, 0.10}, {0.72, 0.42}, {0.48, 0.86}, {0.12, 0.95}
+};
+static const BrushStroke BRUSH_D_STROKES[] = {
+  BRUSH_STROKE(BRUSH_D_STROKE1, 0.24, 0.10, FALSE),
+  BRUSH_STROKE(BRUSH_D_STROKE2, 0.26, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_E_STROKE1[] = {
+  {0.12, 0.02}, {0.12, 0.98}
+};
+static const BrushPoint BRUSH_E_STROKE2[] = {
+  {0.12, 0.05}, {0.78, 0.08}
+};
+static const BrushPoint BRUSH_E_STROKE3[] = {
+  {0.16, 0.50}, {0.66, 0.48}
+};
+static const BrushPoint BRUSH_E_STROKE4[] = {
+  {0.12, 0.94}, {0.68, 0.90}
+};
+static const BrushStroke BRUSH_E_STROKES[] = {
+  BRUSH_STROKE(BRUSH_E_STROKE1, 0.23, 0.10, FALSE),
+  BRUSH_STROKE(BRUSH_E_STROKE2, 0.20, 0.09, FALSE),
+  BRUSH_STROKE(BRUSH_E_STROKE3, 0.18, 0.08, FALSE),
+  BRUSH_STROKE(BRUSH_E_STROKE4, 0.20, 0.09, FALSE)
+};
+
+static const BrushPoint BRUSH_F_STROKE1[] = {
+  {0.16, 0.02}, {0.12, 0.98}
+};
+static const BrushPoint BRUSH_F_STROKE2[] = {
+  {0.12, 0.05}, {0.74, 0.10}
+};
+static const BrushPoint BRUSH_F_STROKE3[] = {
+  {0.16, 0.50}, {0.66, 0.45}
+};
+static const BrushStroke BRUSH_F_STROKES[] = {
+  BRUSH_STROKE(BRUSH_F_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_F_STROKE2, 0.20, 0.10, FALSE),
+  BRUSH_STROKE(BRUSH_F_STROKE3, 0.18, 0.10, FALSE)
+};
+
+static const BrushPoint BRUSH_G_STROKE1[] = {
+  {0.82, 0.20}, {0.58, 0.02}, {0.28, 0.15}, {0.10, 0.48}, {0.30, 0.80}, {0.60, 0.92}, {0.78, 0.78}, {0.52, 0.68}
+};
+static const BrushPoint BRUSH_G_STROKE2[] = {
+  {0.58, 0.64}, {0.90, 0.68}, {0.62, 0.98}
+};
+static const BrushStroke BRUSH_G_STROKES[] = {
+  BRUSH_STROKE(BRUSH_G_STROKE1, 0.26, 0.16, FALSE),
+  BRUSH_STROKE(BRUSH_G_STROKE2, 0.22, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_H_STROKE1[] = {
+  {0.16, 0.02}, {0.12, 0.98}
+};
+static const BrushPoint BRUSH_H_STROKE2[] = {
+  {0.90, 0.02}, {0.80, 0.98}
+};
+static const BrushPoint BRUSH_H_STROKE3[] = {
+  {0.18, 0.52}, {0.48, 0.48}, {0.78, 0.58}
+};
+static const BrushStroke BRUSH_H_STROKES[] = {
+  BRUSH_STROKE(BRUSH_H_STROKE1, 0.24, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_H_STROKE2, 0.24, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_H_STROKE3, 0.21, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_I_STROKE1[] = {
+  {0.20, 0.05}, {0.82, 0.08}
+};
+static const BrushPoint BRUSH_I_STROKE2[] = {
+  {0.50, 0.05}, {0.44, 0.96}
+};
+static const BrushPoint BRUSH_I_STROKE3[] = {
+  {0.18, 0.92}, {0.78, 0.90}
+};
+static const BrushStroke BRUSH_I_STROKES[] = {
+  BRUSH_STROKE(BRUSH_I_STROKE1, 0.20, 0.09, FALSE),
+  BRUSH_STROKE(BRUSH_I_STROKE2, 0.20, 0.08, FALSE),
+  BRUSH_STROKE(BRUSH_I_STROKE3, 0.20, 0.09, FALSE)
+};
+
+static const BrushPoint BRUSH_J_STROKE1[] = {
+  {0.76, 0.05}, {0.32, 0.02}
+};
+static const BrushPoint BRUSH_J_STROKE2[] = {
+  {0.68, 0.05}, {0.64, 0.78}, {0.42, 0.96}, {0.18, 0.80}
+};
+static const BrushStroke BRUSH_J_STROKES[] = {
+  BRUSH_STROKE(BRUSH_J_STROKE1, 0.20, 0.10, FALSE),
+  BRUSH_STROKE(BRUSH_J_STROKE2, 0.22, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_K_STROKE1[] = {
+  {0.18, 0.02}, {0.12, 0.98}
+};
+static const BrushPoint BRUSH_K_STROKE2[] = {
+  {0.82, 0.05}, {0.24, 0.52}
+};
+static const BrushPoint BRUSH_K_STROKE3[] = {
+  {0.26, 0.52}, {0.86, 0.98}
+};
+static const BrushStroke BRUSH_K_STROKES[] = {
+  BRUSH_STROKE(BRUSH_K_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_K_STROKE2, 0.22, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_K_STROKE3, 0.22, 0.11, FALSE)
+};
+
+static const BrushPoint BRUSH_L_STROKE1[] = {
+  {0.18, 0.02}, {0.12, 0.98}, {0.70, 0.92}
+};
+static const BrushStroke BRUSH_L_STROKES[] = {
+  BRUSH_STROKE(BRUSH_L_STROKE1, 0.24, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_M_STROKE1[] = {
+  {0.08, 0.96}, {0.18, 0.05}, {0.40, 0.58}, {0.50, 0.10}, {0.92, 0.98}
+};
+static const BrushStroke BRUSH_M_STROKES[] = {
+  BRUSH_STROKE(BRUSH_M_STROKE1, 0.26, 0.14, FALSE)
+};
+
+static const BrushPoint BRUSH_N_STROKE1[] = {
+  {0.12, 0.98}, {0.16, 0.08}, {0.16, 0.02}
+};
+static const BrushPoint BRUSH_N_STROKE2[] = {
+  {0.18, 0.10}, {0.24, 0.20}, {0.70, 0.88}, {0.86, 0.98}
+};
+static const BrushPoint BRUSH_N_STROKE3[] = {
+  {0.78, 0.02}, {0.86, 0.24}, {0.90, 0.98}
+};
+static const BrushStroke BRUSH_N_STROKES[] = {
+  BRUSH_STROKE(BRUSH_N_STROKE1, 0.28, 0.14, FALSE),
+  BRUSH_STROKE(BRUSH_N_STROKE2, 0.26, 0.15, FALSE),
+  BRUSH_STROKE(BRUSH_N_STROKE3, 0.24, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_N_LOWER_STROKE1[] = {
+  {0.16, 0.88}, {0.20, 0.10}, {0.22, 0.04}
+};
+static const BrushPoint BRUSH_N_LOWER_STROKE2[] = {
+  {0.22, 0.15}, {0.34, 0.26}, {0.74, 0.86}, {0.86, 0.94}
+};
+static const BrushPoint BRUSH_N_LOWER_STROKE3[] = {
+  {0.68, 0.02}, {0.78, 0.18}, {0.82, 0.88}
+};
+static const BrushStroke BRUSH_N_LOWER_STROKES[] = {
+  BRUSH_STROKE(BRUSH_N_LOWER_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_N_LOWER_STROKE2, 0.24, 0.13, FALSE),
+  BRUSH_STROKE(BRUSH_N_LOWER_STROKE3, 0.22, 0.11, FALSE)
+};
+
+static const BrushPoint BRUSH_O_STROKE1[] = {
+  {0.48, 0.02}, {0.20, 0.18}, {0.08, 0.50}, {0.24, 0.82}, {0.54, 0.98}, {0.84, 0.74}, {0.94, 0.38}, {0.70, 0.10}, {0.48, 0.02}
+};
+static const BrushStroke BRUSH_O_STROKES[] = {
+  BRUSH_STROKE(BRUSH_O_STROKE1, 0.26, 0.15, TRUE)
+};
+
+static const BrushPoint BRUSH_P_STROKE1[] = {
+  {0.12, 0.02}, {0.10, 0.98}
+};
+static const BrushPoint BRUSH_P_STROKE2[] = {
+  {0.12, 0.05}, {0.60, 0.08}, {0.70, 0.32}, {0.20, 0.45}
+};
+static const BrushStroke BRUSH_P_STROKES[] = {
+  BRUSH_STROKE(BRUSH_P_STROKE1, 0.24, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_P_STROKE2, 0.22, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_Q_STROKE1[] = {
+  {0.48, 0.02}, {0.20, 0.18}, {0.08, 0.50}, {0.24, 0.82}, {0.56, 0.98}, {0.86, 0.74}, {0.92, 0.44}, {0.70, 0.16}, {0.48, 0.02}
+};
+static const BrushPoint BRUSH_Q_STROKE2[] = {
+  {0.64, 0.72}, {0.94, 1.05}
+};
+static const BrushStroke BRUSH_Q_STROKES[] = {
+  BRUSH_STROKE(BRUSH_Q_STROKE1, 0.26, 0.15, TRUE),
+  BRUSH_STROKE(BRUSH_Q_STROKE2, 0.18, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_R_STROKE1[] = {
+  {0.12, 0.02}, {0.10, 0.98}
+};
+static const BrushPoint BRUSH_R_STROKE2[] = {
+  {0.12, 0.06}, {0.62, 0.08}, {0.70, 0.32}, {0.20, 0.45}
+};
+static const BrushPoint BRUSH_R_STROKE3[] = {
+  {0.26, 0.52}, {0.86, 0.98}
+};
+static const BrushStroke BRUSH_R_STROKES[] = {
+  BRUSH_STROKE(BRUSH_R_STROKE1, 0.24, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_R_STROKE2, 0.22, 0.13, FALSE),
+  BRUSH_STROKE(BRUSH_R_STROKE3, 0.22, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_S_STROKE1[] = {
+  {0.78, 0.12}, {0.48, 0.05}, {0.20, 0.20}, {0.40, 0.45}, {0.68, 0.60}, {0.32, 0.80}, {0.12, 0.94}
+};
+static const BrushStroke BRUSH_S_STROKES[] = {
+  BRUSH_STROKE(BRUSH_S_STROKE1, 0.24, 0.14, FALSE)
+};
+
+static const BrushPoint BRUSH_T_STROKE1[] = {
+  {0.12, 0.08}, {0.90, 0.04}
+};
+static const BrushPoint BRUSH_T_STROKE2[] = {
+  {0.48, 0.02}, {0.42, 0.98}
+};
+static const BrushStroke BRUSH_T_STROKES[] = {
+  BRUSH_STROKE(BRUSH_T_STROKE1, 0.20, 0.10, FALSE),
+  BRUSH_STROKE(BRUSH_T_STROKE2, 0.22, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_U_STROKE1[] = {
+  {0.10, 0.05}, {0.20, 0.78}, {0.48, 0.98}, {0.80, 0.70}, {0.86, 0.05}
+};
+static const BrushStroke BRUSH_U_STROKES[] = {
+  BRUSH_STROKE(BRUSH_U_STROKE1, 0.24, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_V_STROKE1[] = {
+  {0.05, 0.05}, {0.40, 0.94}, {0.82, 0.05}
+};
+static const BrushStroke BRUSH_V_STROKES[] = {
+  BRUSH_STROKE(BRUSH_V_STROKE1, 0.26, 0.14, FALSE)
+};
+
+static const BrushPoint BRUSH_W_STROKE1[] = {
+  {0.04, 0.05}, {0.24, 0.98}
+};
+static const BrushPoint BRUSH_W_STROKE2[] = {
+  {0.26, 0.94}, {0.42, 0.08}, {0.50, 0.40}
+};
+static const BrushPoint BRUSH_W_STROKE3[] = {
+  {0.52, 0.42}, {0.62, 0.08}, {0.70, 0.94}
+};
+static const BrushPoint BRUSH_W_STROKE4[] = {
+  {0.72, 0.92}, {0.92, 0.05}
+};
+static const BrushStroke BRUSH_W_STROKES[] = {
+  BRUSH_STROKE(BRUSH_W_STROKE1, 0.28, 0.13, FALSE),
+  BRUSH_STROKE(BRUSH_W_STROKE2, 0.26, 0.14, FALSE),
+  BRUSH_STROKE(BRUSH_W_STROKE3, 0.26, 0.14, FALSE),
+  BRUSH_STROKE(BRUSH_W_STROKE4, 0.28, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_W_LOWER_STROKE1[] = {
+  {0.08, 0.08}, {0.24, 0.92}, {0.40, 0.16}, {0.52, 0.90}, {0.70, 0.18}, {0.88, 0.94}
+};
+static const BrushStroke BRUSH_W_LOWER_STROKES[] = {
+  BRUSH_STROKE(BRUSH_W_LOWER_STROKE1, 0.28, 0.15, FALSE)
+};
+
+static const BrushPoint BRUSH_X_STROKE1[] = {
+  {0.10, 0.06}, {0.86, 0.96}
+};
+static const BrushPoint BRUSH_X_STROKE2[] = {
+  {0.86, 0.08}, {0.12, 0.94}
+};
+static const BrushStroke BRUSH_X_STROKES[] = {
+  BRUSH_STROKE(BRUSH_X_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_X_STROKE2, 0.24, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_Y_STROKE1[] = {
+  {0.08, 0.05}, {0.40, 0.40}
+};
+static const BrushPoint BRUSH_Y_STROKE2[] = {
+  {0.90, 0.04}, {0.58, 0.48}, {0.48, 0.98}
+};
+static const BrushStroke BRUSH_Y_STROKES[] = {
+  BRUSH_STROKE(BRUSH_Y_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_Y_STROKE2, 0.24, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_Z_STROKE1[] = {
+  {0.08, 0.08}, {0.90, 0.05}
+};
+static const BrushPoint BRUSH_Z_STROKE2[] = {
+  {0.88, 0.05}, {0.12, 0.95}
+};
+static const BrushPoint BRUSH_Z_STROKE3[] = {
+  {0.10, 0.92}, {0.88, 0.94}
+};
+static const BrushStroke BRUSH_Z_STROKES[] = {
+  BRUSH_STROKE(BRUSH_Z_STROKE1, 0.22, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_Z_STROKE2, 0.22, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_Z_STROKE3, 0.22, 0.11, FALSE)
+};
+
+static const BrushPoint BRUSH_ZERO_STROKE1[] = {
+  {0.48, 0.02}, {0.20, 0.15}, {0.10, 0.48}, {0.26, 0.88}, {0.60, 0.98}, {0.86, 0.62}, {0.72, 0.18}, {0.48, 0.02}
+};
+static const BrushStroke BRUSH_ZERO_STROKES[] = {
+  BRUSH_STROKE(BRUSH_ZERO_STROKE1, 0.26, 0.15, TRUE)
+};
+
+static const BrushPoint BRUSH_ONE_STROKE1[] = {
+  {0.32, 0.18}, {0.56, 0.02}, {0.48, 0.96}
+};
+static const BrushPoint BRUSH_ONE_STROKE2[] = {
+  {0.22, 0.92}, {0.68, 0.90}
+};
+static const BrushStroke BRUSH_ONE_STROKES[] = {
+  BRUSH_STROKE(BRUSH_ONE_STROKE1, 0.24, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_ONE_STROKE2, 0.20, 0.10, FALSE)
+};
+
+static const BrushPoint BRUSH_TWO_STROKE1[] = {
+  {0.18, 0.18}, {0.42, 0.02}, {0.74, 0.18}, {0.60, 0.40}, {0.18, 0.80}, {0.82, 0.92}
+};
+static const BrushStroke BRUSH_TWO_STROKES[] = {
+  BRUSH_STROKE(BRUSH_TWO_STROKE1, 0.24, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_THREE_STROKE1[] = {
+  {0.20, 0.12}, {0.54, 0.02}, {0.80, 0.22}, {0.40, 0.42}, {0.72, 0.60}, {0.30, 0.82}, {0.78, 0.94}
+};
+static const BrushStroke BRUSH_THREE_STROKES[] = {
+  BRUSH_STROKE(BRUSH_THREE_STROKE1, 0.24, 0.14, FALSE)
+};
+
+static const BrushPoint BRUSH_FOUR_STROKE1[] = {
+  {0.70, 0.05}, {0.24, 0.62}, {0.90, 0.58}
+};
+static const BrushPoint BRUSH_FOUR_STROKE2[] = {
+  {0.72, 0.02}, {0.68, 0.98}
+};
+static const BrushStroke BRUSH_FOUR_STROKES[] = {
+  BRUSH_STROKE(BRUSH_FOUR_STROKE1, 0.22, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_FOUR_STROKE2, 0.22, 0.12, FALSE)
+};
+
+static const BrushPoint BRUSH_FIVE_STROKE1[] = {
+  {0.76, 0.05}, {0.20, 0.08}, {0.16, 0.42}, {0.58, 0.38}, {0.78, 0.68}, {0.28, 0.94}
+};
+static const BrushStroke BRUSH_FIVE_STROKES[] = {
+  BRUSH_STROKE(BRUSH_FIVE_STROKE1, 0.24, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_SIX_STROKE1[] = {
+  {0.70, 0.12}, {0.40, 0.05}, {0.18, 0.28}, {0.24, 0.60}, {0.55, 0.64}, {0.80, 0.86}, {0.30, 0.94}
+};
+static const BrushStroke BRUSH_SIX_STROKES[] = {
+  BRUSH_STROKE(BRUSH_SIX_STROKE1, 0.24, 0.14, FALSE)
+};
+
+static const BrushPoint BRUSH_SEVEN_STROKE1[] = {
+  {0.10, 0.08}, {0.88, 0.05}
+};
+static const BrushPoint BRUSH_SEVEN_STROKE2[] = {
+  {0.86, 0.06}, {0.32, 0.98}
+};
+static const BrushStroke BRUSH_SEVEN_STROKES[] = {
+  BRUSH_STROKE(BRUSH_SEVEN_STROKE1, 0.22, 0.11, FALSE),
+  BRUSH_STROKE(BRUSH_SEVEN_STROKE2, 0.22, 0.11, FALSE)
+};
+
+static const BrushPoint BRUSH_EIGHT_STROKE1[] = {
+  {0.52, 0.05}, {0.24, 0.20}, {0.48, 0.42}, {0.72, 0.20}, {0.48, 0.05}
+};
+static const BrushPoint BRUSH_EIGHT_STROKE2[] = {
+  {0.52, 0.48}, {0.20, 0.66}, {0.48, 0.94}, {0.82, 0.70}, {0.52, 0.48}
+};
+static const BrushStroke BRUSH_EIGHT_STROKES[] = {
+  BRUSH_STROKE(BRUSH_EIGHT_STROKE1, 0.24, 0.14, TRUE),
+  BRUSH_STROKE(BRUSH_EIGHT_STROKE2, 0.24, 0.14, TRUE)
+};
+
+static const BrushPoint BRUSH_NINE_STROKE1[] = {
+  {0.24, 0.82}, {0.52, 0.98}, {0.82, 0.74}, {0.68, 0.40}, {0.30, 0.36}, {0.12, 0.08}
+};
+static const BrushStroke BRUSH_NINE_STROKES[] = {
+  BRUSH_STROKE(BRUSH_NINE_STROKE1, 0.24, 0.13, FALSE)
+};
+
+static const BrushPoint BRUSH_PERIOD_STROKE1[] = {
+  {0.45, 0.82}, {0.55, 0.82}, {0.55, 0.92}, {0.45, 0.92}, {0.45, 0.82}
+};
+static const BrushStroke BRUSH_PERIOD_STROKES[] = {
+  BRUSH_STROKE(BRUSH_PERIOD_STROKE1, 0.16, 0.08, TRUE)
+};
+
+static const BrushPoint BRUSH_COMMA_STROKE1[] = {
+  {0.52, 0.78}, {0.60, 0.95}, {0.40, 1.05}
+};
+static const BrushStroke BRUSH_COMMA_STROKES[] = {
+  BRUSH_STROKE(BRUSH_COMMA_STROKE1, 0.18, 0.09, FALSE)
+};
+
+static const BrushPoint BRUSH_QUESTION_STROKE1[] = {
+  {0.28, 0.22}, {0.42, 0.05}, {0.70, 0.18}, {0.68, 0.40}, {0.46, 0.52}, {0.44, 0.72}
+};
+static const BrushStroke BRUSH_QUESTION_STROKES[] = {
+  BRUSH_STROKE(BRUSH_QUESTION_STROKE1, 0.22, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_PERIOD_STROKE1, 0.16, 0.08, TRUE)
+};
+
+static const BrushStroke BRUSH_SPACE_STROKES[] = {};
+
+static const BrushGlyph brush_glyphs[] = {
+  BRUSH_GLYPH_ENTRY('A', 1.05, BRUSH_A_STROKES),
+  BRUSH_GLYPH_ENTRY('B', 1.05, BRUSH_B_STROKES),
+  BRUSH_GLYPH_ENTRY('C', 1.02, BRUSH_C_STROKES),
+  BRUSH_GLYPH_ENTRY('D', 1.08, BRUSH_D_STROKES),
+  BRUSH_GLYPH_ENTRY('E', 1.00, BRUSH_E_STROKES),
+  BRUSH_GLYPH_ENTRY('F', 0.98, BRUSH_F_STROKES),
+  BRUSH_GLYPH_ENTRY('G', 1.06, BRUSH_G_STROKES),
+  BRUSH_GLYPH_ENTRY('H', 1.06, BRUSH_H_STROKES),
+  BRUSH_GLYPH_ENTRY('I', 0.72, BRUSH_I_STROKES),
+  BRUSH_GLYPH_ENTRY('J', 0.96, BRUSH_J_STROKES),
+  BRUSH_GLYPH_ENTRY('K', 1.04, BRUSH_K_STROKES),
+  BRUSH_GLYPH_ENTRY('L', 0.96, BRUSH_L_STROKES),
+  BRUSH_GLYPH_ENTRY('M', 1.20, BRUSH_M_STROKES),
+  BRUSH_GLYPH_ENTRY('N', 1.08, BRUSH_N_STROKES),
+  BRUSH_GLYPH_ENTRY('n', 0.92, BRUSH_N_LOWER_STROKES),
+  BRUSH_GLYPH_ENTRY('O', 1.10, BRUSH_O_STROKES),
+  BRUSH_GLYPH_ENTRY('P', 0.98, BRUSH_P_STROKES),
+  BRUSH_GLYPH_ENTRY('Q', 1.12, BRUSH_Q_STROKES),
+  BRUSH_GLYPH_ENTRY('R', 1.04, BRUSH_R_STROKES),
+  BRUSH_GLYPH_ENTRY('S', 1.00, BRUSH_S_STROKES),
+  BRUSH_GLYPH_ENTRY('T', 1.00, BRUSH_T_STROKES),
+  BRUSH_GLYPH_ENTRY('U', 1.08, BRUSH_U_STROKES),
+  BRUSH_GLYPH_ENTRY('V', 1.08, BRUSH_V_STROKES),
+  BRUSH_GLYPH_ENTRY('W', 1.28, BRUSH_W_STROKES),
+  BRUSH_GLYPH_ENTRY('w', 1.16, BRUSH_W_LOWER_STROKES),
+  BRUSH_GLYPH_ENTRY('X', 1.02, BRUSH_X_STROKES),
+  BRUSH_GLYPH_ENTRY('Y', 1.02, BRUSH_Y_STROKES),
+  BRUSH_GLYPH_ENTRY('Z', 1.02, BRUSH_Z_STROKES),
+  BRUSH_GLYPH_ENTRY('0', 1.04, BRUSH_ZERO_STROKES),
+  BRUSH_GLYPH_ENTRY('1', 0.82, BRUSH_ONE_STROKES),
+  BRUSH_GLYPH_ENTRY('2', 1.00, BRUSH_TWO_STROKES),
+  BRUSH_GLYPH_ENTRY('3', 1.00, BRUSH_THREE_STROKES),
+  BRUSH_GLYPH_ENTRY('4', 1.04, BRUSH_FOUR_STROKES),
+  BRUSH_GLYPH_ENTRY('5', 1.00, BRUSH_FIVE_STROKES),
+  BRUSH_GLYPH_ENTRY('6', 1.00, BRUSH_SIX_STROKES),
+  BRUSH_GLYPH_ENTRY('7', 1.00, BRUSH_SEVEN_STROKES),
+  BRUSH_GLYPH_ENTRY('8', 1.04, BRUSH_EIGHT_STROKES),
+  BRUSH_GLYPH_ENTRY('9', 1.00, BRUSH_NINE_STROKES),
+  BRUSH_GLYPH_ENTRY('.', 0.52, BRUSH_PERIOD_STROKES),
+  BRUSH_GLYPH_ENTRY(',', 0.54, BRUSH_COMMA_STROKES),
+  BRUSH_GLYPH_ENTRY('?', 0.96, BRUSH_QUESTION_STROKES),
+  BRUSH_GLYPH_ENTRY(' ', 0.55, BRUSH_SPACE_STROKES)
+};
+
+static const BrushPoint BRUSH_DEFAULT_STROKE1[] = {
+  {0.20, 0.08}, {0.50, 0.50}, {0.30, 0.92}
+};
+static const BrushPoint BRUSH_DEFAULT_STROKE2[] = {
+  {0.78, 0.12}, {0.52, 0.38}, {0.72, 0.86}
+};
+static const BrushStroke BRUSH_DEFAULT_STROKES[] = {
+  BRUSH_STROKE(BRUSH_DEFAULT_STROKE1, 0.22, 0.12, FALSE),
+  BRUSH_STROKE(BRUSH_DEFAULT_STROKE2, 0.22, 0.12, FALSE)
+};
+
+static const BrushGlyph brush_default_glyph = BRUSH_GLYPH_ENTRY('?', 0.95, BRUSH_DEFAULT_STROKES);
+
+static const BrushGlyph* brush_find_glyph(gunichar codepoint) {
+  for (guint i = 0; i < G_N_ELEMENTS(brush_glyphs); i++) {
+    if (brush_glyphs[i].codepoint == codepoint) {
+      return &brush_glyphs[i];
+    }
+  }
+  return NULL;
+}
+
+static const BrushGlyph* brush_get_space_glyph(void) {
+  static gboolean initialized = FALSE;
+  static const BrushGlyph *space_glyph = NULL;
+  if (!initialized) {
+    space_glyph = brush_find_glyph(' ');
+    if (!space_glyph) {
+      space_glyph = &brush_default_glyph;
+    }
+    initialized = TRUE;
+  }
+  return space_glyph;
+}
+
+static const BrushGlyph* brush_lookup(gunichar ch) {
+  if (ch == ' ') {
+    return brush_get_space_glyph();
+  }
+  if (ch == '\t') {
+    return brush_get_space_glyph();
+  }
+  const BrushGlyph *direct = brush_find_glyph(ch);
+  if (direct) {
+    return direct;
+  }
+  gunichar upper = g_unichar_toupper(ch);
+  const BrushGlyph *glyph = brush_find_glyph(upper);
+  if (glyph) {
+    return glyph;
+  }
+  return &brush_default_glyph;
+}
+
+static guint32 text_outline_seed(const Shape *shape) {
+  guint32 seed = (guint32)(shape->base.x * 73856093u) ^
+                 (guint32)(shape->base.y * 19349663u) ^
+                 (guint32)(shape->base.width * 83492791u) ^
+                 (guint32)(shape->base.height * 2654435761u);
+  if (shape->text && *shape->text) {
+    seed ^= g_str_hash(shape->text);
+  }
+  if (seed == 0) seed = 0x9e3779b9u;
+  return seed;
+}
+
+static inline double text_outline_rand(guint32 *state) {
+  *state = (*state * 1664525u) + 1013904223u;
+  return ((*state >> 8) & 0xFFFFFF) / (double)0x1000000;
+}
+
+static void brush_draw_stroke(cairo_t *cr,
+                              const BrushStroke *stroke,
+                              double origin_x,
+                              double origin_y,
+                              double scale,
+                              double shear,
+                              double base_r,
+                              double base_g,
+                              double base_b,
+                              double base_a,
+                              guint32 *seed) {
+  if (!stroke || stroke->point_count < 2) {
+    return;
+  }
+
+  static const double width_multipliers[] = {1.35, 0.95, 0.55};
+  static const double alpha_multipliers[] = {0.55, 0.90, 0.70};
+  static const double color_lift[] = {0.00, 0.05, 0.10};
+
+  for (int pass = 0; pass < 3; pass++) {
+    cairo_new_path(cr);
+    for (guint i = 0; i < stroke->point_count; i++) {
+      double jitter = stroke->jitter * scale;
+      double px = origin_x + stroke->points[i].x * scale + (text_outline_rand(seed) - 0.5) * jitter;
+      double py = origin_y + stroke->points[i].y * scale + (text_outline_rand(seed) - 0.5) * jitter;
+      double shear_offset = shear * (py - origin_y);
+      px += shear_offset;
+      if (i == 0) {
+        cairo_move_to(cr, px, py);
+      } else {
+        cairo_line_to(cr, px, py);
+      }
+    }
+
+    if (stroke->closed) {
+      cairo_close_path(cr);
+    }
+
+    double width_variance = 0.85 + text_outline_rand(seed) * 0.30;
+    double line_width = stroke->width * scale * width_multipliers[pass] * width_variance;
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_line_width(cr, MAX(0.5, line_width));
+
+    double shade = MIN(1.0, base_r + color_lift[pass]);
+    double shade_g = MIN(1.0, base_g + color_lift[pass]);
+    double shade_b = MIN(1.0, base_b + color_lift[pass]);
+    cairo_set_source_rgba(cr, shade, shade_g, shade_b, base_a * alpha_multipliers[pass]);
+
+    if (stroke->closed && pass == 0) {
+      cairo_fill_preserve(cr);
+      cairo_set_line_width(cr, MAX(0.5, line_width * 0.45));
+      cairo_set_source_rgba(cr,
+                            MIN(1.0, shade + 0.1),
+                            MIN(1.0, shade_g + 0.1),
+                            MIN(1.0, shade_b + 0.1),
+                            base_a * 0.65);
+      cairo_stroke(cr);
+    } else {
+      cairo_stroke(cr);
+    }
+  }
+}
+
+static void brush_draw_glyph(cairo_t *cr,
+                             const BrushGlyph *glyph,
+                             double origin_x,
+                             double origin_y,
+                             double scale,
+                             double shear,
+                             double base_r,
+                             double base_g,
+                             double base_b,
+                             double base_a,
+                             guint32 *seed) {
+  if (!glyph) return;
+  if (glyph->stroke_count > 0) {
+    guint32 shadow_seed = *seed ^ 0x5f5f5f5f;
+    double shadow_offset_x = scale * 0.08;
+    double shadow_offset_y = scale * 0.10;
+    for (guint i = 0; i < glyph->stroke_count; i++) {
+      brush_draw_stroke(cr, &glyph->strokes[i],
+                        origin_x + shadow_offset_x,
+                        origin_y + shadow_offset_y,
+                        scale,
+                        shear,
+                        0.18,
+                        0.18,
+                        0.18,
+                        base_a * 0.45,
+                        &shadow_seed);
+    }
+  }
+
+  for (guint i = 0; i < glyph->stroke_count; i++) {
+    brush_draw_stroke(cr, &glyph->strokes[i], origin_x, origin_y,
+                      scale, shear, base_r, base_g, base_b, base_a, seed);
+  }
+}
+
+#define BRUSH_BASE_HEIGHT 1.0
+#define BRUSH_LINE_GAP 0.38
+#define BRUSH_TAB_MULTIPLIER 4
+
+static double brush_line_units(const char *line) {
+  double units = 0.0;
+  if (!line) return units;
+
+  const BrushGlyph *space_glyph = brush_get_space_glyph();
+  const double space_advance = space_glyph ? space_glyph->advance : 0.6;
+
+  const char *p = line;
+  while (p && *p) {
+    gunichar ch = g_utf8_get_char(p);
+    if (ch == '\t') {
+      units += space_advance * BRUSH_TAB_MULTIPLIER;
+    } else {
+      const BrushGlyph *glyph = brush_lookup(ch);
+      if (glyph == &brush_default_glyph && glyph->stroke_count == 0) {
+        units += space_advance;
+      } else {
+        units += glyph->advance;
+      }
+    }
+    p = g_utf8_next_char(p);
+  }
+
+  return units;
+}
+
+static void brush_render_text(cairo_t *cr,
+                              const char *text,
+                              double x,
+                              double y,
+                              double width,
+                              double height,
+                              double base_r,
+                              double base_g,
+                              double base_b,
+                              double base_a,
+                              double shear,
+                              guint32 seed) {
+  if (!text || !*text) {
+    return;
+  }
+
+  char **lines = g_strsplit(text, "\n", -1);
+  if (!lines) return;
+
+  GArray *line_units = g_array_new(FALSE, FALSE, sizeof(double));
+  double max_units = 0.0;
+  int line_count = 0;
+
+  for (int i = 0; lines[i]; i++) {
+    double units = brush_line_units(lines[i]);
+    if (units <= 0.0) {
+      units = brush_get_space_glyph()->advance;
+    }
+    g_array_append_val(line_units, units);
+    if (units > max_units) max_units = units;
+    line_count++;
+  }
+
+  if (line_count == 0 || max_units <= 0.0) {
+    g_array_free(line_units, TRUE);
+    g_strfreev(lines);
+    return;
+  }
+
+  double total_height_units = line_count * BRUSH_BASE_HEIGHT + (line_count - 1) * BRUSH_LINE_GAP;
+  if (total_height_units <= 0.0) {
+    total_height_units = BRUSH_BASE_HEIGHT;
+  }
+
+  double scale_x = width / max_units;
+  double scale_y = height / total_height_units;
+  double scale = MIN(scale_x, scale_y);
+  if (scale <= 0.0) {
+    scale = 1.0;
+  }
+
+  double used_height = total_height_units * scale;
+  double y_offset = (height - used_height) / 2.0;
+  if (y_offset < 0.0) y_offset = 0.0;
+
+  const BrushGlyph *space_glyph = brush_get_space_glyph();
+  double space_advance = space_glyph ? space_glyph->advance : 0.6;
+
+  for (int line_idx = 0; line_idx < line_count; line_idx++) {
+    const char *line_text = lines[line_idx];
+    double units = g_array_index(line_units, double, line_idx);
+    double line_width = units * scale;
+    double x_offset = (width - line_width) / 2.0;
+    if (x_offset < 0.0) x_offset = 0.0;
+
+    double origin_y = y + y_offset + line_idx * (BRUSH_BASE_HEIGHT + BRUSH_LINE_GAP) * scale;
+    double cursor_x = x + x_offset;
+
+    const char *p = line_text;
+    while (p && *p) {
+      gunichar ch = g_utf8_get_char(p);
+      if (ch == '\t') {
+        cursor_x += space_advance * BRUSH_TAB_MULTIPLIER * scale;
+      } else {
+        const BrushGlyph *glyph = brush_lookup(ch);
+        double glyph_scale = scale;
+        double glyph_origin_y = origin_y;
+        gboolean is_lower = g_unichar_islower(ch);
+        if (is_lower) {
+          glyph_scale *= 0.78;
+          glyph_origin_y += scale * (BRUSH_BASE_HEIGHT - 0.78);
+        }
+        if (ch == '.' || ch == ',') {
+          glyph_scale *= 0.55;
+          glyph_origin_y += scale * 0.65;
+        } else if (ch == '?') {
+          glyph_scale *= 0.9;
+          glyph_origin_y += scale * 0.05;
+        }
+        brush_draw_glyph(cr, glyph, cursor_x, glyph_origin_y,
+                         glyph_scale, shear, base_r, base_g, base_b, base_a, &seed);
+        cursor_x += glyph->advance * scale;
+      }
+      p = g_utf8_next_char(p);
+    }
+  }
+
+  g_array_free(line_units, TRUE);
+  g_strfreev(lines);
+}
+
+void shape_render_text_outline_sample(cairo_t *cr,
+                                      const char *text,
+                                      double x,
+                                      double y,
+                                      double width,
+                                      double height,
+                                      double stroke_r,
+                                      double stroke_g,
+                                      double stroke_b,
+                                      double stroke_a) {
+  guint32 seed = g_str_hash(text ? text : "TXT");
+  brush_render_text(cr, text ? text : "TXT",
+                    x,
+                    y,
+                    width,
+                    height,
+                    stroke_r,
+                    stroke_g,
+                    stroke_b,
+                    stroke_a <= 0.0 ? 1.0 : stroke_a,
+                    -0.22,
+                    seed ^ 0x9e3779b9u);
+}
+
+static void text_outline_draw(Shape *shape, cairo_t *cr) {
+  if (!shape->text || shape->text[0] == '\0') {
+    return;
+  }
+
+  Element *element = (Element*)shape;
+  double padding = MAX(6.0, shape->stroke_width * 1.2);
+  double content_width = MAX(1.0, element->width - padding * 2.0);
+  double content_height = MAX(1.0, element->height - padding * 2.0);
+  double base_a = shape->stroke_a;
+  if (base_a <= 0.0) base_a = 1.0;
+
+  guint32 seed = text_outline_seed(shape);
+  brush_render_text(cr,
+                    shape->text,
+                    element->x + padding,
+                    element->y + padding,
+                    content_width,
+                    content_height,
+                    shape->stroke_r,
+                    shape->stroke_g,
+                    shape->stroke_b,
+                    base_a,
+                    -0.22,
+                    seed);
+}
 
 gboolean shape_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   Shape *shape = (Shape*)user_data;
@@ -357,6 +1225,13 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         apply_fill(shape, cr);
         cairo_set_source_rgba(cr, shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a);
         cairo_stroke(cr);
+      }
+      break;
+    case SHAPE_TEXT_OUTLINE:
+      {
+        cairo_save(cr);
+        text_outline_draw(shape, cr);
+        cairo_restore(cr);
       }
       break;
     case SHAPE_CYLINDER_VERTICAL:
@@ -1123,7 +1998,7 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   }
 
   // Draw text if not editing and text exists (but not for plots - their text is data)
-  if (!shape->editing && shape->text && strlen(shape->text) > 0 && shape->shape_type != SHAPE_PLOT) {
+  if (!shape->editing && shape->text && strlen(shape->text) > 0 && shape->shape_type != SHAPE_PLOT && shape->shape_type != SHAPE_TEXT_OUTLINE) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *font_desc = pango_font_description_from_string(shape->font_description);
     pango_layout_set_font_description(layout, font_desc);

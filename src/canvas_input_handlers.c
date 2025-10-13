@@ -714,6 +714,15 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
       if (stroke_color.a <= 0.0) {
         stroke_color.a = 1.0;
       }
+      if (data->selected_shape_type == SHAPE_TEXT_OUTLINE) {
+        text.text = "TXT";
+        text.font_description = "Brush Script MT Bold 96";
+        stroke_color.r = 0.95;
+        stroke_color.g = 0.95;
+        stroke_color.b = 0.95;
+        stroke_color.a = 1.0;
+        text.text_color = stroke_color;
+      }
       ElementColor bg_color = stroke_color;
       ElementShape shape_config = {
         .shape_type = data->selected_shape_type,

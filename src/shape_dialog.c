@@ -26,6 +26,7 @@ typedef struct {
   GtkWidget *cube_btn;
   GtkWidget *plot_btn;
   GtkWidget *oval_btn;
+  GtkWidget *text_outline_btn;
   GtkStringList *fill_model;
   GtkStringList *stroke_model;
 } ShapeDialogData;
@@ -330,6 +331,19 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
     cairo_stroke(cr);
     return;
   }
+  case SHAPE_TEXT_OUTLINE: {
+    shape_render_text_outline_sample(cr,
+                                     "TXT",
+                                     inset,
+                                     inset,
+                                     draw_width,
+                                     draw_height,
+                                     0.95,
+                                     0.95,
+                                     0.95,
+                                     1.0);
+    return;
+  }
   case SHAPE_CUBE: {
     double offset = MIN(draw_width, draw_height) * 0.35;
     // Front face
@@ -483,7 +497,7 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   data->canvas_data->shape_stroke_style = data->stroke_style;
   data->canvas_data->shape_fill_style = data->fill_style;
   data->canvas_data->selected_shape_type = shape_type;
-  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW) {
+  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW || shape_type == SHAPE_TEXT_OUTLINE) {
     data->canvas_data->shape_filled = FALSE;
     data->filled = FALSE;
   } else {
@@ -548,6 +562,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
       break;
     case GDK_KEY_u:
       button = data->curved_arrow_btn;
+      break;
+    case GDK_KEY_x:
+      button = data->text_outline_btn;
       break;
     case GDK_KEY_k:
       button = data->cube_btn;
@@ -776,6 +793,9 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
 
   data->curved_arrow_btn = create_shape_button("Curved Arrow (U)", "U", SHAPE_CURVED_ARROW, data);
   gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->curved_arrow_btn, -1);
+
+  data->text_outline_btn = create_shape_button("Outline Text (X)", "X", SHAPE_TEXT_OUTLINE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->text_outline_btn, -1);
 
   data->vcylinder_btn = create_shape_button("V-Cylinder (V)", "V", SHAPE_CYLINDER_VERTICAL, data);
   gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->vcylinder_btn, -1);
