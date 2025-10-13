@@ -291,12 +291,28 @@ static Element* canvas_pick_element_internal(CanvasData *data, int x, int y, gbo
         rotated_y = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
     }
 
-    if (rotated_x >= element->x && rotated_x <= element->x + element->width &&
-        rotated_y >= element->y && rotated_y <= element->y + element->height) {
-      if (element->z > highest_z_index) {
-        selected_element = element;
-        highest_z_index = element->z;
+    gboolean inside = FALSE;
+
+    if (element->type == ELEMENT_MEDIA_FILE) {
+      MediaNote *media_note = (MediaNote*)element;
+      int bounds_x, bounds_y, bounds_w, bounds_h;
+      media_note_get_visible_bounds(media_note, &bounds_x, &bounds_y, &bounds_w, &bounds_h);
+      if (rotated_x >= bounds_x && rotated_x <= bounds_x + bounds_w &&
+          rotated_y >= bounds_y && rotated_y <= bounds_y + bounds_h) {
+        inside = TRUE;
       }
+    } else if (rotated_x >= element->x && rotated_x <= element->x + element->width &&
+               rotated_y >= element->y && rotated_y <= element->y + element->height) {
+      inside = TRUE;
+    }
+
+    if (!inside) {
+      continue;
+    }
+
+    if (element->z > highest_z_index) {
+      selected_element = element;
+      highest_z_index = element->z;
     }
   }
 

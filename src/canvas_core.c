@@ -131,6 +131,8 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   // OPTIMIZATION: Initialize hidden children cache
   data->hidden_children_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
+  data->audio_playback_states = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+
   // Initialize animation timer
   data->animation_timer_id = 0;
   data->is_loading_space = FALSE;
@@ -182,9 +184,41 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
   while (iter != NULL) {
     ModelElement *model_element = (ModelElement*)iter->data;
 
-    if (model_element->visual_element != NULL) {
+    Element *visual_element = model_element->visual_element;
+
+    if (model_element->state == MODEL_STATE_DELETED) {
+      if (visual_element) {
+        data->selected_elements = g_list_remove(data->selected_elements, visual_element);
+        element_free(visual_element);
+        model_element->visual_element = NULL;
+      }
+      iter = iter->next;
+      continue;
+    }
+
+    if (!visual_element &&
+        model_element->type &&
+        model_element->type->type == ELEMENT_MEDIA_FILE &&
+        data->audio_playback_states) {
+      AudioPlaybackState *state = g_hash_table_lookup(data->audio_playback_states, model_element->uuid);
+      if (state && state->playing && state->element) {
+        Element *persisted = state->element;
+        if (persisted->type == ELEMENT_MEDIA_FILE) {
+          MediaNote *note = (MediaNote*)persisted;
+          if (note->media_type == MEDIA_TYPE_AUDIO) {
+            visual_element = persisted;
+            model_element->visual_element = visual_element;
+            visual_element->canvas_data = data;
+            visual_element->model_element = model_element;
+            state->element = visual_element;
+          }
+        }
+      }
+    }
+
+    if (visual_element != NULL) {
       // Update existing visual element properties directly
-      Element *visual_element = model_element->visual_element;
+      visual_element = model_element->visual_element;
 
       // OPTIMIZATION: Ensure reverse pointer is always set for existing elements
       visual_element->model_element = model_element;
@@ -324,6 +358,7 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
       if (visual_element) {
         model_element->visual_element = visual_element;
         visual_element->model_element = model_element;  // OPTIMIZATION: Set reverse pointer
+
       }
     }
 
@@ -359,6 +394,7 @@ void canvas_data_free(CanvasData *data) {
   if (data->hidden_elements) g_hash_table_destroy(data->hidden_elements);
   // OPTIMIZATION: Clean up hidden children cache
   if (data->hidden_children_cache) g_hash_table_destroy(data->hidden_children_cache);
+  if (data->audio_playback_states) g_hash_table_destroy(data->audio_playback_states);
 
   // Clean up animation timer
   if (data->animation_timer_id > 0) {

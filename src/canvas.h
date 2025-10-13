@@ -20,6 +20,11 @@ typedef struct _CanvasData CanvasData;
 typedef struct _UndoManager UndoManager;
 
 typedef struct {
+  Element *element;
+  gboolean playing;
+} AudioPlaybackState;
+
+typedef struct {
   ModelElement *element;
   double x;
   double y;
@@ -85,6 +90,9 @@ struct _CanvasData {
   GHashTable *hidden_elements; // uuid string -> gboolean
   // OPTIMIZATION: Cache which elements have hidden children for O(1) lookups
   GHashTable *hidden_children_cache; // parent_uuid string -> gboolean
+
+  // Audio playback state persistence
+  GHashTable *audio_playback_states; // uuid string -> AudioPlaybackState*
 
   // Toolbar management
   GtkWidget *toolbar;

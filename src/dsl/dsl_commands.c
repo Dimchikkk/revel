@@ -37,6 +37,11 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
 
     int token_count = 0;
     gchar **tokens = tokenize_line(line, &token_count);
+    if (token_count < 0) {
+      success = FALSE;
+      g_strfreev(tokens);
+      break;
+    }
     if (token_count < 1) {
       g_strfreev(tokens);
       continue;
@@ -757,7 +762,13 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         }
 
         // Check for nested for loops
-        gchar **nested_tokens = tokenize_line(body_line, NULL);
+        int nested_count = 0;
+        gchar **nested_tokens = tokenize_line(body_line, &nested_count);
+        if (nested_count < 0) {
+          success = FALSE;
+          g_strfreev(nested_tokens);
+          break;
+        }
         if (nested_tokens && nested_tokens[0]) {
           if (g_strcmp0(nested_tokens[0], "for") == 0) {
             nesting_depth++;
@@ -779,6 +790,12 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
           g_string_append_c(loop_body, '\n');
         }
         g_string_append(loop_body, body_line);
+      }
+
+      if (!success) {
+        g_string_free(loop_body, TRUE);
+        g_strfreev(tokens);
+        break;
       }
 
       if (!found_end) {
@@ -807,6 +824,9 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
     }
 
     g_strfreev(tokens);
+    if (!success) {
+      break;
+    }
   }
 
   if (variables_changed) {

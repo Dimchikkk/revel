@@ -352,6 +352,27 @@ gboolean parse_double_value(const gchar *token, double *out_value) {
   return TRUE;
 }
 
+static gchar** tokenize_line_error(GArray *tokens, int *token_count, const char *message) {
+  if (message) {
+    g_print("DSL: %s\\n", message);
+  }
+
+  if (tokens) {
+    for (guint i = 0; i < tokens->len; i++) {
+      gchar *existing = g_array_index(tokens, gchar*, i);
+      g_free(existing);
+    }
+    g_array_free(tokens, TRUE);
+  }
+
+  if (token_count) {
+    *token_count = -1;
+  }
+
+  gchar **empty = g_new0(gchar*, 1);
+  return empty;
+}
+
 gchar** tokenize_line(const gchar *line, int *token_count) {
   GArray *tokens = g_array_new(FALSE, FALSE, sizeof(gchar*));
   const gchar *p = line;
@@ -365,12 +386,25 @@ gchar** tokenize_line(const gchar *line, int *token_count) {
       // Quoted string
       const gchar *start = p + 1;
       p++;
-      while (*p && *p != '"') p++;
-      if (*p == '"') {
-        gchar *token = g_strndup(start, p - start);
-        g_array_append_val(tokens, token);
+      while (*p && *p != '"') {
+        if (*p == '\\' && *(p + 1)) {
+          p += 2;
+          continue;
+        }
+        if (*p == '\n' || *p == '\r') {
+          return tokenize_line_error(tokens, token_count,
+                                     "Unterminated string literal; use \\n for newlines");
+        }
         p++;
       }
+      if (*p != '"') {
+        return tokenize_line_error(tokens, token_count,
+                                   "Unterminated string literal; use \\n for newlines");
+      }
+
+      gchar *token = g_strndup(start, p - start);
+      g_array_append_val(tokens, token);
+      p++;
     } else if (*p == '(') {
       // Parenthesized expression
       const gchar *start = p;

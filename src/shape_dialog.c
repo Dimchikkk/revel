@@ -10,8 +10,6 @@ typedef struct {
   gboolean filled;
   StrokeStyle stroke_style;
   FillStyle fill_style;
-  GtkWidget *stroke_combo;
-  GtkWidget *fill_combo;
   GPtrArray *icon_widgets;
   GtkWidget *circle_btn;
   GtkWidget *rectangle_btn;
@@ -28,6 +26,8 @@ typedef struct {
   GtkWidget *cube_btn;
   GtkWidget *plot_btn;
   GtkWidget *oval_btn;
+  GtkStringList *fill_model;
+  GtkStringList *stroke_model;
 } ShapeDialogData;
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
@@ -43,6 +43,8 @@ static void shape_dialog_data_free(ShapeDialogData *data) {
   if (data->icon_widgets) {
     g_ptr_array_free(data->icon_widgets, TRUE);
   }
+  g_clear_object(&data->fill_model);
+  g_clear_object(&data->stroke_model);
   g_free(data);
 }
 
@@ -415,15 +417,14 @@ static void queue_icon_redraws(ShapeDialogData *data) {
   }
 }
 
-static void on_stroke_style_changed(GtkComboBox *combo, gpointer user_data) {
+static void on_stroke_style_changed(GObject *dropdown, GParamSpec *pspec, gpointer user_data) {
   ShapeDialogData *data = (ShapeDialogData*)user_data;
-  if (!data) return;
+  if (!data || !GTK_IS_DROP_DOWN(dropdown) || g_strcmp0(pspec->name, "selected") != 0) {
+    return;
+  }
 
-  int active = gtk_combo_box_get_active(combo);
-  switch (active) {
-    case 0:
-      data->stroke_style = STROKE_STYLE_SOLID;
-      break;
+  guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(dropdown));
+  switch (selected) {
     case 1:
       data->stroke_style = STROKE_STYLE_DASHED;
       break;
@@ -434,18 +435,17 @@ static void on_stroke_style_changed(GtkComboBox *combo, gpointer user_data) {
       data->stroke_style = STROKE_STYLE_SOLID;
       break;
   }
+  queue_icon_redraws(data);
 }
 
-static void on_fill_style_changed(GtkComboBox *combo, gpointer user_data) {
+static void on_fill_style_changed(GObject *dropdown, GParamSpec *pspec, gpointer user_data) {
   ShapeDialogData *data = (ShapeDialogData*)user_data;
-  if (!data) return;
+  if (!data || !GTK_IS_DROP_DOWN(dropdown) || g_strcmp0(pspec->name, "selected") != 0) {
+    return;
+  }
 
-  int active = gtk_combo_box_get_active(combo);
-  switch (active) {
-    case 0: // Outline
-      data->filled = FALSE;
-      data->fill_style = FILL_STYLE_SOLID;
-      break;
+  guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(dropdown));
+  switch (selected) {
     case 1: // Solid
       data->filled = TRUE;
       data->fill_style = FILL_STYLE_SOLID;
@@ -458,7 +458,7 @@ static void on_fill_style_changed(GtkComboBox *combo, gpointer user_data) {
       data->filled = TRUE;
       data->fill_style = FILL_STYLE_CROSS_HATCH;
       break;
-    default:
+    default: // Outline
       data->filled = FALSE;
       data->fill_style = FILL_STYLE_SOLID;
       break;
@@ -496,15 +496,11 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   // Update cursor
   canvas_set_cursor(data->canvas_data, data->canvas_data->draw_cursor);
 
-  shape_dialog_data_free(data);
 }
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data) {
-  ShapeDialogData *data = (ShapeDialogData*)user_data;
-
   if (response_id == GTK_RESPONSE_CANCEL || response_id == GTK_RESPONSE_DELETE_EVENT) {
     gtk_window_destroy(GTK_WINDOW(dialog));
-    shape_dialog_data_free(data);
   }
 }
 
@@ -574,19 +570,15 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
   return FALSE;
 }
 
-static GtkWidget* create_shape_button(const char *label, ShapeType shape_type, ShapeDialogData *data) {
+static GtkWidget* create_shape_button(const char *tooltip, const char *shortcut, ShapeType shape_type, ShapeDialogData *data) {
   GtkWidget *button = gtk_button_new();
-  gtk_widget_set_size_request(button, 100, -1);
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-  gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
-  gtk_widget_set_margin_start(box, 6);
-  gtk_widget_set_margin_end(box, 6);
-  gtk_widget_set_margin_top(box, 6);
-  gtk_widget_set_margin_bottom(box, 6);
+  gtk_button_set_has_frame(GTK_BUTTON(button), FALSE);
+  gtk_widget_set_tooltip_text(button, tooltip);
+  gtk_widget_add_css_class(button, "flat");
+  gtk_widget_add_css_class(button, "shape-tile");
 
   GtkWidget *icon = gtk_drawing_area_new();
-  gtk_widget_set_size_request(icon, 48, 32);
+  gtk_widget_set_size_request(icon, 64, 48);
   ShapeIconData *icon_data = g_new0(ShapeIconData, 1);
   icon_data->dialog_data = data;
   icon_data->shape_type = shape_type;
@@ -597,13 +589,22 @@ static GtkWidget* create_shape_button(const char *label, ShapeType shape_type, S
   }
   g_ptr_array_add(data->icon_widgets, icon);
 
-  GtkWidget *label_widget = gtk_label_new(label);
-  gtk_widget_set_halign(label_widget, GTK_ALIGN_CENTER);
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  gtk_widget_set_halign(content, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(content, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(content), icon);
 
-  gtk_box_append(GTK_BOX(box), icon);
-  gtk_box_append(GTK_BOX(box), label_widget);
+  if (shortcut && *shortcut) {
+    GtkWidget *badge = gtk_label_new(NULL);
+    gchar *markup = g_markup_printf_escaped("<small>%s</small>", shortcut);
+    gtk_label_set_markup(GTK_LABEL(badge), markup);
+    g_free(markup);
+    gtk_widget_add_css_class(badge, "dim-label");
+    gtk_label_set_xalign(GTK_LABEL(badge), 0.5);
+    gtk_box_append(GTK_BOX(content), badge);
+  }
 
-  gtk_button_set_child(GTK_BUTTON(button), box);
+  gtk_button_set_child(GTK_BUTTON(button), content);
 
   g_object_set_data(G_OBJECT(button), "shape_type", GINT_TO_POINTER(shape_type));
   g_signal_connect(button, "clicked", G_CALLBACK(on_shape_button_clicked), data);
@@ -639,6 +640,7 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
 
   GtkWidget *dialog = gtk_dialog_new();
   data->dialog = dialog;
+  g_object_set_data_full(G_OBJECT(dialog), "shape-dialog-data", data, (GDestroyNotify)shape_dialog_data_free);
 
   gtk_window_set_title(GTK_WINDOW(dialog), "Select Shape");
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, 200);
@@ -655,6 +657,25 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
   gtk_box_append(GTK_BOX(content_area), vbox);
 
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  gtk_widget_set_margin_bottom(header, 4);
+  gtk_widget_set_margin_start(header, 4);
+  gtk_widget_set_margin_end(header, 4);
+  GtkWidget *title_label = gtk_label_new("Choose a shape");
+  gtk_widget_add_css_class(title_label, "title-3");
+  gtk_label_set_xalign(GTK_LABEL(title_label), 0.0);
+  gtk_box_append(GTK_BOX(header), title_label);
+
+  GtkWidget *subtitle_label = gtk_label_new("Pick a base and fine-tune stroke and fill styles before drawing.");
+  gtk_widget_add_css_class(subtitle_label, "dim-label");
+  gtk_label_set_wrap(GTK_LABEL(subtitle_label), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(subtitle_label), 0.0);
+  gtk_box_append(GTK_BOX(header), subtitle_label);
+  gtk_box_append(GTK_BOX(vbox), header);
+
+  GtkWidget *divider = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_box_append(GTK_BOX(vbox), divider);
+
   GtkWidget *style_grid = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(style_grid), 8);
   gtk_grid_set_column_spacing(GTK_GRID(style_grid), 12);
@@ -667,11 +688,9 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   gtk_widget_set_halign(fill_label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(style_grid), fill_label, 0, 0, 1, 1);
 
-  GtkWidget *fill_combo = gtk_combo_box_text_new();
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Outline");
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Solid");
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Hachure");
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(fill_combo), NULL, "Cross Hatch");
+  const char *fill_options[] = {"Outline", "Solid", "Hachure", "Cross Hatch", NULL};
+  data->fill_model = gtk_string_list_new(fill_options);
+  GtkWidget *fill_combo = gtk_drop_down_new(G_LIST_MODEL(data->fill_model), NULL);
   gtk_widget_set_hexpand(fill_combo, TRUE);
   int fill_index = 0;
   if (data->filled) {
@@ -689,19 +708,17 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   } else {
     fill_index = 0;
   }
-  gtk_combo_box_set_active(GTK_COMBO_BOX(fill_combo), fill_index);
+  gtk_drop_down_set_selected(GTK_DROP_DOWN(fill_combo), fill_index);
   gtk_grid_attach(GTK_GRID(style_grid), fill_combo, 1, 0, 1, 1);
-  data->fill_combo = fill_combo;
-  g_signal_connect(fill_combo, "changed", G_CALLBACK(on_fill_style_changed), data);
+  g_signal_connect(fill_combo, "notify::selected", G_CALLBACK(on_fill_style_changed), data);
 
   GtkWidget *stroke_label = gtk_label_new("Stroke Style");
   gtk_widget_set_halign(stroke_label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(style_grid), stroke_label, 0, 1, 1, 1);
 
-  GtkWidget *stroke_combo = gtk_combo_box_text_new();
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Solid");
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Dashed");
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(stroke_combo), NULL, "Dotted");
+  const char *stroke_options[] = {"Solid", "Dashed", "Dotted", NULL};
+  data->stroke_model = gtk_string_list_new(stroke_options);
+  GtkWidget *stroke_combo = gtk_drop_down_new(G_LIST_MODEL(data->stroke_model), NULL);
   gtk_widget_set_hexpand(stroke_combo, TRUE);
   int stroke_index = 0;
   switch (data->stroke_style) {
@@ -715,61 +732,62 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
       stroke_index = 0;
       break;
   }
-  gtk_combo_box_set_active(GTK_COMBO_BOX(stroke_combo), stroke_index);
+  gtk_drop_down_set_selected(GTK_DROP_DOWN(stroke_combo), stroke_index);
   gtk_grid_attach(GTK_GRID(style_grid), stroke_combo, 1, 1, 1, 1);
-  data->stroke_combo = stroke_combo;
-  g_signal_connect(stroke_combo, "changed", G_CALLBACK(on_stroke_style_changed), data);
+  g_signal_connect(stroke_combo, "notify::selected", G_CALLBACK(on_stroke_style_changed), data);
 
-  GtkWidget *shapes_grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(shapes_grid), 10);
-  gtk_grid_set_column_spacing(GTK_GRID(shapes_grid), 12);
-  gtk_widget_set_halign(shapes_grid, GTK_ALIGN_CENTER);
-  gtk_box_append(GTK_BOX(vbox), shapes_grid);
+  GtkWidget *shapes_flowbox = gtk_flow_box_new();
+  gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(shapes_flowbox), GTK_SELECTION_NONE);
+  gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(shapes_flowbox), 4);
+  gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(shapes_flowbox), 10);
+  gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(shapes_flowbox), 10);
+  gtk_widget_set_halign(shapes_flowbox, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(vbox), shapes_flowbox);
 
-  data->rectangle_btn = create_shape_button("Rectangle (R)", SHAPE_RECTANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->rectangle_btn, 0, 0, 1, 1);
+  data->rectangle_btn = create_shape_button("Rectangle (R)", "R", SHAPE_RECTANGLE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->rectangle_btn, -1);
 
-  data->rounded_rect_btn = create_shape_button("Rounded Rect (O)", SHAPE_ROUNDED_RECTANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->rounded_rect_btn, 1, 0, 1, 1);
+  data->rounded_rect_btn = create_shape_button("Rounded Rect (O)", "O", SHAPE_ROUNDED_RECTANGLE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->rounded_rect_btn, -1);
 
-  data->oval_btn = create_shape_button("Oval (E)", SHAPE_OVAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->oval_btn, 2, 0, 1, 1);
+  data->oval_btn = create_shape_button("Oval (E)", "E", SHAPE_OVAL, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->oval_btn, -1);
 
-  data->circle_btn = create_shape_button("Circle (C)", SHAPE_CIRCLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->circle_btn, 3, 0, 1, 1);
+  data->circle_btn = create_shape_button("Circle (C)", "C", SHAPE_CIRCLE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->circle_btn, -1);
 
-  data->triangle_btn = create_shape_button("Triangle (T)", SHAPE_TRIANGLE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->triangle_btn, 0, 1, 1, 1);
+  data->triangle_btn = create_shape_button("Triangle (T)", "T", SHAPE_TRIANGLE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->triangle_btn, -1);
 
-  data->diamond_btn = create_shape_button("Diamond (D)", SHAPE_DIAMOND, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->diamond_btn, 1, 1, 1, 1);
+  data->diamond_btn = create_shape_button("Diamond (D)", "D", SHAPE_DIAMOND, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->diamond_btn, -1);
 
-  data->trapezoid_btn = create_shape_button("Trapezoid (P)", SHAPE_TRAPEZOID, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->trapezoid_btn, 2, 1, 1, 1);
+  data->trapezoid_btn = create_shape_button("Trapezoid (P)", "P", SHAPE_TRAPEZOID, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->trapezoid_btn, -1);
 
-  data->line_btn = create_shape_button("Line (L)", SHAPE_LINE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->line_btn, 0, 2, 1, 1);
+  data->line_btn = create_shape_button("Line (L)", "L", SHAPE_LINE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->line_btn, -1);
 
-  data->arrow_btn = create_shape_button("Arrow (A)", SHAPE_ARROW, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->arrow_btn, 1, 2, 1, 1);
+  data->arrow_btn = create_shape_button("Arrow (A)", "A", SHAPE_ARROW, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->arrow_btn, -1);
 
-  data->bezier_btn = create_shape_button("Bezier (B)", SHAPE_BEZIER, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->bezier_btn, 2, 2, 1, 1);
+  data->bezier_btn = create_shape_button("Bezier (B)", "B", SHAPE_BEZIER, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->bezier_btn, -1);
 
-  data->curved_arrow_btn = create_shape_button("Curved Arrow (U)", SHAPE_CURVED_ARROW, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->curved_arrow_btn, 3, 2, 1, 1);
+  data->curved_arrow_btn = create_shape_button("Curved Arrow (U)", "U", SHAPE_CURVED_ARROW, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->curved_arrow_btn, -1);
 
-  data->vcylinder_btn = create_shape_button("V-Cylinder (V)", SHAPE_CYLINDER_VERTICAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->vcylinder_btn, 0, 3, 1, 1);
+  data->vcylinder_btn = create_shape_button("V-Cylinder (V)", "V", SHAPE_CYLINDER_VERTICAL, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->vcylinder_btn, -1);
 
-  data->hcylinder_btn = create_shape_button("H-Cylinder (H)", SHAPE_CYLINDER_HORIZONTAL, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->hcylinder_btn, 1, 3, 1, 1);
+  data->hcylinder_btn = create_shape_button("H-Cylinder (H)", "H", SHAPE_CYLINDER_HORIZONTAL, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->hcylinder_btn, -1);
 
-  data->cube_btn = create_shape_button("Cube (K)", SHAPE_CUBE, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->cube_btn, 2, 3, 1, 1);
+  data->cube_btn = create_shape_button("Cube (K)", "K", SHAPE_CUBE, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->cube_btn, -1);
 
-  data->plot_btn = create_shape_button("Plot (G)", SHAPE_PLOT, data);
-  gtk_grid_attach(GTK_GRID(shapes_grid), data->plot_btn, 0, 4, 1, 1);
+  data->plot_btn = create_shape_button("Plot (G)", "G", SHAPE_PLOT, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->plot_btn, -1);
 
   // Add Cancel button
   gtk_dialog_add_button(GTK_DIALOG(dialog), "Cancel", GTK_RESPONSE_CANCEL);

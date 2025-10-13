@@ -834,6 +834,11 @@ static void dsl_type_check_event_block(DSLTypeCheckerContext *ctx, gchar **lines
 
     int token_count = 0;
     gchar **tokens = tokenize_line(raw, &token_count);
+    if (token_count < 0) {
+      dsl_type_add_error(ctx, j + 1, "Syntax error in event block");
+      g_strfreev(tokens);
+      break;
+    }
     if (token_count > 0) {
       dsl_type_check_event_command(ctx, tokens, token_count, j + 1);
     }
@@ -868,14 +873,19 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
     }
 
     int token_count = 0;
+    int line_no = i + 1;
     gchar **tokens = tokenize_line(line, &token_count);
+    if (token_count < 0) {
+      dsl_type_add_error(&ctx, line_no, "Syntax error");
+      g_strfreev(tokens);
+      continue;
+    }
     if (token_count < 1) {
       g_strfreev(tokens);
       continue;
     }
 
     const gchar *cmd = tokens[0];
-    int line_no = i + 1;
 
     gboolean is_global_decl = g_strcmp0(cmd, "global") == 0;
     int type_token_index = is_global_decl ? 1 : 0;
@@ -1011,6 +1021,12 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
 
         int body_token_count = 0;
         gchar **body_tokens = tokenize_line(check_line, &body_token_count);
+
+        if (body_token_count < 0) {
+          dsl_type_add_error(&ctx, j + 1, "Syntax error in for loop");
+          g_strfreev(body_tokens);
+          break;
+        }
 
         if (body_token_count > 0) {
           if (g_strcmp0(body_tokens[0], "for") == 0) {

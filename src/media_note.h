@@ -22,10 +22,12 @@ typedef struct {
   GstElement *media_pipeline;
   gboolean media_playing;
   GtkWidget *media_widget;
+  guint bus_watch_id;
   unsigned char *media_data;  // Store media data in memory
   int media_size;
   gint duration;
   gboolean reset_media_data;
+  gboolean has_thumbnail;
 
   // Fields for data feeding
   const guint8 *current_pos;
@@ -49,5 +51,10 @@ void media_note_update_size(Element *element, int width, int height);
 void media_note_free(Element *element);
 void media_note_toggle_video_playback(Element *element);
 void media_note_toggle_audio_playback(Element *element);
+void media_note_get_visible_bounds(MediaNote *media_note,
+                                   int *out_x,
+                                   int *out_y,
+                                   int *out_width,
+                                   int *out_height);
 
 #endif

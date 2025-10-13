@@ -2,14 +2,50 @@
 #include "canvas_core.h"
 #include "canvas_placement.h"
 #include "element.h"
+#include "media_note.h"
 #include "space.h"
 #include "model.h"
 #include "undo_manager.h"
+
+static void capture_audio_playback_states(CanvasData *data) {
+  if (!data || !data->audio_playback_states || !data->model) {
+    return;
+  }
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, data->model->elements);
+
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *element = (ModelElement*)value;
+    if (!element || !element->uuid || !element->visual_element) {
+      continue;
+    }
+
+    if (element->type && element->type->type == ELEMENT_MEDIA_FILE) {
+      MediaNote *media_note = (MediaNote*)element->visual_element;
+      if (media_note && media_note->media_type == MEDIA_TYPE_AUDIO) {
+        if (media_note->media_playing) {
+          AudioPlaybackState *state = g_new0(AudioPlaybackState, 1);
+          state->element = (Element*)media_note;
+          state->playing = TRUE;
+          g_hash_table_replace(data->audio_playback_states,
+                               g_strdup(element->uuid),
+                               state);
+        } else {
+          g_hash_table_remove(data->audio_playback_states, element->uuid);
+        }
+      }
+    }
+  }
+}
 
 void switch_to_space(CanvasData *data, const gchar* space_uuid) {
   if (!space_uuid) {
     return;
   }
+
+  capture_audio_playback_states(data);
 
   undo_manager_reset(data->undo_manager);
 

@@ -163,12 +163,13 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   GList *connections = NULL;
   GList *new_elements = NULL;
   GList *connection_elements = NULL;
+  gboolean parse_error = FALSE;
 
   gchar **lines = g_strsplit(script, "\n", 0);
 
   // Count total lines for progress reporting
   int total_lines = 0;
-  for (int i = 0; lines[i] != NULL; i++) {
+  for (int i = 0; lines[i] != NULL && !parse_error; i++) {
     total_lines++;
   }
   g_print("DSL: Processing %d lines...\n", total_lines);
@@ -176,7 +177,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   int progress_interval = total_lines / 10; // Report every 10%
   if (progress_interval < 1000) progress_interval = 1000;
 
-  for (int i = 0; lines[i] != NULL; i++) {
+  for (int i = 0; lines[i] != NULL && !parse_error; i++) {
     if (i > 0 && i % progress_interval == 0) {
       g_print("DSL: Processed %d/%d lines (%.1f%%)...\n", i, total_lines, (i * 100.0) / total_lines);
     }
@@ -187,6 +188,12 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
 
     int token_count = 0;
     gchar **tokens = tokenize_line(line, &token_count);
+
+    if (token_count < 0) {
+      parse_error = TRUE;
+      g_strfreev(tokens);
+      break;
+    }
 
     if (token_count < 1) {
       g_strfreev(tokens);
@@ -515,7 +522,13 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
         }
 
         // Check for nested for loops
-        gchar **check_tokens = tokenize_line(block_line, NULL);
+        int check_count = 0;
+        gchar **check_tokens = tokenize_line(block_line, &check_count);
+        if (check_count < 0) {
+          parse_error = TRUE;
+          g_strfreev(check_tokens);
+          break;
+        }
         if (check_tokens && check_tokens[0]) {
           if (g_strcmp0(check_tokens[0], "for") == 0) {
             nesting_depth++;
@@ -539,6 +552,14 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
         g_string_append(block, block_line);
       }
 
+      if (parse_error) {
+        g_string_free(block, TRUE);
+        for (int j = 0; j < token_count; j++)
+          g_free(tokens[j]);
+        g_free(tokens);
+        break;
+      }
+
       if (!found_end) {
         g_print("DSL: Missing 'end' for on %s %s block\n", event_type, target);
         g_string_free(block, TRUE);
@@ -557,6 +578,9 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
       for (int j = 0; j < token_count; j++)
         g_free(tokens[j]);
       g_free(tokens);
+      if (parse_error) {
+        break;
+      }
       continue;
     }
 
@@ -688,7 +712,13 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
         }
 
         // Check for nested for loops
-        gchar **check_tokens = tokenize_line(body_line, NULL);
+        int nested_count = 0;
+        gchar **check_tokens = tokenize_line(body_line, &nested_count);
+        if (nested_count < 0) {
+          parse_error = TRUE;
+          g_strfreev(check_tokens);
+          break;
+        }
         if (check_tokens && check_tokens[0]) {
           if (g_strcmp0(check_tokens[0], "for") == 0) {
             nesting_depth++;
@@ -710,6 +740,12 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
           g_string_append_c(loop_body, '\n');
         }
         g_string_append(loop_body, body_line);
+      }
+
+      if (parse_error) {
+        g_string_free(loop_body, TRUE);
+        g_strfreev(tokens);
+        break;
       }
 
       if (!found_end) {
@@ -3084,6 +3120,16 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
 }
 
 // Create visual elements for all collected elements (deferred rendering)
+  if (parse_error) {
+    canvas_show_notification(data, "DSL aborted due to syntax error");
+    g_hash_table_destroy(element_map);
+    g_list_free(connections);
+    g_list_free(new_elements);
+    g_list_free(connection_elements);
+    g_strfreev(lines);
+    return;
+  }
+
   int element_count = g_list_length(new_elements);
   g_print("DSL: Creating %d visual elements...\n", element_count);
 
@@ -3683,13 +3729,19 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       g_free(font_str);
     }
     else if (element->type->type == ELEMENT_MEDIA_FILE) {
-      gboolean is_video = (element->video && element->video->duration > 0);
-      const gchar *command = is_video ? "video_create" : "image_create";
+      gboolean is_audio = (element->audio != NULL);
+      gboolean is_video = (!is_audio && element->video && element->video->duration > 0);
+      const gchar *command = is_audio ? "audio_create" : (is_video ? "video_create" : "image_create");
 
       gchar *pos_str = g_strdup_printf("(%d,%d)", element->position->x, element->position->y);
       gchar *size_str = g_strdup_printf("(%d,%d)", element->size->width, element->size->height);
 
-      const gchar *placeholder_path = is_video ? "REPLACE_WITH_VIDEO_PATH.mp4" : "REPLACE_WITH_IMAGE_PATH.png";
+      const gchar *placeholder_path = "REPLACE_WITH_IMAGE_PATH.png";
+      if (is_audio) {
+        placeholder_path = "REPLACE_WITH_AUDIO_PATH.mp3";
+      } else if (is_video) {
+        placeholder_path = "REPLACE_WITH_VIDEO_PATH.mp4";
+      }
 
       const gchar *label_source = (element->text && element->text->text && element->text->text[0] != '\0') ?
         element->text->text : element_id;
@@ -3702,7 +3754,7 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
       g_string_append_printf(dsl,
                              "# TODO: Update %s file path for %s (%s) before executing\n",
-                             is_video ? "video" : "image",
+                             is_audio ? "audio" : (is_video ? "video" : "image"),
                              element_id,
                              label_copy ? label_copy : ""
                              );
@@ -3711,6 +3763,10 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
         g_string_append_printf(dsl,
                                "# Hint: original runtime %d seconds\n",
                                element->video->duration);
+      } else if (is_audio && element->audio) {
+        g_string_append_printf(dsl,
+                               "# Hint: audio duration %d seconds\n",
+                               element->audio->duration);
       }
 
       g_string_append_printf(dsl,

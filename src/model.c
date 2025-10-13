@@ -756,10 +756,12 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .height = element->size->height,
   };
   MediaType media_type = MEDIA_TYPE_NONE;
-  if (element->image) {
-    media_type = MEDIA_TYPE_IMAGE;
+  if (element->audio) {
+    media_type = MEDIA_TYPE_AUDIO;
   } else if (element->video) {
     media_type = MEDIA_TYPE_VIDEO;
+  } else if (element->image) {
+    media_type = MEDIA_TYPE_IMAGE;
   }
   ElementMedia media = {
     .type = media_type,
@@ -767,9 +769,12 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
                   (element->video ? element->video->thumbnail_data : NULL),
     .image_size = element->image ? element->image->image_size :
                   (element->video ? element->video->thumbnail_size : 0),
-    .video_data = element->video ? element->video->video_data : NULL,
-    .video_size = element->video ? element->video->video_size : 0,
-    .duration = element->video ? element->video->duration : 0,
+    .video_data = element->video ? element->video->video_data :
+                  (element->audio ? element->audio->audio_data : NULL),
+    .video_size = element->video ? element->video->video_size :
+                  (element->audio ? element->audio->audio_size : 0),
+    .duration = element->video ? element->video->duration :
+                (element->audio ? element->audio->duration : 0),
   };
 
   ElementConnection connection = {
@@ -795,6 +800,8 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .text = element->text ? element->text->text : "",
     .text_color = text_color,
     .font_description = element->text ? element->text->font_description : NULL,
+    .strikethrough = element->text ? element->text->strikethrough : FALSE,
+    .alignment = element->text ? element->text->alignment : NULL,
   };
   ElementColor stroke_color = {0};
   if (element->stroke_color) {
@@ -829,7 +836,36 @@ ModelElement* model_element_fork(Model *model, ModelElement *element) {
     .rotation_degrees = element->rotation_degrees,
   };
 
-  return model_create_element(model, config);
+  ModelElement *cloned = model_create_element(model, config);
+  if (!cloned) {
+    return NULL;
+  }
+
+  if (element->video) {
+    if (cloned->video) {
+      model_video_free(cloned->video);
+    }
+    cloned->video = element->video;
+    cloned->video->ref_count++;
+  }
+
+  if (element->audio) {
+    if (cloned->audio) {
+      model_audio_free(cloned->audio);
+    }
+    cloned->audio = element->audio;
+    cloned->audio->ref_count++;
+
+    if (element->image) {
+      if (cloned->image) {
+        model_image_free(cloned->image);
+      }
+      cloned->image = element->image;
+      cloned->image->ref_count++;
+    }
+  }
+
+  return cloned;
 }
 
 ModelElement* model_element_clone(Model *model, ModelElement *element, CloneFlags flags) {

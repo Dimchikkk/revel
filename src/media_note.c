@@ -13,11 +13,68 @@
 
 gboolean gst_initialized = FALSE;
 
-// Helper function to get the actual visual bounds of the media content
-static void media_note_get_visual_bounds(MediaNote *media_note,
-                                         int *out_x, int *out_y,
-                                         int *out_width, int *out_height) {
+static gboolean media_note_playback_state_matches_element(gpointer key,
+                                                          gpointer value,
+                                                          gpointer user_data) {
+  (void)key;
+  AudioPlaybackState *state = (AudioPlaybackState*)value;
+  Element *element = (Element*)user_data;
+  return state && state->element == element;
+}
+
+static void media_note_store_playback_state(MediaNote *media_note, gboolean playing) {
+  if (!media_note) {
+    return;
+  }
+
+  CanvasData *canvas_data = media_note->base.canvas_data;
+  if (!canvas_data || !canvas_data->audio_playback_states) {
+    return;
+  }
+
   Element *element = (Element*)media_note;
+  ModelElement *model_element = element->model_element;
+  if (!model_element && canvas_data->model) {
+    model_element = model_get_by_visual(canvas_data->model, element);
+  }
+
+  if (playing) {
+    if (!model_element || !model_element->uuid) {
+      return;
+    }
+    AudioPlaybackState *state = g_new0(AudioPlaybackState, 1);
+    state->element = element;
+    state->playing = TRUE;
+    g_hash_table_replace(canvas_data->audio_playback_states,
+                         g_strdup(model_element->uuid),
+                          state);
+  } else {
+    gboolean removed = FALSE;
+    if (model_element && model_element->uuid) {
+      removed = g_hash_table_remove(canvas_data->audio_playback_states,
+                                    model_element->uuid);
+    }
+
+    if (!removed) {
+      g_hash_table_foreach_remove(canvas_data->audio_playback_states,
+                                  media_note_playback_state_matches_element,
+                                  element);
+    }
+  }
+}
+
+void media_note_get_visible_bounds(MediaNote *media_note,
+                                   int *out_x, int *out_y,
+                                   int *out_width, int *out_height) {
+  Element *element = (Element*)media_note;
+
+  if (media_note->media_type == MEDIA_TYPE_AUDIO && !media_note->has_thumbnail) {
+    *out_x = element->x;
+    *out_y = element->y;
+    *out_width = element->width;
+    *out_height = element->height;
+    return;
+  }
 
   if (media_note->pixbuf) {
     int pixbuf_width = gdk_pixbuf_get_width(media_note->pixbuf);
@@ -113,6 +170,7 @@ static gboolean media_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
     if (media_note->media_pipeline) {
       gst_element_set_state(media_note->media_pipeline, GST_STATE_PAUSED);
       media_note->media_playing = FALSE;
+      media_note_store_playback_state(media_note, FALSE);
     }
 
     // For audio, try to play next connected audio
@@ -183,6 +241,9 @@ static gboolean media_bus_callback(GstBus *bus, GstMessage *msg, gpointer user_d
         g_printerr("Debug info: %s\n", debug_info);
       }
     }
+
+    media_note->media_playing = FALSE;
+    media_note_store_playback_state(media_note, FALSE);
 
     g_error_free(err);
     g_free(debug_info);
@@ -277,14 +338,16 @@ MediaNote* media_note_create(ElementPosition position,
   media_note->alignment = g_strdup(text.alignment ? text.alignment : "bottom-right");
 
   media_note->reset_media_data = FALSE;
+  media_note->has_thumbnail = FALSE;
 
   // Always try to create pixbuf from image_data (this is the thumbnail)
   if (media.image_data && media.image_size > 0) {
     GInputStream *stream = g_memory_input_stream_new_from_data(media.image_data, media.image_size, NULL);
     media_note->pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, NULL);
     g_object_unref(stream);
-  } else {
-    // Fallback: create a placeholder
+    media_note->has_thumbnail = TRUE;
+  } else if (media.type != MEDIA_TYPE_AUDIO) {
+    // Fallback: create a placeholder for non-audio media
     media_note->pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, FALSE, 8, 100, 100);
     gdk_pixbuf_fill(media_note->pixbuf, 0x303030FF);
   }
@@ -379,7 +442,7 @@ void media_note_toggle_video_playback(Element *element) {
 
     // Set up bus callback
     GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(media_note->media_pipeline));
-    gst_bus_add_watch(bus, media_bus_callback, media_note);
+    media_note->bus_watch_id = gst_bus_add_watch(bus, media_bus_callback, media_note);
     gst_object_unref(bus);
 
     // Create video widget
@@ -529,7 +592,7 @@ void media_note_toggle_audio_playback(Element *element) {
 
     // Set up bus callback
     GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(media_note->media_pipeline));
-    gst_bus_add_watch(bus, media_bus_callback, media_note);
+    media_note->bus_watch_id = gst_bus_add_watch(bus, media_bus_callback, media_note);
     gst_object_unref(bus);
   }
 
@@ -537,6 +600,7 @@ void media_note_toggle_audio_playback(Element *element) {
     // Pause playback
     gst_element_set_state(media_note->media_pipeline, GST_STATE_PAUSED);
     media_note->media_playing = FALSE;
+    media_note_store_playback_state(media_note, FALSE);
   } else {
     // If pipeline was in NULL state (after EOS), we need to reset it
     GstState state;
@@ -561,10 +625,12 @@ void media_note_toggle_audio_playback(Element *element) {
 
     if (ret == GST_STATE_CHANGE_FAILURE) {
       g_printerr("Failed to start audio playback\n");
+      media_note_store_playback_state(media_note, FALSE);
       return;
     }
 
     media_note->media_playing = TRUE;
+    media_note_store_playback_state(media_note, TRUE);
   }
 
   // Redraw main canvas
@@ -656,7 +722,7 @@ void media_note_start_editing(Element *element, GtkWidget *overlay) {
   gtk_text_buffer_set_text(buffer, media_note->text, -1);
 
   int draw_x, draw_y, draw_width, draw_height;
-  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
+  media_note_get_visible_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
   int text_view_width, text_view_height;
   gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
@@ -684,7 +750,7 @@ void media_note_update_position(Element *element, int x, int y, int z) {
   // Update text view position if editing
   if (media_note->text_view && media_note->editing) {
     int draw_x, draw_y, draw_width, draw_height;
-    media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
+    media_note_get_visible_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
     int text_view_width, text_view_height;
     gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
@@ -725,7 +791,7 @@ void media_note_update_size(Element *element, int width, int height) {
     // Reposition text view if editing
     if (media_note->editing) {
       int draw_x, draw_y, draw_width, draw_height;
-      media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
+      media_note_get_visible_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
       int text_view_width, text_view_height;
       gtk_widget_get_size_request(media_note->text_view, &text_view_width, &text_view_height);
@@ -760,9 +826,72 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   }
 
   int draw_x, draw_y, draw_width, draw_height;
-  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
+  media_note_get_visible_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
-  if (media_note->pixbuf) {
+  gboolean custom_audio_card = FALSE;
+
+  if (media_note->media_type == MEDIA_TYPE_AUDIO && !media_note->has_thumbnail) {
+    custom_audio_card = TRUE;
+
+    double x = element->x;
+    double y = element->y;
+    double w = element->width;
+    double h = element->height;
+    double corner = MIN(h / 2.0, 18.0);
+
+    cairo_save(cr);
+    cairo_new_path(cr);
+    cairo_arc(cr, x + w - corner, y + corner, corner, -G_PI_2, 0);
+    cairo_arc(cr, x + w - corner, y + h - corner, corner, 0, G_PI_2);
+    cairo_arc(cr, x + corner, y + h - corner, corner, G_PI_2, G_PI);
+    cairo_arc(cr, x + corner, y + corner, corner, G_PI, 3 * G_PI_2);
+    cairo_close_path(cr);
+    cairo_set_source_rgba(cr,
+                          element->bg_r,
+                          element->bg_g,
+                          element->bg_b,
+                          element->bg_a);
+    cairo_fill(cr);
+    cairo_restore(cr);
+
+    // Draw a subtle accent panel on the left
+    cairo_save(cr);
+    cairo_rectangle(cr, x, y, w * 0.3, h);
+    cairo_set_source_rgba(cr,
+                          CLAMP(element->bg_r * 0.75 + 0.1, 0.0, 1.0),
+                          CLAMP(element->bg_g * 0.75 + 0.1, 0.0, 1.0),
+                          CLAMP(element->bg_b * 0.75 + 0.1, 0.0, 1.0),
+                          MIN(1.0, element->bg_a + 0.2));
+    cairo_fill(cr);
+    cairo_restore(cr);
+
+    // Audio glyph (circle with lines)
+    cairo_save(cr);
+    double center_x = x + (w * 0.18);
+    double center_y = y + h / 2.0;
+    double radius = MIN(h * 0.28, w * 0.18);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);
+    cairo_arc(cr, center_x, center_y, radius, 0, 2 * G_PI);
+    cairo_fill(cr);
+
+    cairo_set_line_width(cr, MAX(2.0, h * 0.04));
+    cairo_set_source_rgba(cr, element->bg_r * 0.4, element->bg_g * 0.4, element->bg_b * 0.4, 0.9);
+    cairo_move_to(cr, center_x + radius * 0.4, center_y - radius * 0.6);
+    cairo_line_to(cr, center_x + radius * 0.4, center_y + radius * 0.6);
+    cairo_stroke(cr);
+
+    cairo_set_line_width(cr, MAX(1.5, h * 0.025));
+    for (int wave = 0; wave < 2; wave++) {
+      double offset = (wave + 1) * radius * 0.5;
+      cairo_arc(cr, center_x, center_y, offset, -G_PI_4, G_PI_4);
+      cairo_stroke(cr);
+      cairo_arc(cr, center_x, center_y, offset, G_PI - G_PI_4, G_PI + G_PI_4);
+      cairo_stroke(cr);
+    }
+    cairo_restore(cr);
+  }
+
+  if (!custom_audio_card && media_note->pixbuf) {
     // Draw the image scaled to fit the entire element
     cairo_save(cr);
     cairo_rectangle(cr, draw_x, draw_y, draw_width, draw_height);
@@ -779,7 +908,7 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       cairo_paint(cr); // Opaque when not playing
     }
     cairo_restore(cr);
-  } else {
+  } else if (!custom_audio_card) {
     // Fallback to element bounds if no pixbuf
     // Draw a simple rectangle to represent the element
     cairo_set_source_rgba(cr, element->bg_r, element->bg_g, element->bg_b, element->bg_a);
@@ -919,7 +1048,7 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
       int cx, cy;
       // Get unrotated connection point on image
       int conn_draw_x, conn_draw_y, conn_draw_width, conn_draw_height;
-      media_note_get_visual_bounds(media_note, &conn_draw_x, &conn_draw_y, &conn_draw_width, &conn_draw_height);
+      media_note_get_visible_bounds(media_note, &conn_draw_x, &conn_draw_y, &conn_draw_width, &conn_draw_height);
 
       switch(i) {
       case 0: cx = conn_draw_x + conn_draw_width/2; cy = conn_draw_y; break;
@@ -946,7 +1075,7 @@ void media_note_draw(Element *element, cairo_t *cr, gboolean is_selected) {
 void media_note_get_connection_point(Element *element, int point, int *cx, int *cy) {
   MediaNote *media_note = (MediaNote*)element;
   int draw_x, draw_y, draw_width, draw_height;
-  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
+  media_note_get_visible_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
   int unrotated_x = 0, unrotated_y = 0;
 
@@ -988,7 +1117,7 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
   MediaNote *media_note = (MediaNote*)element;
 
   int draw_x, draw_y, draw_width, draw_height;
-  media_note_get_visual_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
+  media_note_get_visible_bounds(media_note, &draw_x, &draw_y, &draw_width, &draw_height);
 
   int size = 8;
   int unrotated_handles[4][2] = {
@@ -1033,6 +1162,35 @@ int media_note_pick_connection_point(Element *element, int x, int y) {
 
 void media_note_free(Element *element) {
   MediaNote *media_note = (MediaNote*)element;
+
+  if (media_note->media_type == MEDIA_TYPE_AUDIO) {
+    media_note_store_playback_state(media_note, FALSE);
+  }
+
+  if (media_note->media_pipeline) {
+    GstElement *appsrc = gst_bin_get_by_name(GST_BIN(media_note->media_pipeline), "source");
+    if (appsrc) {
+      g_signal_handlers_disconnect_by_func(appsrc, G_CALLBACK(need_data_callback), media_note);
+      gst_object_unref(appsrc);
+    }
+
+    gst_element_set_state(media_note->media_pipeline, GST_STATE_NULL);
+    gst_element_get_state(media_note->media_pipeline, NULL, NULL, GST_CLOCK_TIME_NONE);
+
+    if (media_note->bus_watch_id > 0) {
+      g_source_remove(media_note->bus_watch_id);
+      media_note->bus_watch_id = 0;
+    }
+
+    gst_object_unref(media_note->media_pipeline);
+    media_note->media_pipeline = NULL;
+  }
+
+  if (media_note->media_widget && GTK_IS_WIDGET(media_note->media_widget)) {
+    gtk_widget_unparent(media_note->media_widget);
+  }
+  media_note->media_widget = NULL;
+
   if (media_note->pixbuf) g_object_unref(media_note->pixbuf);
   if (media_note->text) g_free(media_note->text);
   if (media_note->font_description) g_free(media_note->font_description);
@@ -1047,16 +1205,6 @@ void media_note_free(Element *element) {
 
   if (media_note->text_view && GTK_IS_WIDGET(media_note->text_view) && gtk_widget_get_parent(media_note->text_view)) {
     gtk_widget_unparent(media_note->text_view);
-  }
-
-  if (media_note->media_pipeline) {
-    gst_element_set_state(media_note->media_pipeline, GST_STATE_NULL);
-    gst_object_unref(media_note->media_pipeline);
-    media_note->media_pipeline = NULL;
-  }
-
-  if (media_note->media_widget && GTK_IS_WIDGET(media_note->media_widget)) {
-    gtk_widget_unparent(media_note->media_widget);
   }
 
   media_note->media_playing = FALSE;
