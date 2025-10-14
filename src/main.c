@@ -13,6 +13,7 @@
 #include "shape_dialog.h"
 #include "database.h"
 #include "dsl_executor.h"
+#include "ui/dialogs/ai_chat_dialog.h"
 
 // Global variables to store command line options
 static char *g_database_filename = NULL;
@@ -99,6 +100,16 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   gtk_box_append(GTK_BOX(toolbar_background), toolbar_scroll);
   gtk_revealer_set_child(GTK_REVEALER(toolbar_revealer), toolbar_background);
+
+  // === AI ASSISTANT GROUP ===
+  GtkWidget *ai_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
+  gtk_widget_add_css_class(ai_group, "toolbar-group");
+  gtk_widget_set_margin_end(ai_group, 4);
+
+  GtkWidget *ai_btn = gtk_toggle_button_new_with_label("AI");
+  gtk_widget_set_tooltip_text(ai_btn, "Open AI Assistant");
+  gtk_box_append(GTK_BOX(ai_group), ai_btn);
+  gtk_box_append(GTK_BOX(toolbar), ai_group);
 
   // === CONTENT CREATION GROUP ===
   GtkWidget *create_group = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 1);
@@ -365,6 +376,8 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   data->toolbar_visible = TRUE;
   data->toolbar_auto_hide = FALSE;
   data->toolbar_hide_timer_id = 0;
+  data->ai_toggle_button = ai_btn;
+  data->ai_dialog = NULL;
 
   canvas_input_register_event_handlers(data);
 
@@ -422,6 +435,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(add_paper_btn, "clicked", G_CALLBACK(canvas_on_add_paper_note), data);
   g_signal_connect(add_note_btn, "clicked", G_CALLBACK(canvas_on_add_note), data);
   g_signal_connect(add_text_btn, "clicked", G_CALLBACK(canvas_on_add_text), data);
+  g_signal_connect(ai_btn, "toggled", G_CALLBACK(ai_chat_dialog_toggle), data);
   g_signal_connect(log_btn, "clicked", G_CALLBACK(on_log_clicked), data);
   g_signal_connect(add_space_btn, "clicked", G_CALLBACK(canvas_on_add_space), data);
   g_signal_connect(back_btn, "clicked", G_CALLBACK(canvas_on_go_back), data);

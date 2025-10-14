@@ -8,6 +8,19 @@ DSL scripts can be executed in two ways:
 - **DSL Executor window**: Press **Ctrl+E** to open the interactive executor
 - **Command line**: `./revel --dsl path/to/script.dsl` to run scripts directly on startup
 
+## AI Assistant Usage
+
+Open the AI Assistant from the toolbar `AI` toggle. The assistant captures the
+current canvas as DSL, truncating context to the configured byte budget, and
+issues the prompt to the selected CLI provider. Returned scripts are validated
+with the DSL type checker; if validation fails the assistant retries up to
+three times while sharing the failure context. All successful and failed
+responses are logged in the SQLite action log with `origin="ai"`.
+
+Use the gear button inside the dialog to customise provider path overrides,
+timeouts, context size, and grammar snippet inclusion. Leave the CLI path blank
+to fall back to the default executable name from `config/ai_providers.json`.
+
 ## Table of Contents
 
 1. [Grammar Reference](#grammar-reference)

@@ -1,0 +1,26 @@
+{
+  "providers": [
+    {
+      "id": "claude",
+      "label": "Claude",
+      "binary": "claude",
+      "args": []
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini",
+      "binary": "gemini",
+      "args": [],
+      "input_mode": "arg"
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "binary": "codex",
+      "args": [
+        "exec"
+      ],
+      "input_mode": "arg"
+    }
+  ]
+}

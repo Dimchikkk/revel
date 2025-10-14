@@ -10,6 +10,7 @@
 #include "undo_manager.h"
 #include "shape.h"
 #include "canvas_drop.h"
+#include "note.h"
 #include "paper_note.h"
 #include "animation.h"
 #include "inline_text.h"
@@ -1034,12 +1035,28 @@ void dsl_runtime_register_element(CanvasData *data, const gchar *id, ModelElemen
 
   g_hash_table_replace(runtime->id_to_model, g_strdup(id), element);
   g_hash_table_replace(runtime->model_to_id, element, g_strdup(id));
+
+  if (data && data->dsl_aliases && element->uuid && *element->uuid &&
+      g_strcmp0(id, element->uuid) != 0) {
+    g_hash_table_insert(data->dsl_aliases, g_strdup(id), g_strdup(element->uuid));
+  }
 }
 
 ModelElement* dsl_runtime_lookup_element(CanvasData *data, const gchar *id) {
   DSLRuntime *runtime = dsl_runtime_get(data);
   if (!runtime || !id) return NULL;
-  return (ModelElement *)g_hash_table_lookup(runtime->id_to_model, id);
+  ModelElement *element = (ModelElement *)g_hash_table_lookup(runtime->id_to_model, id);
+  if (element) {
+    return element;
+  }
+
+  if (data && data->model && data->model->elements) {
+    element = g_hash_table_lookup(data->model->elements, id);
+    if (element) {
+      dsl_runtime_register_element(data, id, element);
+    }
+  }
+  return element;
 }
 
 const gchar* dsl_runtime_lookup_element_id(CanvasData *data, ModelElement *element) {
@@ -1136,6 +1153,13 @@ void dsl_runtime_add_move_animation(CanvasData *data, ModelElement *model_elemen
                                            AnimInterpolationType interp) {
   if (!data || !model_element || !model_element->uuid || !data->anim_engine) return;
 
+  if (data->undo_manager && (from_x != to_x || from_y != to_y)) {
+    undo_manager_push_move_action(data->undo_manager,
+                                  model_element,
+                                  from_x, from_y,
+                                  to_x, to_y);
+  }
+
   animation_add_move(data->anim_engine, model_element->uuid,
                      start_time, duration, interp,
                      from_x, from_y, to_x, to_y);
@@ -1175,14 +1199,81 @@ void dsl_runtime_add_rotate_animation(CanvasData *data, ModelElement *model_elem
 void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, const gchar *new_text) {
   if (!data || !model_element || !new_text) return;
 
+  const gchar *old_text_ptr = (model_element->text && model_element->text->text)
+                                ? model_element->text->text
+                                : "";
+  gboolean changed = g_strcmp0(old_text_ptr, new_text) != 0;
+  gchar *old_text_copy = g_strdup(old_text_ptr);
+  g_message("DSL text_update target=%s old='%s' new='%s'", model_element->uuid, old_text_ptr, new_text);
+
   Element *element = model_element->visual_element;
-  if (element && element->type == ELEMENT_INLINE_TEXT) {
-    InlineText *inline_text = (InlineText *)element;
-    g_free(inline_text->text);
-    inline_text->text = g_strdup(new_text);
-    inline_text_update_layout(inline_text);
+  gboolean element_changed = FALSE;
+
+  if (element) {
+    switch (element->type) {
+      case ELEMENT_INLINE_TEXT: {
+        InlineText *inline_text = (InlineText *)element;
+        if (g_strcmp0(inline_text->text, new_text) != 0) {
+          g_free(inline_text->text);
+          inline_text->text = g_strdup(new_text);
+          inline_text_update_layout(inline_text);
+          element_changed = TRUE;
+        }
+        break;
+      }
+      case ELEMENT_NOTE: {
+        Note *note = (Note *)element;
+        if (g_strcmp0(note->text, new_text) != 0) {
+          g_free(note->text);
+          note->text = g_strdup(new_text);
+          element_changed = TRUE;
+        }
+        break;
+      }
+      case ELEMENT_PAPER_NOTE: {
+        PaperNote *paper = (PaperNote *)element;
+        if (g_strcmp0(paper->text, new_text) != 0) {
+          g_free(paper->text);
+          paper->text = g_strdup(new_text);
+          element_changed = TRUE;
+        }
+        break;
+      }
+      case ELEMENT_SHAPE: {
+        Shape *shape = (Shape *)element;
+        if (g_strcmp0(shape->text, new_text) != 0) {
+          g_free(shape->text);
+          shape->text = g_strdup(new_text);
+          element_changed = TRUE;
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
 
-  model_update_text(data->model, model_element, new_text);
-  gtk_widget_queue_draw(data->drawing_area);
+  int model_result = model_update_text(data->model, model_element, new_text);
+  if (model_result > 0) {
+    changed = TRUE;
+  }
+
+  if (element_changed) {
+    changed = TRUE;
+  }
+
+  if (changed && data->undo_manager) {
+    undo_manager_push_text_action(data->undo_manager,
+                                  model_element,
+                                  old_text_copy ? old_text_copy : "",
+                                  new_text);
+  }
+
+  if (changed) {
+    g_message("DSL text_update applied; model text now '%s'", model_element->text && model_element->text->text ? model_element->text->text : "<null>");
+    canvas_sync_with_model(data);
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+
+  g_free(old_text_copy);
 }

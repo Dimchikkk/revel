@@ -22,6 +22,7 @@
 #include "font_dialog.h"
 #include "clone_dialog.h"
 #include "ui_event_bus.h"
+#include "ui/dialogs/ai_chat_dialog.h"
 
 #include <graphene.h>
 #include <math.h>
@@ -1904,6 +1905,19 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
 
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_e) {
     canvas_show_script_dialog(NULL, data);
+    return;
+  }
+
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_r) {
+    if (data->ai_toggle_button) {
+      if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->ai_toggle_button))) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->ai_toggle_button), TRUE);
+      } else {
+        ai_chat_dialog_present(data);
+      }
+    } else {
+      ai_chat_dialog_present(data);
+    }
     return;
   }
 

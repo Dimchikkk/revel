@@ -7,3 +7,4 @@ build/*
 .gdb_history
 ai_cube.dsl
 test_space_tree*
+test_dsl*

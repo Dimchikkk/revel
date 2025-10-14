@@ -850,7 +850,10 @@ static void dsl_type_check_event_block(DSLTypeCheckerContext *ctx, gchar **lines
   }
 }
 
-gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gchar *filename) {
+gboolean dsl_type_check_script(CanvasData *data,
+                               const gchar *script,
+                               const gchar *filename,
+                               GPtrArray **out_errors) {
   (void)data;
   DSLTypeCheckerContext ctx = {
     .variables = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL),
@@ -858,6 +861,21 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
     .errors = g_ptr_array_new_with_free_func(g_free),
     .filename = filename,
   };
+
+  if (out_errors) {
+    *out_errors = NULL;
+  }
+
+  if (data && data->model && data->model->elements) {
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, data->model->elements);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+      if (key) {
+        g_hash_table_insert(ctx.elements, g_strdup((const gchar *)key), GINT_TO_POINTER(1));
+      }
+    }
+  }
 
   if (data && data->presentation_mode_active) {
     dsl_runtime_seed_global_types(data, ctx.variables);
@@ -1086,10 +1104,19 @@ gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gcha
 
   gboolean ok = (ctx.errors->len == 0);
   if (!ok) {
-    g_print("DSL type check found %u issue(s):\n", ctx.errors->len);
-    for (guint i = 0; i < ctx.errors->len; i++) {
-      const gchar *msg = g_ptr_array_index(ctx.errors, i);
-      g_print("%s\n", msg);
+    if (out_errors) {
+      GPtrArray *collected = g_ptr_array_new_with_free_func(g_free);
+      for (guint i = 0; i < ctx.errors->len; i++) {
+        const gchar *msg = g_ptr_array_index(ctx.errors, i);
+        g_ptr_array_add(collected, g_strdup(msg));
+      }
+      *out_errors = collected;
+    } else {
+      g_print("DSL type check found %u issue(s):\n", ctx.errors->len);
+      for (guint i = 0; i < ctx.errors->len; i++) {
+        const gchar *msg = g_ptr_array_index(ctx.errors, i);
+        g_print("%s\n", msg);
+      }
     }
   }
 

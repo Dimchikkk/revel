@@ -20,6 +20,30 @@
 // Forward declaration for recursive script execution
 extern void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename, gboolean skip_type_check);
 
+static gchar *dsl_copy_paren_token(const gchar *start, const gchar **after_token) {
+  if (!start || *start != '(') {
+    return NULL;
+  }
+
+  int depth = 1;
+  const gchar *p = start + 1;
+  while (*p && depth > 0) {
+    if (*p == '(') depth++;
+    else if (*p == ')') depth--;
+    p++;
+  }
+
+  if (depth != 0) {
+    return NULL;
+  }
+
+  gchar *token = g_strndup(start, p - start);
+  if (after_token) {
+    *after_token = p;
+  }
+  return token;
+}
+
 gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) {
   if (!data || !block_source) return FALSE;
 
@@ -45,6 +69,10 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
     if (token_count < 1) {
       g_strfreev(tokens);
       continue;
+    }
+
+    if (tokens[0]) {
+      g_print("DSL: command token '%s' (count=%d)\n", tokens[0], token_count);
     }
 
     if (g_strcmp0(tokens[0], "set") == 0 && token_count >= 3) {
@@ -150,7 +178,7 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         g_free(var_name);
       }
     }
-    else if (g_strcmp0(tokens[0], "animate_move") == 0 && token_count >= 4) {
+    else if (g_strcmp0(tokens[0], "animate_move") == 0) {
       const gchar *elem_id = tokens[1];
       ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
       if (!model_element) {
@@ -161,16 +189,60 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
 
       int from_x = 0, from_y = 0, to_x = 0, to_y = 0;
       int cursor = 2;
+      const gchar *from_token = NULL;
+      const gchar *to_token = NULL;
+      const gchar *after_to_ptr = NULL;
+      gboolean from_token_owned = FALSE;
+      gboolean to_token_owned = FALSE;
+
       if (token_count >= 6 && tokens[2][0] == '(' && tokens[3][0] == '(') {
-        if (!dsl_parse_point_token(data, tokens[2], &from_x, &from_y) ||
-            !dsl_parse_point_token(data, tokens[3], &to_x, &to_y)) {
+        from_token = tokens[2];
+        to_token = tokens[3];
+        cursor = 4;
+      } else if (token_count >= 3 && tokens[2][0] == '(') {
+        from_token = NULL;
+        to_token = tokens[2];
+        cursor = 3;
+      } else {
+        const gchar *raw_line = lines[i];
+        const gchar *id_pos = strstr(raw_line, elem_id);
+        if (id_pos) {
+          const gchar *scan = id_pos + strlen(elem_id);
+          while (*scan && g_ascii_isspace(*scan)) scan++;
+
+          if (*scan == '(') {
+            const gchar *after_first = NULL;
+            gchar *first = dsl_copy_paren_token(scan, &after_first);
+            if (first) {
+              from_token = first;
+              from_token_owned = TRUE;
+              g_print("DSL: animate_move inferred from point %s\n", from_token);
+              scan = after_first;
+              while (*scan && g_ascii_isspace(*scan)) scan++;
+              if (*scan == '(') {
+                const gchar *after_second = NULL;
+                gchar *second = dsl_copy_paren_token(scan, &after_second);
+                if (second) {
+                  to_token = second;
+                  to_token_owned = TRUE;
+                  after_to_ptr = after_second;
+                  cursor = 4;
+                  g_print("DSL: animate_move inferred to point %s\n", to_token);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (from_token) {
+        if (!dsl_parse_point_token(data, from_token, &from_x, &from_y)) {
           g_print("DSL: Failed to parse animate_move positions\n");
           g_strfreev(tokens);
           success = FALSE;
           continue;
         }
-        cursor = 4;
-      } else if (tokens[2][0] == '(') {
+      } else {
         if (!model_element->position) {
           g_print("DSL: animate_move missing element position data\n");
           g_strfreev(tokens);
@@ -179,22 +251,27 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         }
         from_x = model_element->position->x;
         from_y = model_element->position->y;
-        if (!dsl_parse_point_token(data, tokens[2], &to_x, &to_y)) {
-          g_print("DSL: Failed to parse animate_move target position\n");
-          g_strfreev(tokens);
-          success = FALSE;
-          continue;
+      }
+
+      if (!to_token) {
+        if (token_count > cursor && tokens[cursor][0] == '(') {
+          to_token = tokens[cursor];
+          cursor++;
         }
-        cursor = 3;
-      } else {
-        g_print("DSL: Invalid animate_move syntax\n");
+      }
+
+      if (!to_token) {
+        g_print("DSL: animate_move missing destination point for '%s'\n", elem_id);
+        if (from_token_owned) g_free((gchar *)from_token);
         g_strfreev(tokens);
         success = FALSE;
         continue;
       }
 
-      if ((cursor + 1) >= token_count) {
-        g_print("DSL: animate_move missing timing arguments\n");
+      if (!dsl_parse_point_token(data, to_token, &to_x, &to_y)) {
+        g_print("DSL: Failed to parse animate_move target position\n");
+        if (from_token_owned) g_free((gchar *)from_token);
+        if (to_token_owned) g_free((gchar *)to_token);
         g_strfreev(tokens);
         success = FALSE;
         continue;
@@ -202,25 +279,71 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
 
       double start_time = 0.0;
       double duration = 0.0;
-      if (!dsl_parse_double_token(data, tokens[cursor], &start_time) ||
-          !dsl_parse_double_token(data, tokens[cursor + 1], &duration)) {
-        g_print("DSL: animate_move timing parse error\n");
+
+      gboolean timing_parsed = FALSE;
+      if (token_count >= cursor + 2 && tokens[cursor] && tokens[cursor + 1]) {
+        if (dsl_parse_double_token(data, tokens[cursor], &start_time) &&
+            dsl_parse_double_token(data, tokens[cursor + 1], &duration)) {
+          timing_parsed = TRUE;
+        }
+      }
+
+      if (!timing_parsed && after_to_ptr) {
+        const gchar *scan = after_to_ptr;
+        while (*scan && g_ascii_isspace(*scan)) scan++;
+        gchar *end_ptr = NULL;
+        start_time = g_ascii_strtod(scan, &end_ptr);
+        if (end_ptr && end_ptr != scan) {
+          scan = end_ptr;
+          while (*scan && g_ascii_isspace(*scan)) scan++;
+          duration = g_ascii_strtod(scan, &end_ptr);
+          if (end_ptr && end_ptr != scan) {
+            timing_parsed = TRUE;
+            after_to_ptr = end_ptr;
+          }
+        }
+      }
+
+      if (!timing_parsed) {
+        g_print("DSL: animate_move missing or invalid timing arguments for '%s'\n", elem_id);
+        if (from_token_owned) g_free((gchar *)from_token);
+        if (to_token_owned) g_free((gchar *)to_token);
         g_strfreev(tokens);
         success = FALSE;
         continue;
       }
 
       AnimInterpolationType interp = ANIM_INTERP_LINEAR;
-      if ((cursor + 2) < token_count) {
+      gboolean interp_parsed = FALSE;
+      if (token_count > cursor + 2) {
         const gchar *type_token = tokens[cursor + 2];
-        if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
-        else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
-        else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
-        else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
-        else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
-        else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
-        else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
-        else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
+        if (type_token && *type_token) {
+          interp_parsed = TRUE;
+          if (g_strcmp0(type_token, "immediate") == 0) interp = ANIM_INTERP_IMMEDIATE;
+          else if (g_strcmp0(type_token, "linear") == 0) interp = ANIM_INTERP_LINEAR;
+          else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) interp = ANIM_INTERP_BEZIER;
+          else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) interp = ANIM_INTERP_EASE_IN;
+          else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) interp = ANIM_INTERP_EASE_OUT;
+          else if (g_strcmp0(type_token, "bounce") == 0) interp = ANIM_INTERP_BOUNCE;
+          else if (g_strcmp0(type_token, "elastic") == 0) interp = ANIM_INTERP_ELASTIC;
+          else if (g_strcmp0(type_token, "back") == 0) interp = ANIM_INTERP_BACK;
+          else interp_parsed = FALSE;
+        }
+      }
+
+      if (!interp_parsed && after_to_ptr) {
+        const gchar *scan = after_to_ptr;
+        while (*scan && g_ascii_isspace(*scan)) scan++;
+        if (*scan) {
+          if (g_ascii_strncasecmp(scan, "immediate", 9) == 0) interp = ANIM_INTERP_IMMEDIATE;
+          else if (g_ascii_strncasecmp(scan, "linear", 6) == 0) interp = ANIM_INTERP_LINEAR;
+          else if (g_ascii_strncasecmp(scan, "bezier", 6) == 0 || g_ascii_strncasecmp(scan, "curve", 5) == 0) interp = ANIM_INTERP_BEZIER;
+          else if (g_ascii_strncasecmp(scan, "ease-in", 7) == 0 || g_ascii_strncasecmp(scan, "easein", 6) == 0) interp = ANIM_INTERP_EASE_IN;
+          else if (g_ascii_strncasecmp(scan, "ease-out", 8) == 0 || g_ascii_strncasecmp(scan, "easeout", 7) == 0) interp = ANIM_INTERP_EASE_OUT;
+          else if (g_ascii_strncasecmp(scan, "bounce", 6) == 0) interp = ANIM_INTERP_BOUNCE;
+          else if (g_ascii_strncasecmp(scan, "elastic", 7) == 0) interp = ANIM_INTERP_ELASTIC;
+          else if (g_ascii_strncasecmp(scan, "back", 4) == 0) interp = ANIM_INTERP_BACK;
+        }
       }
 
       if (!animation_prepared) {
@@ -230,7 +353,11 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
 
       dsl_runtime_add_move_animation(data, model_element, from_x, from_y, to_x, to_y,
                                      start_time, duration, interp);
+      g_print("DSL: animate_move parsed -> from (%d,%d) to (%d,%d) start %.3f duration %.3f\n",
+              from_x, from_y, to_x, to_y, start_time, duration);
       animations_scheduled = TRUE;
+      if (from_token_owned) g_free((gchar *)from_token);
+      if (to_token_owned) g_free((gchar *)to_token);
     }
     else if (g_strcmp0(tokens[0], "animate_resize") == 0 && token_count >= 4) {
       const gchar *elem_id = tokens[1];
@@ -545,13 +672,52 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
                           start_time, duration, interp);
       animations_scheduled = TRUE;
     }
-    else if (g_strcmp0(tokens[0], "text_update") == 0 && token_count >= 3) {
+    else if (g_strcmp0(tokens[0], "text_update") == 0) {
+      if (token_count < 2) {
+        g_print("DSL: text_update missing element id\n");
+        g_strfreev(tokens);
+        continue;
+      }
+
       const gchar *elem_id = tokens[1];
-      const gchar *text_token = tokens[2];
+      const gchar *text_token = NULL;
+      gboolean fallback_alloc = FALSE;
+
+      if (token_count >= 3) {
+        text_token = tokens[2];
+      } else {
+        const gchar *raw_line = lines[i];
+        const gchar *id_pos = strstr(raw_line, elem_id);
+        if (id_pos) {
+          const gchar *after_id = id_pos + strlen(elem_id);
+          while (*after_id && g_ascii_isspace(*after_id)) {
+            after_id++;
+          }
+          if (*after_id != '\0') {
+            text_token = g_strdup(after_id);
+            fallback_alloc = TRUE;
+          }
+        }
+      }
+
+      if (!text_token || *text_token == '\0') {
+        g_print("DSL: text_update missing text payload after '%s'\n", elem_id);
+        if (fallback_alloc) {
+          g_free((gpointer)text_token);
+        }
+        g_strfreev(tokens);
+        success = FALSE;
+        continue;
+      }
+
       gchar *clean_text = dsl_unescape_text(text_token);
       gchar *interpolated = dsl_interpolate_text(data, clean_text);
       g_free(clean_text);
+      if (fallback_alloc) {
+        g_free((gpointer)text_token);
+      }
 
+      g_print("DSL: text_update command for '%s'\n", elem_id);
       ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
       if (!model_element) {
         g_print("DSL: text_update target '%s' not found\n", elem_id);

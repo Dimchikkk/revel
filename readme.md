@@ -11,6 +11,7 @@ Note-taking and brainstorming application with infinite canvas and powerful orga
 * [Performance](#performance)
 * [Dependencies](#dependencies)
 * [To run on x86_64 GNU/Linux](#to-run-on-x86_64-gnulinux)
+* [AI Integration](#ai-integration)
 * [Project layout](#project-layout)
 * [DSL example](#dsl-example)
 * [DSL Documentation](#dsl-documentation)
@@ -111,6 +112,7 @@ Built for extreme scalability - handles massive datasets with optimized viewport
 * GTK4
 * SQLite3
 * GStreamer
+* JSON-GLib
 
 ```
 # UI
@@ -119,11 +121,26 @@ sudo apt install libgtk-4-dev
 sudo apt install libsqlite3-dev
 # Video support
 sudo apt install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav
+# AI CLI support
+sudo apt install libjson-glib-dev
 ```
 
 ## To run on x86_64 GNU/Linux:
 
 `make -j 7 && ./revel`
+
+## AI Integration
+
+The AI Assistant is exposed via the toolbar `AI` toggle. Each request invokes an
+external CLI provider and consumes the current canvas DSL context. Default
+providers are configured in `config/ai_providers.json` and can be extended by
+adding new entries without recompiling.
+
+The assistant expects the provider binaries to be available on `$PATH`. Paths,
+timeouts, context window size, and grammar inclusion can be customised from the
+gear menu inside the dialog. Overrides are persisted to the SQLite database so
+subsequent sessions retain the configuration. Conversation history stays inside
+the app and is logged with `origin="ai"` in the action log for auditing.
 
 ## Project layout
 

@@ -19,6 +19,7 @@ void canvas_show_script_dialog(GtkButton *button, gpointer user_data);
 void canvas_execute_script(CanvasData *data, const gchar *script);
 void canvas_execute_script_file(CanvasData *data, const gchar *script, const gchar *filename);
 void canvas_execute_script_internal(CanvasData *data, const gchar *script, const gchar *filename, gboolean skip_type_check);
+gchar *canvas_generate_dsl_from_model(CanvasData *data);
 void canvas_presentation_next_slide(CanvasData *data);
 void canvas_presentation_prev_slide(CanvasData *data);
 gboolean canvas_is_presentation_mode(CanvasData *data);

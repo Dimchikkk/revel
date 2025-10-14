@@ -122,5 +122,8 @@ int database_get_space_background(sqlite3 *db, const char *space_uuid, char **ba
 int database_set_space_background_color(sqlite3 *db, const char *space_uuid, const char *background_color);
 int database_get_space_grid_settings(sqlite3 *db, const char *space_uuid, int *grid_enabled, char **grid_color);
 int database_set_space_grid_settings(sqlite3 *db, const char *space_uuid, int grid_enabled, const char *grid_color);
+int database_get_setting(sqlite3 *db, const char *key, char **value_out);
+int database_set_setting(sqlite3 *db, const char *key, const char *value);
+int database_insert_action_log(sqlite3 *db, const char *origin, const char *prompt, const char *dsl, const char *error_text);
 
 #endif

@@ -169,6 +169,20 @@ int database_create_tables(sqlite3 *db) {
     "    FOREIGN KEY (from_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (to_element_uuid) REFERENCES elements(uuid),"
     "    FOREIGN KEY (target_space_uuid) REFERENCES spaces(uuid)"
+    ");"
+
+    "CREATE TABLE IF NOT EXISTS app_settings ("
+    "    key TEXT PRIMARY KEY,"
+    "    value TEXT"
+    ");"
+
+    "CREATE TABLE IF NOT EXISTS action_log ("
+    "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "    origin TEXT NOT NULL,"
+    "    prompt TEXT,"
+    "    dsl TEXT,"
+    "    error TEXT,"
+    "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
     ");";
 
   int rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);
@@ -2590,5 +2604,101 @@ int database_set_space_grid_settings(sqlite3 *db, const char *space_uuid, int gr
     return 0;
   }
   sqlite3_finalize(stmt);
+  return 1;
+}
+
+int database_get_setting(sqlite3 *db, const char *key, char **value_out) {
+  if (!db || !key) {
+    return 0;
+  }
+
+  const char *sql = "SELECT value FROM app_settings WHERE key = ?";
+  sqlite3_stmt *stmt = NULL;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare get setting: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_text(stmt, 1, key, -1, SQLITE_STATIC);
+
+  int rc = sqlite3_step(stmt);
+  int result = 0;
+  if (rc == SQLITE_ROW) {
+    const char *value = (const char *)sqlite3_column_text(stmt, 0);
+    if (value_out) {
+      *value_out = g_strdup(value ? value : "");
+    }
+    result = 1;
+  }
+
+  sqlite3_finalize(stmt);
+  return result;
+}
+
+int database_set_setting(sqlite3 *db, const char *key, const char *value) {
+  if (!db || !key) {
+    return 0;
+  }
+
+  const char *sql = "INSERT INTO app_settings(key, value) VALUES(?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+  sqlite3_stmt *stmt = NULL;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare set setting: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_text(stmt, 1, key, -1, SQLITE_STATIC);
+  if (value) {
+    sqlite3_bind_text(stmt, 2, value, -1, SQLITE_STATIC);
+  } else {
+    sqlite3_bind_null(stmt, 2);
+  }
+
+  int rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  if (rc != SQLITE_DONE) {
+    fprintf(stderr, "Failed to set setting %s: %s\n", key, sqlite3_errmsg(db));
+    return 0;
+  }
+
+  return 1;
+}
+
+int database_insert_action_log(sqlite3 *db, const char *origin, const char *prompt, const char *dsl, const char *error_text) {
+  if (!db || !origin) {
+    return 0;
+  }
+
+  const char *sql = "INSERT INTO action_log(origin, prompt, dsl, error) VALUES(?, ?, ?, ?)";
+  sqlite3_stmt *stmt = NULL;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+    fprintf(stderr, "Failed to prepare insert action log: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
+
+  sqlite3_bind_text(stmt, 1, origin, -1, SQLITE_STATIC);
+  if (prompt) {
+    sqlite3_bind_text(stmt, 2, prompt, -1, SQLITE_STATIC);
+  } else {
+    sqlite3_bind_null(stmt, 2);
+  }
+  if (dsl) {
+    sqlite3_bind_text(stmt, 3, dsl, -1, SQLITE_STATIC);
+  } else {
+    sqlite3_bind_null(stmt, 3);
+  }
+  if (error_text) {
+    sqlite3_bind_text(stmt, 4, error_text, -1, SQLITE_STATIC);
+  } else {
+    sqlite3_bind_null(stmt, 4);
+  }
+
+  int rc = sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  if (rc != SQLITE_DONE) {
+    fprintf(stderr, "Failed to insert action log: %s\n", sqlite3_errmsg(db));
+    return 0;
+  }
   return 1;
 }

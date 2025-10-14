@@ -15,6 +15,7 @@
 #include "undo_manager.h"
 #include "shape.h"
 #include "database.h"
+#include "ai/ai_runtime.h"
 
 static gint compare_elements_by_z_index(gconstpointer a, gconstpointer b) {
   const Element *element_a = (const Element*)a;
@@ -63,6 +64,22 @@ static gboolean parse_hex_color_rgba(const char *hex_color, ElementColor *color)
   color->b = b / 255.0;
   color->a = a / 255.0;
   return TRUE;
+}
+
+static void canvas_remove_alias_for_uuid(CanvasData *data, const char *uuid) {
+  if (!data || !data->dsl_aliases || !uuid) {
+    return;
+  }
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, data->dsl_aliases);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    const gchar *stored_uuid = value;
+    if (g_strcmp0(stored_uuid, uuid) == 0) {
+      g_hash_table_iter_remove(&iter);
+    }
+  }
 }
 
 CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay, const char *db_filename) {
@@ -118,6 +135,7 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   data->dsl_runtime = NULL;
   data->dsl_pressed_element = NULL;
   data->dsl_pressed_valid = FALSE;
+  data->dsl_aliases = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
   // Initialize grid settings
   data->show_grid = FALSE;
@@ -132,6 +150,8 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   data->hidden_children_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
   data->audio_playback_states = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+
+  data->ai_runtime = ai_runtime_new(data->model ? data->model->db : NULL, NULL);
 
   // Initialize animation timer
   data->animation_timer_id = 0;
@@ -187,6 +207,9 @@ void create_or_update_visual_elements(GList *sorted_elements, CanvasData *data) 
     Element *visual_element = model_element->visual_element;
 
     if (model_element->state == MODEL_STATE_DELETED) {
+      if (model_element->uuid) {
+        canvas_remove_alias_for_uuid(data, model_element->uuid);
+      }
       if (visual_element) {
         data->selected_elements = g_list_remove(data->selected_elements, visual_element);
         element_free(visual_element);
@@ -395,6 +418,7 @@ void canvas_data_free(CanvasData *data) {
   // OPTIMIZATION: Clean up hidden children cache
   if (data->hidden_children_cache) g_hash_table_destroy(data->hidden_children_cache);
   if (data->audio_playback_states) g_hash_table_destroy(data->audio_playback_states);
+  if (data->dsl_aliases) g_hash_table_destroy(data->dsl_aliases);
 
   // Clean up animation timer
   if (data->animation_timer_id > 0) {
@@ -404,6 +428,12 @@ void canvas_data_free(CanvasData *data) {
 
   // Clean up quadtree
   if (data->quadtree) quadtree_free(data->quadtree);
+
+  ai_runtime_free(data->ai_runtime);
+
+  if (data->ai_dialog && GTK_IS_WIDGET(data->ai_dialog)) {
+    gtk_window_destroy(GTK_WINDOW(data->ai_dialog));
+  }
 
   // Don't free the model here - it's freed in canvas_on_app_shutdown
 
@@ -743,6 +773,9 @@ void canvas_on_app_shutdown(GApplication *app, gpointer user_data) {
   if (data) {
     // Save the model before freeing
     if (data->model) {
+      if (data->ai_runtime) {
+        ai_runtime_save_settings(data->ai_runtime, data->model->db);
+      }
       model_save_elements(data->model);
       model_free(data->model);
     }

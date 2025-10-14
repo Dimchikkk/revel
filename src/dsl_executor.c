@@ -21,6 +21,25 @@
 #include "dsl/dsl_commands.h"
 #include "dsl/dsl_type_checker.h"
 
+static void element_map_register(CanvasData *data, GHashTable *element_map, const gchar *alias, ModelElement *element) {
+  if (!element_map || !element) {
+    return;
+  }
+
+  if (alias && *alias) {
+    g_hash_table_insert(element_map, g_strdup(alias), element);
+  }
+
+  if (element->uuid && *element->uuid && g_strcmp0(alias, element->uuid) != 0) {
+    g_hash_table_insert(element_map, g_strdup(element->uuid), element);
+  }
+
+  if (data && data->dsl_aliases && element->uuid && *element->uuid &&
+      alias && *alias && g_strcmp0(alias, element->uuid) != 0) {
+    g_hash_table_insert(data->dsl_aliases, g_strdup(alias), g_strdup(element->uuid));
+  }
+}
+
 static void determine_optimal_connection_points(ModelElement *from, ModelElement *to,
                                                 int *from_point, int *to_point) {
   if (!from || !to || !from_point || !to_point) return;
@@ -56,10 +75,32 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   // Check if this is a presentation script (has animation_next_slide commands)
   gboolean is_presentation = (strstr(script, "animation_next_slide") != NULL);
 
-  if (!skip_type_check && !dsl_type_check_script(data, script, filename)) {
-    extern void canvas_show_notification(CanvasData *data, const char *message);
-    canvas_show_notification(data, "DSL type check failed");
-    return;
+  if (!skip_type_check) {
+    GPtrArray *type_errors = NULL;
+    if (!dsl_type_check_script(data, script, filename, &type_errors)) {
+      extern void canvas_show_notification(CanvasData *data, const char *message);
+      GString *msg = g_string_new("DSL type check failed");
+      if (type_errors && type_errors->len > 0) {
+        g_string_append(msg, ": ");
+        for (guint i = 0; i < type_errors->len; i++) {
+          const gchar *error = g_ptr_array_index(type_errors, i);
+          if (i > 0) {
+            g_string_append(msg, " | ");
+          }
+          g_string_append(msg, error);
+        }
+      }
+      char *notify = g_string_free(msg, FALSE);
+      canvas_show_notification(data, notify);
+      g_free(notify);
+      if (type_errors) {
+        g_ptr_array_free(type_errors, TRUE);
+      }
+      return;
+    }
+    if (type_errors) {
+      g_ptr_array_free(type_errors, TRUE);
+    }
   }
 
   if (is_presentation) {
@@ -160,10 +201,45 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   }
 
   GHashTable *element_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  if (data && data->model && data->model->elements) {
+    GHashTableIter existing_iter;
+    gpointer existing_key;
+    gpointer existing_value;
+    g_hash_table_iter_init(&existing_iter, data->model->elements);
+    while (g_hash_table_iter_next(&existing_iter, &existing_key, &existing_value)) {
+      if (existing_key && existing_value) {
+        element_map_register(data,
+                             element_map,
+                             (const gchar *)existing_key,
+                             (ModelElement *)existing_value);
+      }
+    }
+  }
+
+  if (data && data->dsl_aliases && data->model && data->model->elements) {
+    GHashTableIter alias_iter;
+    gpointer alias_key;
+    gpointer alias_value;
+    g_hash_table_iter_init(&alias_iter, data->dsl_aliases);
+    while (g_hash_table_iter_next(&alias_iter, &alias_key, &alias_value)) {
+      const gchar *alias = alias_key;
+      const gchar *uuid = alias_value;
+      if (!alias || !uuid) {
+        continue;
+      }
+      ModelElement *alias_element = g_hash_table_lookup(data->model->elements, uuid);
+      if (alias_element) {
+        dsl_runtime_register_element(data, alias, alias_element);
+        g_hash_table_insert(element_map, g_strdup(alias), alias_element);
+      }
+    }
+  }
   GList *connections = NULL;
   GList *new_elements = NULL;
   GList *connection_elements = NULL;
   gboolean parse_error = FALSE;
+  gboolean model_dirty = FALSE;
+  gboolean redraw_requested = FALSE;
 
   gchar **lines = g_strsplit(script, "\n", 0);
 
@@ -1095,7 +1171,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
         if (locked_set) {
           model_element->locked = locked;
         }
-        g_hash_table_insert(element_map, g_strdup(id), model_element);
+        element_map_register(data, element_map, id, model_element);
         dsl_runtime_register_element(data, id, model_element);
         new_elements = g_list_prepend(new_elements, model_element);
       }
@@ -1381,7 +1457,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
         if (locked_set) {
           model_element->locked = locked;
         }
-        g_hash_table_insert(element_map, g_strdup(id), model_element);
+        element_map_register(data, element_map, id, model_element);
         dsl_runtime_register_element(data, id, model_element);
         new_elements = g_list_prepend(new_elements, model_element);
       }
@@ -1485,7 +1561,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
             if (rotation_set && rotation_degrees != 0.0) {
               model_element->rotation_degrees = rotation_degrees;
             }
-            g_hash_table_insert(element_map, g_strdup(id), model_element);
+            element_map_register(data, element_map, id, model_element);
             dsl_runtime_register_element(data, id, model_element);
             new_elements = g_list_prepend(new_elements, model_element);
           }
@@ -1638,7 +1714,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
             if (rotation_set && rotation_degrees != 0.0) {
               model_element->rotation_degrees = rotation_degrees;
             }
-            g_hash_table_insert(element_map, g_strdup(id), model_element);
+            element_map_register(data, element_map, id, model_element);
             dsl_runtime_register_element(data, id, model_element);
             new_elements = g_list_prepend(new_elements, model_element);
           }
@@ -1792,7 +1868,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
             if (rotation_set && rotation_degrees != 0.0) {
               model_element->rotation_degrees = rotation_degrees;
             }
-            g_hash_table_insert(element_map, g_strdup(id), model_element);
+            element_map_register(data, element_map, id, model_element);
             dsl_runtime_register_element(data, id, model_element);
             new_elements = g_list_prepend(new_elements, model_element);
           }
@@ -1893,7 +1969,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
           if (rotation_set && rotation_degrees != 0.0) {
             model_element->rotation_degrees = rotation_degrees;
           }
-          g_hash_table_insert(element_map, g_strdup(id), model_element);
+          element_map_register(data, element_map, id, model_element);
           dsl_runtime_register_element(data, id, model_element);
           new_elements = g_list_prepend(new_elements, model_element);
         }
@@ -2673,7 +2749,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
         if (locked_set) {
           model_element->locked = locked;
         }
-        g_hash_table_insert(element_map, g_strdup(id), model_element);
+        element_map_register(data, element_map, id, model_element);
         dsl_runtime_register_element(data, id, model_element);
         new_elements = g_list_prepend(new_elements, model_element);
       }
@@ -2771,137 +2847,219 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
       connections = g_list_append(connections, info);
     }
     // Animation commands
-    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_move") == 0 && token_count >= 6) {
-      // animate_move ELEMENT_ID (from_x,from_y) (to_x,to_y) START_TIME DURATION [TYPE]
+    else if (g_strcmp0(tokens[0], "animate_move") == 0 && token_count >= 4) {
       const gchar *elem_id = tokens[1];
-      int from_x, from_y, to_x, to_y;
-      double start_time, duration;
+      int from_x = 0, from_y = 0, to_x = 0, to_y = 0;
+      double start_time = 0.0, duration = 0.0;
       AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+      gboolean have_from = FALSE;
+      int cursor = 2;
 
-      if (!parse_point(tokens[2], &from_x, &from_y)) {
-        g_print("Error: Failed to parse from position: %s\n", tokens[2]);
+      if (token_count >= 6 && tokens[2][0] == '(' && tokens[3][0] == '(') {
+        if (!parse_point(tokens[2], &from_x, &from_y) ||
+            !parse_point(tokens[3], &to_x, &to_y)) {
+          g_print("Error: Failed to parse animate_move points\n");
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        have_from = TRUE;
+        cursor = 4;
+      } else if (tokens[2][0] == '(') {
+        if (!parse_point(tokens[2], &to_x, &to_y)) {
+          g_print("Error: Failed to parse animate_move destination: %s\n", tokens[2]);
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor = 3;
+      } else {
+        g_print("Error: animate_move requires destination point\n");
         for (int j = 0; j < token_count; j++) g_free(tokens[j]);
         g_free(tokens);
         continue;
       }
 
-      if (!parse_point(tokens[3], &to_x, &to_y)) {
-        g_print("Error: Failed to parse to position: %s\n", tokens[3]);
-        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
-        g_free(tokens);
-        continue;
+      if (token_count > cursor) {
+        if (!parse_double_value(tokens[cursor], &start_time)) {
+          g_print("Error: Failed to parse start_time: %s\n", tokens[cursor]);
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor++;
       }
 
-      if (!parse_double_value(tokens[4], &start_time)) {
-        g_print("Error: Failed to parse start_time: %s\n", tokens[4]);
-        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
-        g_free(tokens);
-        continue;
+      if (token_count > cursor) {
+        if (!parse_double_value(tokens[cursor], &duration)) {
+          g_print("Error: Failed to parse duration: %s\n", tokens[cursor]);
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor++;
       }
 
-      if (!parse_double_value(tokens[5], &duration)) {
-        g_print("Error: Failed to parse duration: %s\n", tokens[5]);
-        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
-        g_free(tokens);
-        continue;
-      }
-
-      // Parse interpolation type if provided
-      if (token_count >= 7) {
-        if (g_strcmp0(tokens[6], "immediate") == 0) {
+      if (token_count > cursor) {
+        const gchar *type_token = tokens[cursor];
+        if (g_strcmp0(type_token, "immediate") == 0) {
           interp = ANIM_INTERP_IMMEDIATE;
-        } else if (g_strcmp0(tokens[6], "linear") == 0) {
+        } else if (g_strcmp0(type_token, "linear") == 0) {
           interp = ANIM_INTERP_LINEAR;
-        } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
+        } else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) {
           interp = ANIM_INTERP_BEZIER;
-        } else if (g_strcmp0(tokens[6], "ease-in") == 0 || g_strcmp0(tokens[6], "easein") == 0) {
+        } else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) {
           interp = ANIM_INTERP_EASE_IN;
-        } else if (g_strcmp0(tokens[6], "ease-out") == 0 || g_strcmp0(tokens[6], "easeout") == 0) {
+        } else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) {
           interp = ANIM_INTERP_EASE_OUT;
-        } else if (g_strcmp0(tokens[6], "bounce") == 0) {
+        } else if (g_strcmp0(type_token, "bounce") == 0) {
           interp = ANIM_INTERP_BOUNCE;
-        } else if (g_strcmp0(tokens[6], "elastic") == 0) {
+        } else if (g_strcmp0(type_token, "elastic") == 0) {
           interp = ANIM_INTERP_ELASTIC;
-        } else if (g_strcmp0(tokens[6], "back") == 0) {
+        } else if (g_strcmp0(type_token, "back") == 0) {
           interp = ANIM_INTERP_BACK;
         }
       }
 
-      // Look up element by ID and get UUID
       ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
-      if (elem && elem->uuid) {
+      if (!elem) {
+        g_print("Warning: Element %s not found for animate_move\n", elem_id);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!have_from && elem->position) {
+        from_x = elem->position->x;
+        from_y = elem->position->y;
+      }
+
+      if (is_animation_mode && data->anim_engine) {
         animation_add_move(data->anim_engine, elem->uuid,
-                          start_time, duration, interp,
-                          from_x, from_y, to_x, to_y);
+                           start_time, duration, interp,
+                           from_x, from_y, to_x, to_y);
       } else {
-        g_print("Warning: Element %s not found for animation\n", elem_id);
+        int current_z = elem->position ? elem->position->z :
+                        (elem->visual_element ? elem->visual_element->z : 0);
+        if (data->undo_manager && (from_x != to_x || from_y != to_y)) {
+          undo_manager_push_move_action(data->undo_manager,
+                                        elem,
+                                        from_x, from_y,
+                                        to_x, to_y);
+        }
+        model_update_position(data->model, elem, to_x, to_y, current_z);
+        if (elem->visual_element) {
+          element_update_position(elem->visual_element, to_x, to_y, current_z);
+        }
+        model_dirty = TRUE;
+        redraw_requested = TRUE;
       }
     }
-    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_resize") == 0 && token_count >= 6) {
-      // animate_resize ELEMENT_ID (from_w,from_h) (to_w,to_h) START_TIME DURATION [TYPE]
+    else if (g_strcmp0(tokens[0], "animate_resize") == 0 && token_count >= 4) {
       const gchar *elem_id = tokens[1];
-      int from_w, from_h, to_w, to_h;
-      double start_time, duration;
+      int from_w = 0, from_h = 0, to_w = 0, to_h = 0;
+      double start_time = 0.0, duration = 0.0;
       AnimInterpolationType interp = ANIM_INTERP_LINEAR;
+      gboolean have_from = FALSE;
+      int cursor = 2;
 
-      if (!parse_point(tokens[2], &from_w, &from_h)) {
-        g_print("Error: Failed to parse from size: %s\n", tokens[2]);
+      if (token_count >= 6 && tokens[2][0] == '(' && tokens[3][0] == '(') {
+        if (!parse_point(tokens[2], &from_w, &from_h) ||
+            !parse_point(tokens[3], &to_w, &to_h)) {
+          g_print("Error: Failed to parse animate_resize sizes\n");
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        have_from = TRUE;
+        cursor = 4;
+      } else if (tokens[2][0] == '(') {
+        if (!parse_point(tokens[2], &to_w, &to_h)) {
+          g_print("Error: Failed to parse animate_resize target size\n");
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor = 3;
+      } else {
+        g_print("Error: animate_resize requires size point\n");
         for (int j = 0; j < token_count; j++) g_free(tokens[j]);
         g_free(tokens);
         continue;
       }
 
-      if (!parse_point(tokens[3], &to_w, &to_h)) {
-        g_print("Error: Failed to parse to size: %s\n", tokens[3]);
-        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
-        g_free(tokens);
-        continue;
+      if (token_count > cursor) {
+        if (!parse_double_value(tokens[cursor], &start_time)) {
+          g_print("Error: Failed to parse start_time: %s\n", tokens[cursor]);
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor++;
       }
 
-      if (!parse_double_value(tokens[4], &start_time)) {
-        g_print("Error: Failed to parse start_time: %s\n", tokens[4]);
-        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
-        g_free(tokens);
-        continue;
+      if (token_count > cursor) {
+        if (!parse_double_value(tokens[cursor], &duration)) {
+          g_print("Error: Failed to parse duration: %s\n", tokens[cursor]);
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+        cursor++;
       }
 
-      if (!parse_double_value(tokens[5], &duration)) {
-        g_print("Error: Failed to parse duration: %s\n", tokens[5]);
-        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
-        g_free(tokens);
-        continue;
-      }
-
-      if (token_count >= 7) {
-        if (g_strcmp0(tokens[6], "immediate") == 0) {
+      if (token_count > cursor) {
+        const gchar *type_token = tokens[cursor];
+        if (g_strcmp0(type_token, "immediate") == 0) {
           interp = ANIM_INTERP_IMMEDIATE;
-        } else if (g_strcmp0(tokens[6], "linear") == 0) {
+        } else if (g_strcmp0(type_token, "linear") == 0) {
           interp = ANIM_INTERP_LINEAR;
-        } else if (g_strcmp0(tokens[6], "bezier") == 0 || g_strcmp0(tokens[6], "curve") == 0) {
+        } else if (g_strcmp0(type_token, "bezier") == 0 || g_strcmp0(type_token, "curve") == 0) {
           interp = ANIM_INTERP_BEZIER;
-        } else if (g_strcmp0(tokens[6], "ease-in") == 0 || g_strcmp0(tokens[6], "easein") == 0) {
+        } else if (g_strcmp0(type_token, "ease-in") == 0 || g_strcmp0(type_token, "easein") == 0) {
           interp = ANIM_INTERP_EASE_IN;
-        } else if (g_strcmp0(tokens[6], "ease-out") == 0 || g_strcmp0(tokens[6], "easeout") == 0) {
+        } else if (g_strcmp0(type_token, "ease-out") == 0 || g_strcmp0(type_token, "easeout") == 0) {
           interp = ANIM_INTERP_EASE_OUT;
-        } else if (g_strcmp0(tokens[6], "bounce") == 0) {
+        } else if (g_strcmp0(type_token, "bounce") == 0) {
           interp = ANIM_INTERP_BOUNCE;
-        } else if (g_strcmp0(tokens[6], "elastic") == 0) {
+        } else if (g_strcmp0(type_token, "elastic") == 0) {
           interp = ANIM_INTERP_ELASTIC;
-        } else if (g_strcmp0(tokens[6], "back") == 0) {
+        } else if (g_strcmp0(type_token, "back") == 0) {
           interp = ANIM_INTERP_BACK;
         }
       }
 
       ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
-      if (elem && elem->uuid) {
+      if (!elem) {
+        g_print("Warning: Element %s not found for animate_resize\n", elem_id);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (!have_from && elem->size) {
+        from_w = elem->size->width;
+        from_h = elem->size->height;
+      }
+
+      if (is_animation_mode && data->anim_engine) {
         animation_add_resize(data->anim_engine, elem->uuid,
                             start_time, duration, interp,
                             from_w, from_h, to_w, to_h);
       } else {
-        g_print("Warning: Element %s not found for animation\n", elem_id);
+        if (data->undo_manager && (from_w != to_w || from_h != to_h)) {
+          undo_manager_push_resize_action(data->undo_manager, elem,
+                                          from_w, from_h, to_w, to_h);
+        }
+        model_update_size(data->model, elem, to_w, to_h);
+        if (elem->visual_element) {
+          element_update_size(elem->visual_element, to_w, to_h);
+        }
+        model_dirty = TRUE;
+        redraw_requested = TRUE;
       }
     }
-    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_rotate") == 0 && token_count >= 4) {
+    else if (g_strcmp0(tokens[0], "animate_rotate") == 0 && token_count >= 4) {
       // animate_rotate ELEMENT_ID TO_DEGREES START_TIME DURATION [TYPE]
       // animate_rotate ELEMENT_ID FROM_DEGREES TO_DEGREES START_TIME DURATION [TYPE]
       const gchar *elem_id = tokens[1];
@@ -2975,15 +3133,31 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
       }
 
       ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
-      if (elem && elem->uuid) {
+      if (!elem) {
+        g_print("Warning: Element %s not found for animate_rotate\n", elem_id);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (is_animation_mode && data->anim_engine) {
         animation_add_rotate(data->anim_engine, elem->uuid,
                             start_time, duration, interp,
                             from_rotation, to_rotation);
       } else {
-        g_print("Warning: Element %s not found for animation\n", elem_id);
+        if (data->undo_manager && fabs(from_rotation - to_rotation) > 1e-6) {
+          undo_manager_push_rotate_action(data->undo_manager, elem,
+                                          from_rotation, to_rotation);
+        }
+        model_update_rotation(data->model, elem, to_rotation);
+        if (elem->visual_element) {
+          elem->visual_element->rotation_degrees = to_rotation;
+        }
+        model_dirty = TRUE;
+        redraw_requested = TRUE;
       }
     }
-    else if (is_animation_mode && g_strcmp0(tokens[0], "animate_color") == 0 && token_count >= 5) {
+    else if (g_strcmp0(tokens[0], "animate_color") == 0 && token_count >= 5) {
       // animate_color ELEMENT_ID FROM_COLOR TO_COLOR START_TIME DURATION [TYPE]
       const gchar *elem_id = tokens[1];
       const gchar *from_color = tokens[2];
@@ -3026,12 +3200,38 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
       }
 
       ModelElement *elem = g_hash_table_lookup(element_map, elem_id);
-      if (elem && elem->uuid) {
+      if (!elem) {
+        g_print("Warning: Element %s not found for animate_color\n", elem_id);
+        for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+        g_free(tokens);
+        continue;
+      }
+
+      if (is_animation_mode && data->anim_engine) {
         animation_add_color(data->anim_engine, elem->uuid,
                            start_time, duration, interp,
                            from_color, to_color);
       } else {
-        g_print("Warning: Element %s not found for animation\n", elem_id);
+        double fr, fg, fb, fa;
+        double tr, tg, tb, ta;
+        if (!parse_color_token(from_color, &fr, &fg, &fb, &fa) ||
+            !parse_color_token(to_color, &tr, &tg, &tb, &ta)) {
+          g_print("Error: Failed to parse animate_color values\n");
+          for (int j = 0; j < token_count; j++) g_free(tokens[j]);
+          g_free(tokens);
+          continue;
+        }
+
+        if (data->undo_manager && (fabs(fr - tr) > 1e-6 || fabs(fg - tg) > 1e-6 ||
+                                   fabs(fb - tb) > 1e-6 || fabs(fa - ta) > 1e-6)) {
+          undo_manager_push_color_action(data->undo_manager, elem,
+                                         fr, fg, fb, fa,
+                                         tr, tg, tb, ta);
+        }
+
+        model_update_color(data->model, elem, tr, tg, tb, ta);
+        model_dirty = TRUE;
+        redraw_requested = TRUE;
       }
     }
     else if (is_animation_mode && g_strcmp0(tokens[0], "animate_appear") == 0 && token_count >= 4) {
@@ -3132,6 +3332,12 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
 
   int element_count = g_list_length(new_elements);
   g_print("DSL: Creating %d visual elements...\n", element_count);
+  if (element_count > 0) {
+    redraw_requested = TRUE;
+  }
+  if (element_count > 0) {
+    redraw_requested = TRUE;
+  }
 
   int elem_idx = 0;
   for (GList *l = new_elements; l != NULL; l = l->next) {
@@ -3149,6 +3355,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   if (new_elements) {
     g_print("DSL: Pushing batch undo for %d elements...\n", element_count);
     undo_manager_push_create_action_batch(data->undo_manager, new_elements);
+    redraw_requested = TRUE;
   }
 
   // Process connections
@@ -3234,6 +3441,7 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   int connection_count = g_list_length(connection_elements);
   if (connection_elements) {
     undo_manager_push_create_action_batch(data->undo_manager, connection_elements);
+    redraw_requested = TRUE;
   }
 
   // Clean up
@@ -3249,10 +3457,20 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
   // Start animation if in animation mode
   if (is_animation_mode && data->anim_engine) {
     g_print("Starting animation...\n");
-    animation_engine_start(data->anim_engine, data->drawing_area, data);
+    if (data->drawing_area) {
+      animation_engine_start(data->anim_engine, data->drawing_area, data);
+    } else {
+      animation_engine_reset(data->anim_engine);
+    }
   }
 
-  gtk_widget_queue_draw(data->drawing_area);
+  if (model_dirty && data->model && data->model->elements) {
+    canvas_sync_with_model(data);
+  }
+
+  if (redraw_requested && data->drawing_area) {
+    gtk_widget_queue_draw(data->drawing_area);
+  }
 }
 
 // Helper function to clear all elements in current space while preserving space settings
@@ -3288,7 +3506,9 @@ static void canvas_clear_space_for_presentation(CanvasData *data) {
 
   // Clear visual selection
   canvas_clear_selection(data);
-  canvas_sync_with_model(data);
+  if (data->model && data->model->elements) {
+    canvas_sync_with_model(data);
+  }
 }
 
 // Check if we're in presentation mode

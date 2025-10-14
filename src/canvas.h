@@ -15,6 +15,7 @@
 // Forward declare to avoid circular dependency
 typedef struct _SpaceTreeView SpaceTreeView;
 typedef struct _DSLRuntime DSLRuntime;
+typedef struct _AiRuntime AiRuntime;
 
 typedef struct _CanvasData CanvasData;
 typedef struct _UndoManager UndoManager;
@@ -100,6 +101,8 @@ struct _CanvasData {
   gboolean toolbar_visible;
   gboolean toolbar_auto_hide;
   guint toolbar_hide_timer_id;
+  GtkWidget *ai_toggle_button;
+  GtkWidget *ai_dialog;
 
   // Space name display
   gboolean show_space_name;
@@ -141,6 +144,10 @@ struct _CanvasData {
 
   Element *dsl_pressed_element;
   gboolean dsl_pressed_valid;
+
+  GHashTable *dsl_aliases;   // alias string -> uuid string
+
+  AiRuntime *ai_runtime;
 };
 
 #endif

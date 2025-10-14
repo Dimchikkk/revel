@@ -4,7 +4,10 @@
 #include <glib.h>
 #include "canvas.h"
 
-gboolean dsl_type_check_script(CanvasData *data, const gchar *script, const gchar *filename);
+gboolean dsl_type_check_script(CanvasData *data,
+                               const gchar *script,
+                               const gchar *filename,
+                               GPtrArray **out_errors);
 gboolean dsl_type_is_number_literal(const gchar *token);
 
 #endif
