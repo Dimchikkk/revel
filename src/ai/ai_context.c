@@ -32,7 +32,7 @@ static gboolean resolve_include_grammar(const AiContextOptions *options) {
 static gchar *load_grammar_snippet(void) {
   gchar *contents = NULL;
   gsize length = 0;
-  if (!g_file_get_contents("DSL.md", &contents, &length, NULL)) {
+  if (!g_file_get_contents("docs/DSL.md", &contents, &length, NULL)) {
     return NULL;
   }
   if (length > AI_GRAMMAR_SNIPPET_LIMIT) {

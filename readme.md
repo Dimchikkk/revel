@@ -75,7 +75,7 @@ examples/   DSL examples
 build/      Build output
 ```
 
-Full DSL docs: [DSL.md](DSL.md)
+Full DSL docs: [DSL.md](docs/DSL.md)
 
 ## Desktop launcher
 
