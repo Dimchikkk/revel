@@ -13,9 +13,8 @@ SRCS = \
 	$(wildcard $(SRC_DIR)/*.c) \
 	$(wildcard $(SRC_DIR)/dsl/*.c) \
 	$(wildcard $(SRC_DIR)/ai/*.c) \
-	$(wildcard $(SRC_DIR)/core/*.c) \
-	$(wildcard $(SRC_DIR)/ui/*.c) \
-	$(wildcard $(SRC_DIR)/ui/dialogs/*.c)
+	$(wildcard $(SRC_DIR)/canvas/*.c) \
+	$(wildcard $(SRC_DIR)/elements/*.c)
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TARGET = revel
 

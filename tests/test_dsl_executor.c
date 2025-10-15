@@ -1,8 +1,8 @@
 #include <glib.h>
 #include <math.h>
 
-#include "canvas.h"
-#include "dsl_executor.h"
+#include "canvas/canvas.h"
+#include "dsl/dsl_executor.h"
 #include "model.h"
 #include "animation.h"
 

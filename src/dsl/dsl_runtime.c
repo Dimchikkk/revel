@@ -4,22 +4,22 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "canvas_core.h"
-#include "element.h"
-#include "connection.h"
+#include "canvas/canvas_core.h"
+#include "elements/element.h"
+#include "elements/connection.h"
 #include "undo_manager.h"
-#include "shape.h"
-#include "canvas_drop.h"
-#include "note.h"
-#include "paper_note.h"
+#include "elements/shape.h"
+#include "canvas/canvas_drop.h"
+#include "elements/note.h"
+#include "elements/paper_note.h"
 #include "animation.h"
-#include "inline_text.h"
+#include "elements/inline_text.h"
 
 #include "dsl/dsl_runtime.h"
 #include "dsl/dsl_commands.h"
 #include "dsl/dsl_utils.h"
 
-#include "canvas_presentation.h"
+#include "canvas/canvas_presentation.h"
 
 typedef struct _DSLRuntime DSLRuntime;
 

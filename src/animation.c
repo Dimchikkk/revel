@@ -1,6 +1,6 @@
 #include "animation.h"
-#include "canvas_core.h"
-#include "element.h"
+#include "canvas/canvas_core.h"
+#include "elements/element.h"
 #include "model.h"
 #include <glib.h>
 #include <stdlib.h>

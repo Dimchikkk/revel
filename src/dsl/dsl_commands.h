@@ -2,7 +2,7 @@
 #define DSL_COMMANDS_H
 
 #include <glib.h>
-#include "canvas.h"
+#include "canvas/canvas.h"
 
 gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source);
 

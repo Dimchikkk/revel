@@ -37,7 +37,7 @@ Everything lives in a single SQLite file. Search uses BM25 ranking. Canvas is in
 
 ## Performance
 
-Handles large datasets. Viewport culling means only visible stuff gets rendered. Tested with 10k+ elements.
+Handles large datasets. Viewport culling means only visible stuff gets rendered. Tested with 1M elements.
 
 ![10,000 elements](examples/media/10_000.jpg)
 

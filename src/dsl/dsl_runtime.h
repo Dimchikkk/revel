@@ -2,7 +2,7 @@
 #define DSL_RUNTIME_H
 
 #include <glib.h>
-#include "canvas.h"
+#include "canvas/canvas.h"
 
 typedef struct _DSLRuntime DSLRuntime;
 

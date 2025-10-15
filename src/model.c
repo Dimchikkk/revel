@@ -1,11 +1,11 @@
 #include "model.h"
 #include "database.h"
-#include "element.h"
-#include "note.h"
-#include "connection.h"
+#include "elements/element.h"
+#include "elements/note.h"
+#include "elements/connection.h"
 #include <string.h>
 #include <stdio.h>
-#include "canvas_core.h"
+#include "canvas/canvas_core.h"
 #include <glib.h>
 
 void model_free(Model *model) {

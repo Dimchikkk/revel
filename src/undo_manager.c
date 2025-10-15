@@ -1,10 +1,10 @@
 // undo_manager.c
 #include "undo_manager.h"
-#include "element.h"
+#include "elements/element.h"
 #include "model.h"
 #include <string.h>
-#include "canvas.h"
-#include "canvas_core.h"
+#include "canvas/canvas.h"
+#include "canvas/canvas_core.h"
 
 UndoManager* undo_manager_new(Model *model) {
   UndoManager *manager = g_new0(UndoManager, 1);

@@ -1,5 +1,5 @@
-#include "canvas_input.h"
-#include "canvas_core.h"
+#include "canvas/canvas_input.h"
+#include "canvas/canvas_core.h"
 #include "model.h"
 #include <gtk/gtk.h>
 #include <glib.h>

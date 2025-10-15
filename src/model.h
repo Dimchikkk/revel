@@ -4,7 +4,7 @@
 #include <sqlite3.h>
 #include <glib.h>
 #include <uuid/uuid.h>
-#include "element.h"
+#include "elements/element.h"
 
 typedef enum {
   MODEL_STATE_NEW,      // Not yet saved to database

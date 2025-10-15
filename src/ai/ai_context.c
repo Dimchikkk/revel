@@ -2,11 +2,11 @@
 
 #include <math.h>
 #include <string.h>
-#include "dsl_executor.h"
-#include "canvas.h"
-#include "model.h"
-#include "element.h"
-#include "shape.h"
+#include "dsl/dsl_executor.h"
+#include "canvas/canvas.h"
+#include "../model.h"
+#include "../elements/element.h"
+#include "../elements/shape.h"
 
 #define AI_HISTORY_DEFAULT_LIMIT 3
 #define AI_GRAMMAR_SNIPPET_LIMIT (2 * 1024)

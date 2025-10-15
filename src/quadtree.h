@@ -2,7 +2,7 @@
 #define QUADTREE_H
 
 #include <glib.h>
-#include "element.h"
+#include "elements/element.h"
 
 #define QUADTREE_MAX_ELEMENTS 64
 #define QUADTREE_MAX_DEPTH 16

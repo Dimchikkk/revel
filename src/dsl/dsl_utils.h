@@ -2,8 +2,8 @@
 #define DSL_UTILS_H
 
 #include <glib.h>
-#include "shape.h"
-#include "connection.h"
+#include "elements/shape.h"
+#include "elements/connection.h"
 
 gchar* trim_whitespace(gchar *str);
 gchar** tokenize_line(const gchar *line, int *token_count);

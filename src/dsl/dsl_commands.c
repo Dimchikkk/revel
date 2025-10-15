@@ -2,17 +2,17 @@
 #include <math.h>
 #include <string.h>
 
-#include "canvas_core.h"
-#include "element.h"
-#include "connection.h"
+#include "canvas/canvas_core.h"
+#include "elements/element.h"
+#include "elements/connection.h"
 #include "undo_manager.h"
-#include "shape.h"
-#include "canvas_drop.h"
-#include "paper_note.h"
+#include "elements/shape.h"
+#include "canvas/canvas_drop.h"
+#include "elements/paper_note.h"
 #include "animation.h"
-#include "inline_text.h"
+#include "elements/inline_text.h"
 
-#include "dsl_executor.h"
+#include "dsl/dsl_executor.h"
 #include "dsl/dsl_runtime.h"
 #include "dsl/dsl_utils.h"
 #include "dsl/dsl_commands.h"

@@ -1,8 +1,8 @@
-#include "canvas_space_tree.h"
-#include "canvas_core.h"
+#include "canvas/canvas_space_tree.h"
+#include "canvas/canvas_core.h"
 #include "model.h"
 #include "database.h"
-#include "canvas.h"
+#include "canvas/canvas.h"
 #include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
