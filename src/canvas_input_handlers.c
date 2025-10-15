@@ -1812,6 +1812,9 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
   g_menu_append(structure_section, "Hide Children", "menu.hide-children");
   g_menu_append(structure_section, "Show Children", "menu.show-children");
 
+  const gchar *lock_label = model_element->locked ? "Unlock" : "Lock";
+  g_menu_append(structure_section, lock_label, "menu.lock-unlock");
+
   g_menu_append(clone_section, "Clone", "menu.clone");
 
   g_menu_append(info_section, "Edit Description", "menu.description");
