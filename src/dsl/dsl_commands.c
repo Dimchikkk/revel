@@ -71,9 +71,6 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
       continue;
     }
 
-    if (tokens[0]) {
-      g_print("DSL: command token '%s' (count=%d)\n", tokens[0], token_count);
-    }
 
     if (g_strcmp0(tokens[0], "set") == 0 && token_count >= 3) {
       const gchar *var_token = tokens[1];
@@ -717,7 +714,6 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
         g_free((gpointer)text_token);
       }
 
-      g_print("DSL: text_update command for '%s'\n", elem_id);
       ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
       if (!model_element) {
         g_print("DSL: text_update target '%s' not found\n", elem_id);
@@ -880,11 +876,6 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
           model_element->rotation_degrees = rotation_degrees;
         }
         dsl_runtime_register_element(data, id, model_element);
-
-        // Create visual element and add to canvas
-        if (!model_element->visual_element) {
-          model_element->visual_element = create_visual_element(model_element, data);
-        }
       } else {
         success = FALSE;
       }

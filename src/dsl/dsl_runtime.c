@@ -1045,18 +1045,7 @@ void dsl_runtime_register_element(CanvasData *data, const gchar *id, ModelElemen
 ModelElement* dsl_runtime_lookup_element(CanvasData *data, const gchar *id) {
   DSLRuntime *runtime = dsl_runtime_get(data);
   if (!runtime || !id) return NULL;
-  ModelElement *element = (ModelElement *)g_hash_table_lookup(runtime->id_to_model, id);
-  if (element) {
-    return element;
-  }
-
-  if (data && data->model && data->model->elements) {
-    element = g_hash_table_lookup(data->model->elements, id);
-    if (element) {
-      dsl_runtime_register_element(data, id, element);
-    }
-  }
-  return element;
+  return (ModelElement *)g_hash_table_lookup(runtime->id_to_model, id);
 }
 
 const gchar* dsl_runtime_lookup_element_id(CanvasData *data, ModelElement *element) {
@@ -1126,6 +1115,14 @@ gboolean dsl_runtime_handle_click(CanvasData *data, const gchar *element_id) {
   }
 
   g_ptr_array_free(snapshot, TRUE);
+
+  // Sync visuals after all handlers complete
+  if (handled) {
+    extern void canvas_sync_with_model(CanvasData *canvas_data);
+    canvas_sync_with_model(data);
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+
   return handled;
 }
 
@@ -1204,7 +1201,6 @@ void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, cons
                                 : "";
   gboolean changed = g_strcmp0(old_text_ptr, new_text) != 0;
   gchar *old_text_copy = g_strdup(old_text_ptr);
-  g_message("DSL text_update target=%s old='%s' new='%s'", model_element->uuid, old_text_ptr, new_text);
 
   Element *element = model_element->visual_element;
   gboolean element_changed = FALSE;
@@ -1267,12 +1263,6 @@ void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, cons
                                   model_element,
                                   old_text_copy ? old_text_copy : "",
                                   new_text);
-  }
-
-  if (changed) {
-    g_message("DSL text_update applied; model text now '%s'", model_element->text && model_element->text->text ? model_element->text->text : "<null>");
-    canvas_sync_with_model(data);
-    gtk_widget_queue_draw(data->drawing_area);
   }
 
   g_free(old_text_copy);
