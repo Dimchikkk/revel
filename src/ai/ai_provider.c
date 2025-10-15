@@ -156,7 +156,6 @@ static const gchar * const empty_args[] = { NULL };
 static const AiProviderDefaultSpec default_specs[] = {
   { "claude", "Claude", "claude", empty_args, AI_PAYLOAD_STDIN, NULL, NULL },
   { "gemini", "Gemini", "gemini", empty_args, AI_PAYLOAD_STDIN, NULL, NULL },
-  { "grok", "Grok", "grok", empty_args, AI_PAYLOAD_STDIN, NULL, NULL },
   { "codex", "Codex", "codex", empty_args, AI_PAYLOAD_STDIN, NULL, NULL }
 };
 

@@ -456,8 +456,17 @@ char *ai_context_build_payload(CanvasData *data,
   g_string_append(payload, "**Shapes (text label is rendered INSIDE the shape):**\n");
   g_string_append(payload, "  shape_create id TYPE \"label\" (x,y) (w,h) [filled true|false] [bg color(...)] [stroke N] [stroke_color color(...)]\n");
   g_string_append(payload, "  The \"label\" parameter puts text INSIDE the shape. This is ONE element, not two.\n");
-  g_string_append(payload, "  Types: circle, rectangle, roundedrect, triangle, diamond, vcylinder, hcylinder, trapezoid, line, arrow, bezier, oval, cube\n");
+  g_string_append(payload, "  Types: circle, rectangle, roundedrect, triangle, diamond, vcylinder, hcylinder, trapezoid, line, arrow, bezier, oval, cube, plot\n");
   g_string_append(payload, "  Example: shape_create node1 rectangle \"Input Layer\" (100,100) (200,80) creates a box with centered text inside.\n\n");
+
+  g_string_append(payload, "**Plots/Graphs:**\n");
+  g_string_append(payload, "  shape_create id plot \"DATA\" (x,y) (w,h) [stroke_width N] [stroke_color color(...)]\n");
+  g_string_append(payload, "  Data formats (use \\n between lines/points):\n");
+  g_string_append(payload, "    • Multi-line: \"line Temp 0,10 1,25 2,20\\nline Humidity 0,15 1,22\"\n");
+  g_string_append(payload, "    • X,Y pairs: \"0,10\\n1,25\\n2,20\\n3,35\"\n");
+  g_string_append(payload, "    • Y only: \"10\\n25\\n20\\n35\" (auto-indexed)\n");
+  g_string_append(payload, "  Features: auto-scaling axes from 0, gridlines, legend for multi-line plots\n");
+  g_string_append(payload, "  Example: shape_create sales plot \"line Q1 0,100 1,150 2,180\\nline Q2 0,90 1,140 2,200\" (100,100) (500,350) stroke_width 2\n\n");
 
   g_string_append(payload, "**Media:**\n");
   g_string_append(payload, "  image_create id /path/to/file.png (x,y) (w,h)\n");
@@ -540,7 +549,8 @@ char *ai_context_build_payload(CanvasData *data,
   g_string_append(payload, "❌ NEVER: Tight spacing <100px\n");
   g_string_append(payload, "✓ ALWAYS: Put text in shape label parameter\n");
   g_string_append(payload, "✓ ALWAYS: Use text_create ONLY for standalone titles/descriptions\n");
-  g_string_append(payload, "✓ ALWAYS: Space elements 150-300px apart\n\n");
+  g_string_append(payload, "✓ ALWAYS: Space elements 150-300px apart\n");
+  g_string_append(payload, "✓ ALWAYS: Use plot shapes for data visualization (bar charts, line graphs, trends)\n\n");
 
   if (out_snapshot) {
     *out_snapshot = full_dsl;

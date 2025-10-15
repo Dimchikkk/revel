@@ -1783,6 +1783,61 @@ int database_set_space_parent_id(sqlite3 *db, const char *space_uuid, const char
     }
 }
 
+// Recalculate all ref_counts from scratch based on actual element usage
+// This fixes any stale ref_counts from crashes or incomplete transactions
+int database_recalculate_ref_counts(sqlite3 *db) {
+  char *err_msg = NULL;
+
+  const char *sql =
+    // Recalculate element_type_refs
+    "UPDATE element_type_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE type_id = element_type_refs.id"
+    ");"
+
+    // Recalculate position_refs
+    "UPDATE position_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE position_id = position_refs.id"
+    ");"
+
+    // Recalculate size_refs
+    "UPDATE size_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE size_id = size_refs.id"
+    ");"
+
+    // Recalculate image_refs
+    "UPDATE image_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE image_id = image_refs.id"
+    ");"
+
+    // Recalculate video_refs
+    "UPDATE video_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE video_id = video_refs.id"
+    ");"
+
+    // Recalculate audio_refs
+    "UPDATE audio_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE audio_id = audio_refs.id"
+    ");"
+
+    // Recalculate text_refs
+    "UPDATE text_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE text_id = text_refs.id"
+    ");"
+
+    // Recalculate color_refs
+    "UPDATE color_refs SET ref_count = ("
+    "  SELECT COUNT(*) FROM elements WHERE bg_color_id = color_refs.id"
+    ");";
+
+  if (sqlite3_exec(db, sql, NULL, NULL, &err_msg) != SQLITE_OK) {
+    fprintf(stderr, "Failed to recalculate ref_counts: %s\n", err_msg);
+    sqlite3_free(err_msg);
+    return 0;
+  }
+
+  return 1;
+}
+
 // Remove references with ref_count < 1 from database and return total rows deleted
 int cleanup_database_references(sqlite3 *db) {
   int total_deleted = 0;

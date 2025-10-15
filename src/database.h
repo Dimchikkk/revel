@@ -58,6 +58,7 @@ int database_read_image_ref(sqlite3 *db, int image_id, ModelImage **image);
 int database_update_image_ref(sqlite3 *db, ModelImage *image);
 
 int cleanup_database_references(sqlite3 *db);
+int database_recalculate_ref_counts(sqlite3 *db);
 
 // Video reference operations
 int database_create_video_ref(sqlite3 *db,

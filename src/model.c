@@ -682,16 +682,6 @@ int model_delete_element(Model *model, ModelElement *element) {
     return 0;
   }
 
-  // Decrement ref_count for shared resources with proper NULL checks
-  if (element->type && element->type->ref_count > 0) element->type->ref_count--;
-  if (element->position && element->position->ref_count > 0) element->position->ref_count--;
-  if (element->size && element->size->ref_count > 0) element->size->ref_count--;
-  if (element->text && element->text->ref_count > 0) element->text->ref_count--;
-  if (element->bg_color && element->bg_color->ref_count > 0) element->bg_color->ref_count--;
-  if (element->image && element->image->ref_count > 0) element->image->ref_count--;
-  if (element->video && element->video->ref_count > 0) element->video->ref_count--;
-  if (element->audio && element->audio->ref_count > 0) element->audio->ref_count--;
-
   // Mark element as deleted
   element->state = MODEL_STATE_DELETED;
 
@@ -985,72 +975,6 @@ int model_save_elements(Model *model) {
       }
 
       if (delete_success) {
-        // Update reference counts in database
-        if (element->type && element->type->id > 0) {
-          database_update_type_ref(model->db, element->type);
-          if (element->type->ref_count < 1) {
-            g_hash_table_remove(model->types, GINT_TO_POINTER(element->type->id));
-            model_type_free(element->type);
-          }
-        }
-
-        if (element->position && element->position->id > 0) {
-          database_update_position_ref(model->db, element->position);
-          if (element->position->ref_count < 1) {
-            g_hash_table_remove(model->positions, GINT_TO_POINTER(element->position->id));
-            model_position_free(element->position);
-          }
-        }
-
-        if (element->size && element->size->id > 0) {
-          database_update_size_ref(model->db, element->size);
-          if (element->size->ref_count < 1) {
-            g_hash_table_remove(model->sizes, GINT_TO_POINTER(element->size->id));
-            model_size_free(element->size);
-          }
-        }
-
-        if (element->text && element->text->id > 0) {
-          database_update_text_ref(model->db, element->text);
-          if (element->text->ref_count < 1) {
-            g_hash_table_remove(model->texts, GINT_TO_POINTER(element->text->id));
-            model_text_free(element->text);
-          }
-        }
-
-        if (element->bg_color && element->bg_color->id > 0) {
-          database_update_color_ref(model->db, element->bg_color);
-          if (element->bg_color->ref_count < 1) {
-            g_hash_table_remove(model->colors, GINT_TO_POINTER(element->bg_color->id));
-            model_color_free(element->bg_color);
-          }
-        }
-
-        if (element->image && element->image->id > 0) {
-          database_update_image_ref(model->db, element->image);
-          if (element->image->ref_count < 1) {
-            g_hash_table_remove(model->images, GINT_TO_POINTER(element->image->id));
-            model_image_free(element->image);
-          }
-        }
-
-        if (element->video && element->video->id > 0) {
-          database_update_video_ref(model->db, element->video);
-          if (element->video->ref_count < 1) {
-            g_hash_table_remove(model->videos, GINT_TO_POINTER(element->video->id));
-            model_video_free(element->video);
-          }
-        }
-
-        if (element->audio && element->audio->id > 0) {
-          database_update_audio_ref(model->db, element->audio);
-          if (element->audio->ref_count < 1) {
-            g_hash_table_remove(model->audios, GINT_TO_POINTER(element->audio->id));
-            model_audio_free(element->audio);
-          }
-        }
-
-        cleanup_database_references(model->db);
         saved_count++;
       } else {
         fprintf(stderr, "Failed to delete element %s from database\n", element->uuid);
@@ -1068,6 +992,10 @@ int model_save_elements(Model *model) {
   }
 
   g_list_free(deleted_elements);
+
+  // Recalculate ref_counts from actual DB state, then cleanup orphaned refs
+  database_recalculate_ref_counts(model->db);
+  cleanup_database_references(model->db);
 
   // SECOND: Process NEW and UPDATED elements with elements first order
   GList *elements_to_save = NULL;
