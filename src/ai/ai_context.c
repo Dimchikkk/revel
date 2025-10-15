@@ -216,6 +216,19 @@ static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
     return NULL;
   }
 
+  // Build reverse map: uuid -> alias from dsl_aliases
+  GHashTable *uuid_to_alias = g_hash_table_new(g_str_hash, g_str_equal);
+  if (data->dsl_aliases) {
+    GHashTableIter alias_iter;
+    gpointer alias_key, alias_value;
+    g_hash_table_iter_init(&alias_iter, data->dsl_aliases);
+    while (g_hash_table_iter_next(&alias_iter, &alias_key, &alias_value)) {
+      const gchar *alias = alias_key;
+      const gchar *uuid = alias_value;
+      g_hash_table_insert(uuid_to_alias, (gpointer)uuid, (gpointer)alias);
+    }
+  }
+
   GPtrArray *entries = g_ptr_array_new_with_free_func(g_free);
   GHashTableIter iter;
   gpointer key, value;
@@ -236,6 +249,7 @@ static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
 
   if (entries->len == 0) {
     g_ptr_array_free(entries, TRUE);
+    g_hash_table_destroy(uuid_to_alias);
     return NULL;
   }
 
@@ -260,9 +274,18 @@ static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
     int w = element->size ? element->size->width : 0;
     int h = element->size ? element->size->height : 0;
 
+    // Use DSL alias if available, otherwise fall back to UUID
+    const gchar *element_id = element->uuid;
+    if (element->uuid) {
+      const gchar *alias = g_hash_table_lookup(uuid_to_alias, element->uuid);
+      if (alias) {
+        element_id = alias;
+      }
+    }
+
     g_string_append_printf(summary,
                            "- %s (%s%s%s) at (%d,%d) size (%d,%d)\n",
-                           element->uuid ? element->uuid : "(unknown)",
+                           element_id ? element_id : "(unknown)",
                            type_name ? type_name : "Element",
                            shape_name ? ": " : "",
                            shape_name ? shape_name : "",
@@ -270,6 +293,7 @@ static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
   }
 
   g_ptr_array_free(entries, TRUE);
+  g_hash_table_destroy(uuid_to_alias);
   return g_string_free(summary, FALSE);
 }
 
@@ -459,6 +483,7 @@ char *ai_context_build_payload(CanvasData *data,
   g_string_append(payload, "  on click button_id\n");
   g_string_append(payload, "    set count {count + 1}\n");
   g_string_append(payload, "    text_update label \"Count: ${count}\"\n");
+  g_string_append(payload, "    element_delete button_id  # Delete element\n");
   g_string_append(payload, "  end\n");
   g_string_append(payload, "  on variable count == 10\n");
   g_string_append(payload, "    text_update status \"Done!\"\n");
@@ -482,6 +507,7 @@ char *ai_context_build_payload(CanvasData *data,
   g_string_append(payload, "Resize element: animate_resize id (current_w,current_h) (new_w,new_h) 0 0\n");
   g_string_append(payload, "Change color: animate_color id color(old_r,old_g,old_b,old_a) color(new_r,new_g,new_b,new_a) 0 0\n");
   g_string_append(payload, "Update text: text_update id \"New text with ${variable}\"\n");
+  g_string_append(payload, "Delete element: element_delete id\n");
   g_string_append(payload, "Add shape: shape_create new_id circle \"Label\" (x,y) (w,h) filled true bg color(r,g,b,a)\n");
   g_string_append(payload, "Connect: connect id1 id2 parallel single color(1,1,1,1)\n\n");
 

@@ -795,6 +795,12 @@ static void dsl_type_check_event_command(DSLTypeCheckerContext *ctx, gchar **tok
     if (element_id && element_id[0] != '\0') {
       dsl_type_register_element(ctx, element_id, line);
     }
+  } else if (g_strcmp0(command, "element_delete") == 0) {
+    if (token_count < 2) {
+      dsl_type_add_error(ctx, line, "element_delete requires an element id");
+      return;
+    }
+    dsl_type_require_element(ctx, tokens[1], line, "element_delete");
   } else if (g_strcmp0(command, "for") == 0) {
     // For loops are allowed in event blocks
     if (token_count < 4) {
@@ -1093,6 +1099,8 @@ gboolean dsl_type_check_script(CanvasData *data,
     } else if (g_strcmp0(cmd, "position_bind") == 0 && token_count >= 3) {
       dsl_type_require_element(&ctx, tokens[1], line_no, "position_bind");
       dsl_type_require_variable(&ctx, tokens[2], line_no, "position_bind");
+    } else if (g_strcmp0(cmd, "element_delete") == 0 && token_count >= 2) {
+      dsl_type_require_element(&ctx, tokens[1], line_no, "element_delete");
     } else {
       for (int t = 1; t < token_count; t++) {
         dsl_type_check_token_for_braces(&ctx, tokens[t], line_no, cmd);

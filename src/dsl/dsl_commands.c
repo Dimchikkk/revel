@@ -892,6 +892,20 @@ gboolean dsl_execute_command_block(CanvasData *data, const gchar *block_source) 
       g_free(text_elem.font_description);
       g_free(interpolated);
     }
+    else if (g_strcmp0(tokens[0], "element_delete") == 0 && token_count >= 2) {
+      const gchar *elem_id = tokens[1];
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: element_delete target '%s' not found\n", elem_id);
+      } else {
+        // Push undo action before deletion
+        if (data->undo_manager) {
+          undo_manager_push_delete_action(data->undo_manager, model_element);
+        }
+        model_delete_element(data->model, model_element);
+        g_print("DSL: element_delete removed '%s'\n", elem_id);
+      }
+    }
     else if (g_strcmp0(tokens[0], "for") == 0 && token_count >= 4) {
       // For loop: for var start end
       const gchar *loop_var = tokens[1];

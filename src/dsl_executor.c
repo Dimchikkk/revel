@@ -2846,6 +2846,23 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
 
       connections = g_list_append(connections, info);
     }
+    // Element deletion
+    else if (g_strcmp0(tokens[0], "element_delete") == 0 && token_count >= 2) {
+      const gchar *elem_id = tokens[1];
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: element_delete target '%s' not found\n", elem_id);
+      } else {
+        // Push undo action before deletion
+        if (data->undo_manager) {
+          undo_manager_push_delete_action(data->undo_manager, model_element);
+        }
+        model_delete_element(data->model, model_element);
+        model_dirty = TRUE;
+        redraw_requested = TRUE;
+        g_print("DSL: element_delete removed '%s'\n", elem_id);
+      }
+    }
     // Animation commands
     else if (g_strcmp0(tokens[0], "animate_move") == 0 && token_count >= 4) {
       const gchar *elem_id = tokens[1];
@@ -4071,9 +4088,27 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
     }
   }
 
-  // Clean up
+  // Populate data->dsl_aliases with the generated element_id mappings
   GHashTableIter id_iter;
   gpointer id_key, id_value;
+
+  if (data->dsl_aliases) {
+    // Clear existing aliases
+    g_hash_table_remove_all(data->dsl_aliases);
+
+    // Copy element_id_map to dsl_aliases (alias -> uuid)
+    g_hash_table_iter_init(&id_iter, element_id_map);
+    while (g_hash_table_iter_next(&id_iter, &id_key, &id_value)) {
+      const gchar *uuid = id_key;
+      const gchar *alias = id_value;
+      // Only add if alias is different from UUID
+      if (g_strcmp0(alias, uuid) != 0) {
+        g_hash_table_insert(data->dsl_aliases, g_strdup(alias), g_strdup(uuid));
+      }
+    }
+  }
+
+  // Clean up element_id_map
   g_hash_table_iter_init(&id_iter, element_id_map);
   while (g_hash_table_iter_next(&id_iter, &id_key, &id_value)) {
     g_free(id_key);    // Free the UUID key

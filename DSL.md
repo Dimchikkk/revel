@@ -170,6 +170,7 @@ RuntimeCommand ::= VariableDecl
                 | PresentationCommand
                 | ForLoop
                 | ElementCreate
+                | ElementDelete
 
 SetCommand ::= 'set' VarAccess EXPR
 VarAccess  ::= IDENTIFIER ['[' EXPR ']']
@@ -191,6 +192,8 @@ BindCommand ::= 'text_bind' IDENTIFIER IDENTIFIER
 
 PresentationCommand ::= 'presentation_next'
                      | 'presentation_auto_next_if' IDENTIFIER Value
+
+ElementDelete ::= 'element_delete' IDENTIFIER
 ```
 
 ### Expression Language
@@ -264,6 +267,7 @@ Revel DSL has two execution contexts with nearly identical capabilities:
 - **Full DSL support** - Uses same script processor as top-level
 - **Variable declarations** (`int`, `real`, `bool`, `string`, arrays) - **Can declare new variables inside handlers**
 - Element creation (all types: notes, text, shapes, images, videos, audio, spaces)
+- `element_delete` - Delete elements from canvas
 - `connect` - Arrow connections
 - `set` - Variable assignment (existing or new variables)
 - `animate_*` - Animation commands (**works without `animation_mode`**)
@@ -895,6 +899,7 @@ animate_resize ELEMENT (to_w,to_h) START DURATION [interp]
 text_update ELEMENT "New text with ${expr}"
 text_bind ELEMENT_ID VARIABLE   # bind a text element to a string variable
 position_bind ELEMENT_ID VARIABLE # store element position as "x,y" string
+element_delete ELEMENT_ID       # delete an element from the canvas
 presentation_next               # advance presentation to next slide
 presentation_auto_next_if VARIABLE VALUE  # auto-advance when variable reaches value
 ```
@@ -902,6 +907,17 @@ presentation_auto_next_if VARIABLE VALUE  # auto-advance when variable reaches v
 `text_bind` keeps the element text and string variable in sync - when the user finishes editing the bound element, the variable is updated and any `on variable` handlers run. `position_bind` updates the referenced string variable with the element's canvas coordinates (e.g. `"420,180"`) whenever the element is moved, which is useful for drag/match activities.
 
 `presentation_auto_next_if` lets you automatically advance to the next presentation slide once a variable reaches a target value (numeric or string). This is handy for quizzes - set a counter or status variable in response to user actions, then register the auto-advance trigger.
+
+`element_delete` removes an element from the canvas by its ID. This is useful for creating dynamic interfaces where elements need to be removed in response to user actions or state changes. The element is immediately removed from the canvas and deleted from the model.
+
+**Example:**
+```dsl
+shape_create box1 rectangle "Click to delete" (100,100) (200,100) filled true bg #ff6b6b
+
+on click box1
+  element_delete box1
+end
+```
 
 `set` assigns values to variables or array elements. Declare all variables with `int`, `real`, `bool`, `string`, or array types before using them.
 
