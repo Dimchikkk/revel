@@ -2094,7 +2094,12 @@ static int shape_pick_resize_handle(Element *element, int x, int y) {
     {element->x, element->y + element->height}
   };
 
+  // For small elements (< 50px), only show bottom-right handle (index 2)
+  gboolean is_small = (element->width < 50 || element->height < 50);
+
   for (int i = 0; i < 4; i++) {
+    if (is_small && i != 2) continue; // Skip all but bottom-right for small elements
+
     if (abs(rotated_cx - handles[i].px) <= size && abs(rotated_cy - handles[i].py) <= size) {
       return i;
     }
@@ -2103,6 +2108,11 @@ static int shape_pick_resize_handle(Element *element, int x, int y) {
 }
 
 static int shape_pick_connection_point(Element *element, int x, int y) {
+  // Hide connection points for small elements (< 100px on either dimension)
+  if (element->width < 100 || element->height < 100) {
+    return -1;
+  }
+
   for (int i = 0; i < 4; i++) {
     int px, py;
     shape_get_connection_point(element, i, &px, &py);

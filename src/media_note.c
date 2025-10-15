@@ -1127,11 +1127,16 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
     {draw_x, draw_y + draw_height}
   };
 
+  // For small elements (< 50px), only show bottom-right handle (index 2)
+  gboolean is_small = (element->width < 50 || element->height < 50);
+
   // Rotate handles around element center if rotated
   double center_x = element->x + element->width / 2.0;
   double center_y = element->y + element->height / 2.0;
 
   for (int i = 0; i < 4; i++) {
+    if (is_small && i != 2) continue; // Skip all but bottom-right for small elements
+
     int handle_x = unrotated_handles[i][0];
     int handle_y = unrotated_handles[i][1];
 
@@ -1151,6 +1156,11 @@ int media_note_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int media_note_pick_connection_point(Element *element, int x, int y) {
+  // Hide connection points for small elements (< 100px on either dimension)
+  if (element->width < 100 || element->height < 100) {
+    return -1;
+  }
+
   for (int i = 0; i < 4; i++) {
     int px, py;
     media_note_get_connection_point(element, i, &px, &py);

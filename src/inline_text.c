@@ -210,6 +210,11 @@ int inline_text_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int inline_text_pick_connection_point(Element *element, int x, int y) {
+  // Hide connection points for small elements (< 100px on either dimension)
+  if (element->width < 100 || element->height < 100) {
+    return -1;
+  }
+
   // x, y are already in canvas coordinates - no conversion needed
   for (int i = 0; i < 4; i++) {
     int px, py;
