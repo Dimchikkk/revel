@@ -883,6 +883,9 @@ gboolean dsl_type_check_script(CanvasData *data,
     }
   }
 
+  // Also seed elements from DSL runtime (for AI-generated aliases like "circle_5")
+  dsl_runtime_seed_element_ids(data, ctx.elements);
+
   if (data && data->presentation_mode_active) {
     dsl_runtime_seed_global_types(data, ctx.variables);
   }

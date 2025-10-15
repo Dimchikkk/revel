@@ -1467,6 +1467,34 @@ void canvas_execute_script_internal(CanvasData *data, const gchar *script, const
       g_free(font_override);
       // Note: alignment is owned by inline_text, don't free here
     }
+    else if (g_strcmp0(tokens[0], "text_update") == 0 && token_count >= 3) {
+      // text_update ID "New Text"
+      const gchar *elem_id = tokens[1];
+      const gchar *text_token = tokens[2];
+
+      // Parse text with interpolation
+      gchar *clean_text = NULL;
+      if (text_token[0] == '"' && text_token[strlen(text_token)-1] == '"') {
+        gchar *quoted = g_strndup(text_token + 1, strlen(text_token) - 2);
+        clean_text = dsl_unescape_text(quoted);
+        g_free(quoted);
+      } else {
+        clean_text = dsl_unescape_text(text_token);
+      }
+      gchar *interpolated = dsl_interpolate_text(data, clean_text);
+      g_free(clean_text);
+
+      ModelElement *model_element = dsl_runtime_lookup_element(data, elem_id);
+      if (!model_element) {
+        g_print("DSL: text_update target '%s' not found\n", elem_id);
+      } else {
+        dsl_runtime_text_update(data, model_element, interpolated);
+        model_dirty = TRUE;
+        redraw_requested = TRUE;
+      }
+
+      g_free(interpolated);
+    }
     else if (g_strcmp0(tokens[0], "image_create") == 0 && token_count >= 5) {
       // image_create ID PATH (x,y) (width,height) [rotation DEGREES]
       const gchar *id = tokens[1];
@@ -3676,7 +3704,21 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
 
     // Generate a unique ID for the element
     gchar *element_id = NULL;
-    if (element->text && element->text->text && strlen(element->text->text) > 0) {
+
+    // First check if element already has a DSL alias
+    if (data->dsl_aliases && element->uuid) {
+      GHashTableIter alias_iter;
+      gpointer alias_key, alias_value;
+      g_hash_table_iter_init(&alias_iter, data->dsl_aliases);
+      while (g_hash_table_iter_next(&alias_iter, &alias_key, &alias_value)) {
+        if (g_strcmp0((const gchar*)alias_value, element->uuid) == 0) {
+          element_id = g_strdup((const gchar*)alias_key);
+          break;
+        }
+      }
+    }
+
+    if (!element_id && element->text && element->text->text && strlen(element->text->text) > 0) {
       // Create ID from first few words of text
       gchar *clean_text = g_ascii_strdown(element->text->text, -1);
 
@@ -3718,13 +3760,14 @@ gchar* canvas_generate_dsl_from_model(CanvasData *data) {
       }
 
       g_free(clean_text);
-    } else {
-      // No text content, use generic ID
+    } else if (!element_id) {
+      // No text content and no DSL alias, use generic ID
       element_id = g_strdup_printf("elem_%d", element_counter++);
     }
 
-    // Ensure ID is unique by checking against used_ids
-    while (g_hash_table_contains(used_ids, element_id)) {
+    // Ensure ID is unique by checking against used_ids (skip if it's a DSL alias)
+    gboolean is_dsl_alias = (data->dsl_aliases && g_hash_table_contains(data->dsl_aliases, element_id));
+    while (!is_dsl_alias && g_hash_table_contains(used_ids, element_id)) {
       gchar *unique_id = g_strdup_printf("%s_%d", element_id, element_counter++);
       g_free(element_id);
       element_id = unique_id;

@@ -69,7 +69,8 @@ char *ai_dsl_runner_apply(CanvasData *data,
   UndoManager *undo_manager = data ? data->undo_manager : NULL;
   guint undo_before = undo_manager ? g_list_length(undo_manager->undo_stack) : 0;
 
-  canvas_execute_script(data, dsl);
+  // Don't reset DSL runtime - preserve element IDs across AI turns
+  canvas_execute_script_internal(data, dsl, NULL, TRUE);
 
   guint undo_after = undo_manager ? g_list_length(undo_manager->undo_stack) : 0;
 

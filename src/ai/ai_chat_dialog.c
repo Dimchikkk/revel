@@ -36,6 +36,7 @@ typedef struct {
   guint current_attempt;
   guint max_attempts;
   gchar *base_prompt;
+  gchar *last_error;
 } AiChatDialogState;
 
 typedef struct {
@@ -57,6 +58,7 @@ static void ai_chat_dialog_state_free(AiChatDialogState *state) {
   if (!state) return;
   g_clear_object(&state->cancellable);
   g_free(state->base_prompt);
+  g_free(state->last_error);
   g_free(state);
 }
 
@@ -347,6 +349,7 @@ static void ai_chat_dialog_finalize_attempt(AiChatDialogState *state) {
   transcript_clear_pending(state);
   state->current_attempt = 0;
   g_clear_pointer(&state->base_prompt, g_free);
+  g_clear_pointer(&state->last_error, g_free);
 }
 
 static gboolean schedule_retry_idle(gpointer user_data) {
@@ -428,6 +431,8 @@ static void ai_chat_task_finish(GObject *source, GAsyncResult *result, gpointer 
       transcript_set_pending(state, retry_msg, TRUE);
       g_free(retry_msg);
       state->current_attempt = job->attempt + 1;
+      g_clear_pointer(&state->last_error, g_free);
+      state->last_error = g_strdup(error->message);
       g_clear_error(&error);
       g_idle_add(schedule_retry_idle, state);
       return;
@@ -464,6 +469,8 @@ static void ai_chat_task_finish(GObject *source, GAsyncResult *result, gpointer 
       transcript_set_pending(state, retry_msg, TRUE);
       g_free(retry_msg);
       state->current_attempt = job->attempt + 1;
+      g_clear_pointer(&state->last_error, g_free);
+      state->last_error = g_strdup(runner_error);
       g_free(runner_error);
       g_free(dsl);
       g_idle_add(schedule_retry_idle, state);
@@ -522,13 +529,20 @@ static void ai_chat_dialog_start_attempt(AiChatDialogState *state) {
   gboolean truncated = FALSE;
   GError *error = NULL;
   char *payload = ai_runtime_build_payload(runtime, state->data, state->base_prompt,
-                                           &snapshot, &truncated, &error);
+                                           state->last_error, &snapshot, &truncated, &error);
   if (!payload) {
     transcript_set_pending(state, error ? error->message : "Failed to build context", TRUE);
     if (error) g_error_free(error);
     ai_chat_dialog_finalize_attempt(state);
     return;
   }
+
+  // Debug: Write payload to /tmp/ai_payload.txt for inspection
+  // FILE *debug_file = fopen("/tmp/ai_payload.txt", "w");
+  // if (debug_file) {
+  //  fprintf(debug_file, "%s", payload);
+  //  fclose(debug_file);
+  //}
 
   AiChatJob *job = g_new0(AiChatJob, 1);
   job->state = state;

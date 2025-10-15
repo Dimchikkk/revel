@@ -346,6 +346,7 @@ static void append_history_block(GString *payload, const AiSessionState *session
 char *ai_context_build_payload(CanvasData *data,
                                AiSessionState *session,
                                const char *prompt,
+                               const char *retry_error,
                                const AiContextOptions *options,
                                char **out_snapshot,
                                gboolean *out_truncated,
@@ -380,12 +381,14 @@ char *ai_context_build_payload(CanvasData *data,
 
   GString *payload = g_string_new(NULL);
   g_string_append(payload, "### INSTRUCTIONS\n");
-  g_string_append(payload, "You are a Revel DSL assistant. Generate valid DSL scripts to modify the infinite canvas.\n");
-  g_string_append(payload, "The CURRENT_DSL shows existing elements. Use ELEMENT_INDEX to reference them by ID.\n");
-  g_string_append(payload, "Make minimal, targeted changes. Don't recreate elements unless requested.\n");
-  g_string_append(payload, "CRITICAL: Text content is PART OF the shape/note element, NOT a separate element. Never create standalone text for labels.\n\n");
+  g_string_append(payload, "You are a Revel DSL assistant. Generate valid DSL scripts to modify the infinite canvas.\n\n");
 
   append_history_block(payload, session, history_limit);
+
+  g_string_append(payload, "### CRITICAL_RULES\n");
+  g_string_append(payload, "1. **Element IDs**: Use exact IDs from HISTORY or ELEMENT_INDEX. Never invent IDs like 'elem_1'.\n");
+  g_string_append(payload, "2. **Shape text**: Shapes have built-in labels. Use shape_create with label parameter, not separate text_create.\n");
+  g_string_append(payload, "3. **Coordinates**: Always use explicit integer coordinates (x,y).\n\n");
 
   if (summary && *summary) {
     g_string_append(payload, "### CURRENT_DSL_SUMMARY\n");
@@ -421,22 +424,19 @@ char *ai_context_build_payload(CanvasData *data,
     g_string_append_c(payload, '\n');
   }
 
-  g_string_append(payload, "### RESPONSE_FORMAT\n");
-  g_string_append(payload, "Output ONLY valid Revel DSL script. No explanations, comments, or markdown.\n");
-  g_string_append(payload, "NEVER output text_create immediately after shape_create with the same coordinates.\n\n");
+  if (retry_error && *retry_error) {
+    g_string_append(payload, "\n### PREVIOUS_ATTEMPT_ERROR\n");
+    g_string_append(payload, "The previous attempt to fulfill this request failed with the following error:\n");
+    g_string_append(payload, retry_error);
+    gsize error_len = strlen(retry_error);
+    if (error_len > 0 && retry_error[error_len - 1] != '\n') {
+      g_string_append_c(payload, '\n');
+    }
+    g_string_append(payload, "\nPlease correct the issue in your response.\n\n");
+  }
 
-  g_string_append(payload, "### CRITICAL_RULES\n");
-  g_string_append(payload, "1. **NEVER USE text_create TO LABEL SHAPES**: Shapes have built-in label parameter. Using text_create creates broken overlapping elements.\n");
-  g_string_append(payload, "   ✓ CORRECT: shape_create box rectangle \"My Label\" (100,100) (200,80)\n");
-  g_string_append(payload, "   ✗ WRONG: shape_create box rectangle \"\" (100,100) (200,80)\\ntext_create label \"My Label\" (100,100) (200,80)\n");
-  g_string_append(payload, "   The WRONG example creates TWO elements - the shape AND a floating text box. This is a bug.\n\n");
-  g_string_append(payload, "2. **Element IDs**: When modifying existing elements, use exact IDs from ELEMENT_INDEX. Never invent placeholders like elem_1.\n");
-  g_string_append(payload, "3. **Coordinates**: Always use explicit integer coordinates. Reference from ELEMENT_INDEX for positioning.\n");
-  g_string_append(payload, "4. **text_create is for standalone text ONLY**: Use it for titles, descriptions, captions - NOT shape labels.\n");
-  g_string_append(payload, "5. **Animations**: Use instantaneous animations for immediate changes: `animate_move id (x,y) (x,y) 0 0`\n");
-  g_string_append(payload, "6. **Colors**: Format as `color(r,g,b,a)` with values 0.0-1.0, or hex `#RRGGBB` / `#RRGGBBAA`\n");
-  g_string_append(payload, "7. **Minimal changes**: Only modify/create what user requested. Don't recreate entire canvas.\n");
-  g_string_append(payload, "8. **Visual clarity**: Leave sufficient spacing (100-200px) between distinct elements to avoid overlap.\n\n");
+  g_string_append(payload, "### RESPONSE_FORMAT\n");
+  g_string_append(payload, "Output ONLY valid Revel DSL script. No explanations, comments, or markdown.\n\n");
 
   g_string_append(payload, "### DSL_QUICK_REFERENCE\n");
   g_string_append(payload, "**Variables:**\n");

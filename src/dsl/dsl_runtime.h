@@ -44,6 +44,7 @@ double dsl_runtime_get_array_element(CanvasData *data, const gchar *name, int in
 gboolean dsl_runtime_recompute_expressions(CanvasData *data);
 
 void dsl_runtime_seed_global_types(CanvasData *data, GHashTable *dest);
+void dsl_runtime_seed_element_ids(CanvasData *data, GHashTable *dest);
 
 void dsl_runtime_register_element(CanvasData *data, const gchar *id, ModelElement *element);
 ModelElement* dsl_runtime_lookup_element(CanvasData *data, const gchar *id);

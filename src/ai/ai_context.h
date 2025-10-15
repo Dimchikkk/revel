@@ -17,6 +17,7 @@ typedef struct {
 char *ai_context_build_payload(CanvasData *data,
                                AiSessionState *session,
                                const char *prompt,
+                               const char *retry_error,
                                const AiContextOptions *options,
                                char **out_snapshot,
                                gboolean *out_truncated,

@@ -221,6 +221,22 @@ void dsl_runtime_seed_global_types(CanvasData *data, GHashTable *dest) {
   }
 }
 
+void dsl_runtime_seed_element_ids(CanvasData *data, GHashTable *dest) {
+  if (!data || !dest) return;
+  DSLRuntime *runtime = dsl_runtime_get(data);
+  if (!runtime || !runtime->id_to_model) return;
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, runtime->id_to_model);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    const gchar *id = (const gchar *)key;
+    if (id && !g_hash_table_contains(dest, id)) {
+      g_hash_table_insert(dest, g_strdup(id), GINT_TO_POINTER(1));
+    }
+  }
+}
+
 DSLVariable* dsl_runtime_ensure_variable(CanvasData *data, const gchar *name) {
   DSLRuntime *runtime = dsl_runtime_get(data);
   if (!runtime || !name) return NULL;
@@ -1241,6 +1257,9 @@ void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, cons
           g_free(shape->text);
           shape->text = g_strdup(new_text);
           element_changed = TRUE;
+          if (data && data->drawing_area) {
+            gtk_widget_queue_draw(data->drawing_area);
+          }
         }
         break;
       }
@@ -1263,6 +1282,11 @@ void dsl_runtime_text_update(CanvasData *data, ModelElement *model_element, cons
                                   model_element,
                                   old_text_copy ? old_text_copy : "",
                                   new_text);
+  }
+
+  // Queue redraw to show updated text
+  if (element_changed && data && data->drawing_area) {
+    gtk_widget_queue_draw(data->drawing_area);
   }
 
   g_free(old_text_copy);

@@ -208,6 +208,7 @@ const gchar *ai_runtime_get_cli_override(const AiRuntime *runtime, const gchar *
 char *ai_runtime_build_payload(AiRuntime *runtime,
                                CanvasData *data,
                                const char *prompt,
+                               const char *retry_error,
                                char **out_snapshot,
                                gboolean *out_truncated,
                                GError **error) {
@@ -222,7 +223,7 @@ char *ai_runtime_build_payload(AiRuntime *runtime,
     .history_limit = runtime->history_limit,
   };
 
-  char *payload = ai_context_build_payload(data, runtime->session, prompt, &options,
+  char *payload = ai_context_build_payload(data, runtime->session, prompt, retry_error, &options,
                                            out_snapshot, out_truncated, error);
   if (payload && runtime->session) {
     ai_session_state_set_provider(runtime->session, ai_settings_get_selected_provider(runtime->settings));

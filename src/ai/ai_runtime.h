@@ -29,6 +29,7 @@ const gchar *ai_runtime_get_cli_override(const AiRuntime *runtime, const gchar *
 char *ai_runtime_build_payload(AiRuntime *runtime,
                                CanvasData *data,
                                const char *prompt,
+                               const char *retry_error,
                                char **out_snapshot,
                                gboolean *out_truncated,
                                GError **error);
