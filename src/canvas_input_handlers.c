@@ -1930,6 +1930,12 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
   }
 
   if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_l) {
+    extern void canvas_reset_view(GtkButton *button, gpointer user_data);
+    canvas_reset_view(NULL, data);
+    return;
+  }
+
+  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_o) {
     canvas_show_shape_selection_dialog(NULL, data);
     return;
   }
