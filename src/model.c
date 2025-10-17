@@ -1128,8 +1128,18 @@ gint model_compare_for_deletion(const ModelElement *a, const ModelElement *b) {
 }
 
 ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
-  if (!model || !visual_element) return NULL;
+  if (!model || !visual_element) {
+    return NULL;
+  }
 
+  // Fast path: rely on the reverse pointer stored on the visual element.
+  if (visual_element->model_element &&
+      visual_element->model_element->visual_element == visual_element) {
+    return visual_element->model_element;
+  }
+
+  // Fallback: scan elements once, then register the reverse link to avoid
+  // repeating the lookup in future calls.
   GHashTableIter iter;
   gpointer key, value;
 
@@ -1137,6 +1147,7 @@ ModelElement* model_get_by_visual(Model *model, Element *visual_element) {
   while (g_hash_table_iter_next(&iter, &key, &value)) {
     ModelElement *model_elem = (ModelElement*)value;
     if (model_elem->visual_element == visual_element) {
+      visual_element->model_element = model_elem;
       return model_elem;
     }
   }
