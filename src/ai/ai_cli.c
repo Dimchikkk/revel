@@ -914,39 +914,70 @@ gboolean ai_cli_generate_with_timeout(const AiProvider *provider, const gchar *p
     return FALSE;
   }
 
-  if (!WIFEXITED(exit_status) || WEXITSTATUS(exit_status) != 0) {
-    if (out_error) {
-      const gchar *stderr_text = stderr_buffer->len ? stderr_buffer->str : "provider exited with error";
-      *out_error = g_strdup_printf("Provider failed (status %d): %s", WEXITSTATUS(exit_status), stderr_text);
-    }
-    g_string_free(stdout_buffer, TRUE);
-    g_string_free(stderr_buffer, TRUE);
-    return FALSE;
-  }
+  gboolean exited_cleanly = WIFEXITED(exit_status);
+  gint exit_code = exited_cleanly ? WEXITSTATUS(exit_status) : -1;
+  gboolean exit_ok = exited_cleanly && exit_code == 0;
 
-  if (out_dsl) {
-    char *raw_output = g_string_free(stdout_buffer, FALSE);
-    char *raw_copy = g_strdup(raw_output ? raw_output : "");
-    ai_cli_debug_write("REVEL_AI_DEBUG_STDOUT", "/tmp/ai_stdout.txt", raw_copy);
+  char *raw_output = g_string_free(stdout_buffer, FALSE);
+  char *raw_copy = g_strdup(raw_output ? raw_output : "");
+  ai_cli_debug_write("REVEL_AI_DEBUG_STDOUT", "/tmp/ai_stdout.txt", raw_copy);
+
+  if (!out_dsl) {
+    if (!exit_ok) {
+      if (out_error) {
+        const gchar *stderr_text = stderr_buffer->len ? stderr_buffer->str : "provider exited with error";
+        if (exited_cleanly && exit_code >= 0) {
+          *out_error = g_strdup_printf("Provider failed (status %d): %s", exit_code, stderr_text);
+        } else {
+          *out_error = g_strdup_printf("Provider terminated unexpectedly: %s", stderr_text);
+        }
+      }
+      ai_cli_debug_write("REVEL_AI_DEBUG_STDERR", "/tmp/ai_stderr.txt", stderr_buffer->len ? stderr_buffer->str : NULL);
+      g_free(raw_copy);
+      g_free(raw_output);
+      g_string_free(stderr_buffer, TRUE);
+      return FALSE;
+    }
+    g_free(raw_output);
+  } else {
     char *normalized = ai_cli_normalize_output(raw_output);
     if (!normalized) {
       ai_cli_debug_write("REVEL_AI_DEBUG_STDERR", "/tmp/ai_stderr.txt", stderr_buffer->len ? stderr_buffer->str : NULL);
       g_string_free(stderr_buffer, TRUE);
       if (out_error) {
-        if (raw_copy && *raw_copy) {
-          *out_error = g_strdup_printf("AI provider did not return DSL content. Raw response:\n%s", raw_copy);
+        if (!exit_ok) {
+          if (exit_code >= 0) {
+            if (raw_copy && *raw_copy) {
+              *out_error = g_strdup_printf("AI provider exited with status %d and did not return DSL content. Raw response:\n%s", exit_code, raw_copy);
+            } else {
+              *out_error = g_strdup_printf("AI provider exited with status %d and did not return DSL content", exit_code);
+            }
+          } else {
+            *out_error = g_strdup("AI provider terminated unexpectedly and did not return DSL content");
+          }
         } else {
-          *out_error = g_strdup("AI provider did not return DSL content");
+          if (raw_copy && *raw_copy) {
+            *out_error = g_strdup_printf("AI provider did not return DSL content. Raw response:\n%s", raw_copy);
+          } else {
+            *out_error = g_strdup("AI provider did not return DSL content");
+          }
         }
       }
       g_free(raw_copy);
       return FALSE;
     }
     *out_dsl = normalized;
-    g_free(raw_copy);
-  } else {
-    g_string_free(stdout_buffer, TRUE);
   }
+
+  if (!exit_ok) {
+    if (exited_cleanly && exit_code >= 0) {
+      g_warning("AI provider exited with status %d but returned DSL; continuing", exit_code);
+    } else {
+      g_warning("AI provider terminated unexpectedly but returned DSL; continuing");
+    }
+  }
+
+  g_free(raw_copy);
 
   ai_cli_debug_write("REVEL_AI_DEBUG_STDERR", "/tmp/ai_stderr.txt", stderr_buffer->len ? stderr_buffer->str : NULL);
 
