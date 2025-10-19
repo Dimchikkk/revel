@@ -17,6 +17,7 @@ typedef struct {
   gchar *arg_flag;
   gchar *stdin_flag;
   gchar *default_binary;
+  gboolean requires_pty;
 } AiProvider;
 
 typedef struct {
@@ -44,6 +45,7 @@ const gchar *ai_provider_get_default_binary(const AiProvider *provider);
 AiPayloadMode ai_provider_get_payload_mode(const AiProvider *provider);
 const gchar *ai_provider_get_arg_flag(const AiProvider *provider);
 const gchar *ai_provider_get_stdin_flag(const AiProvider *provider);
+gboolean ai_provider_requires_pty(const AiProvider *provider);
 GPtrArray *ai_provider_load_from_path(const gchar *path, GError **error);
 GPtrArray *ai_provider_load_with_fallback(const gchar *config_dir, GError **error);
 

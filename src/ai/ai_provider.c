@@ -9,7 +9,8 @@ static AiProvider *ai_provider_new(const gchar *id,
                                    gchar **args,
                                    AiPayloadMode payload_mode,
                                    const gchar *arg_flag,
-                                   const gchar *stdin_flag) {
+                                   const gchar *stdin_flag,
+                                   gboolean requires_pty) {
   AiProvider *provider = g_new0(AiProvider, 1);
   provider->id = g_strdup(id);
   provider->label = g_strdup(label);
@@ -19,6 +20,7 @@ static AiProvider *ai_provider_new(const gchar *id,
   provider->payload_mode = payload_mode;
   provider->arg_flag = g_strdup(arg_flag);
   provider->stdin_flag = g_strdup(stdin_flag);
+  provider->requires_pty = requires_pty;
   return provider;
 }
 
@@ -34,7 +36,8 @@ AiProvider *ai_provider_copy(const AiProvider *provider) {
                                      args_copy,
                                      provider->payload_mode,
                                      provider->arg_flag,
-                                     provider->stdin_flag);
+                                     provider->stdin_flag,
+                                     provider->requires_pty);
   ai_provider_set_binary(copy, provider->binary);
   g_free(copy->default_binary);
   copy->default_binary = g_strdup(provider->default_binary);
@@ -102,6 +105,10 @@ const gchar *ai_provider_get_stdin_flag(const AiProvider *provider) {
   return provider ? provider->stdin_flag : NULL;
 }
 
+gboolean ai_provider_requires_pty(const AiProvider *provider) {
+  return provider ? provider->requires_pty : FALSE;
+}
+
 void ai_provider_list_free(GPtrArray *providers) {
   if (!providers) {
     return;
@@ -149,14 +156,15 @@ typedef struct {
   AiPayloadMode payload_mode;
   const gchar *arg_flag;
   const gchar *stdin_flag;
+  gboolean requires_pty;
 } AiProviderDefaultSpec;
 
 static const gchar * const empty_args[] = { NULL };
 
 static const AiProviderDefaultSpec default_specs[] = {
-  { "claude", "Claude", "claude", empty_args, AI_PAYLOAD_STDIN, NULL, NULL },
-  { "gemini", "Gemini", "gemini", empty_args, AI_PAYLOAD_STDIN, NULL, NULL },
-  { "codex", "Codex", "codex", empty_args, AI_PAYLOAD_STDIN, NULL, NULL }
+  { "claude", "Claude", "claude", empty_args, AI_PAYLOAD_STDIN, NULL, NULL, FALSE },
+  { "gemini", "Gemini", "gemini", empty_args, AI_PAYLOAD_STDIN, NULL, NULL, FALSE },
+  { "codex", "Codex", "codex", empty_args, AI_PAYLOAD_STDIN, NULL, NULL, TRUE }
 };
 
 static void populate_defaults(GPtrArray *providers) {
@@ -181,7 +189,8 @@ static void populate_defaults(GPtrArray *providers) {
                                                    args_copy,
                                                    spec->payload_mode,
                                                    spec->arg_flag,
-                                                   spec->stdin_flag));
+                                                   spec->stdin_flag,
+                                                   spec->requires_pty));
   }
 }
 
@@ -266,13 +275,19 @@ GPtrArray *ai_provider_load_from_path(const gchar *path, GError **error) {
       stdin_flag = json_object_get_string_member(obj, "stdin_flag");
     }
 
+    gboolean requires_pty = FALSE;
+    if (json_object_has_member(obj, "requires_pty")) {
+      requires_pty = json_object_get_boolean_member(obj, "requires_pty");
+    }
+
     ai_provider_list_add(providers, ai_provider_new(id,
                                                    label,
                                                    binary,
                                                    args,
                                                    payload_mode,
                                                    arg_flag,
-                                                   stdin_flag));
+                                                   stdin_flag,
+                                                   requires_pty));
   }
 
   g_free(contents);

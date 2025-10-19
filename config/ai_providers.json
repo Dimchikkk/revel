@@ -20,7 +20,8 @@
       "args": [
         "exec"
       ],
-      "input_mode": "arg"
+      "input_mode": "arg",
+      "requires_pty": true
     }
   ]
 }

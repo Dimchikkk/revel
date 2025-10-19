@@ -6,7 +6,7 @@ PKG_LIBS = `pkg-config --libs gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gst
 DEBUG_FLAGS = -Wall -g
 RELEASE_FLAGS = -Wall -O3 -DNDEBUG
 CFLAGS = $(if $(RELEASE),$(RELEASE_FLAGS),$(DEBUG_FLAGS)) $(PKG_CFLAGS) -Isrc
-LIBS = $(PKG_LIBS) -lm -luuid
+LIBS = $(PKG_LIBS) -lm -luuid -lutil
 
 SRC_DIR = src
 TEST_DIR = tests

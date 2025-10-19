@@ -12,6 +12,29 @@
 
 #define AI_MAX_ATTEMPTS 3
 
+static void ai_debug_write_file(const gchar *env_key,
+                                const gchar *default_path,
+                                const gchar *content) {
+  if (!content) {
+    return;
+  }
+
+  const gchar *path = g_getenv(env_key);
+  if (!path || !*path) {
+    const gchar *toggle = g_getenv("REVEL_AI_DEBUG");
+    if (!toggle || !*toggle) {
+      return;
+    }
+    path = default_path;
+  }
+
+  GError *error = NULL;
+  g_file_set_contents(path, content, -1, &error);
+  if (error) {
+    g_error_free(error);
+  }
+}
+
 typedef struct {
   CanvasData *data;
   GtkWidget *dialog;
@@ -537,12 +560,7 @@ static void ai_chat_dialog_start_attempt(AiChatDialogState *state) {
     return;
   }
 
-  // Debug: Write payload to /tmp/ai_payload.txt for inspection
-  // FILE *debug_file = fopen("/tmp/ai_payload.txt", "w");
-  // if (debug_file) {
-  //  fprintf(debug_file, "%s", payload);
-  //  fclose(debug_file);
-  //}
+  ai_debug_write_file("REVEL_AI_DEBUG_PAYLOAD", "/tmp/ai_payload.txt", payload);
 
   AiChatJob *job = g_new0(AiChatJob, 1);
   job->state = state;

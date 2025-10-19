@@ -10,8 +10,138 @@
 #include <unistd.h>
 #include <gio/gio.h>
 
+#if defined(__linux__)
+#include <pty.h>
+#elif defined(__APPLE__)
+#include <util.h>
+#endif
+
 #define AI_CLI_DEFAULT_TIMEOUT_MS 60000
 #define AI_CLI_READ_CHUNK 4096
+
+static void ai_cli_debug_write(const gchar *env_key,
+                               const gchar *default_path,
+                               const gchar *content) {
+  if (!content) {
+    return;
+  }
+
+  const gchar *path = g_getenv(env_key);
+  if (!path || !*path) {
+    const gchar *toggle = g_getenv("REVEL_AI_DEBUG");
+    if (!toggle || !*toggle) {
+      return;
+    }
+    path = default_path;
+  }
+
+  GError *error = NULL;
+  g_file_set_contents(path, content, -1, &error);
+  if (error) {
+    g_error_free(error);
+  }
+}
+
+static void strip_ansi_sequences(char *text) {
+  if (!text) {
+    return;
+  }
+
+  char *src = text;
+  char *dst = text;
+  while (*src) {
+    if (*src == '\x1b') {
+      src++;
+      if (*src == '[') {
+        src++;
+        while (*src && !(*src >= '@' && *src <= '~')) {
+          src++;
+        }
+        if (*src) {
+          src++;
+        }
+        continue;
+      }
+      if (*src == ']') {
+        src++;
+        while (*src && *src != '\a') {
+          src++;
+        }
+        if (*src == '\a') {
+          src++;
+        }
+        continue;
+      }
+      while (*src && !(*src >= '@' && *src <= '~')) {
+        src++;
+      }
+      if (*src) {
+        src++;
+      }
+      continue;
+    }
+    *dst++ = *src++;
+  }
+  *dst = '\0';
+}
+
+static gboolean looks_like_dsl_line(const gchar *line) {
+  if (!line || *line == '\0') {
+    return FALSE;
+  }
+
+  static const gchar * const prefixes[] = {
+    "shape_create",
+    "note_create",
+    "paper_note_create",
+    "text_create",
+    "text_update",
+    "note_update",
+    "paper_note_update",
+    "space_",
+    "element_",
+    "image_create",
+    "video_create",
+    "audio_create",
+    "media_create",
+    "connect",
+    "disconnect",
+    "animate_",
+    "for ",
+    "end",
+    "set ",
+    "on ",
+    "off ",
+    "wait ",
+    "background_",
+    "dsl_version",
+    "load_space",
+    "save_space",
+    "clone_",
+    "group_",
+    "ungroup",
+    "tag_",
+    "untag",
+    "delete",
+    "update ",
+    "move ",
+    "resize ",
+    "rotate ",
+    "color ",
+    "audio_",
+    "video_",
+    "image_",
+    "path_"
+  };
+
+  for (guint i = 0; i < G_N_ELEMENTS(prefixes); i++) {
+    if (g_str_has_prefix(line, prefixes[i])) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
 
 static gboolean args_contains(const gchar * const *args, const gchar *value) {
   if (!args || !value) {
@@ -161,6 +291,9 @@ static gchar *ai_cli_normalize_output(char *raw) {
   }
   *dst = '\0';
 
+  strip_ansi_sequences(text);
+  ai_cli_debug_write("REVEL_AI_DEBUG_STDOUT_SANITIZED", "/tmp/ai_stdout_sanitized.txt", text);
+
   gchar **lines = g_strsplit(text, "\n", 0);
   gchar *codex_dsl = extract_codex_segment(lines);
   if (codex_dsl) {
@@ -263,7 +396,7 @@ static gchar *ai_cli_normalize_output(char *raw) {
 
     gchar *clean_line = strip_leading(line_trim);
     gchar *clean_trim = clean_line ? g_strstrip(clean_line) : NULL;
-    if (clean_trim && *clean_trim != '\0') {
+    if (clean_trim && *clean_trim != '\0' && looks_like_dsl_line(clean_trim)) {
       if (result->len > 0) {
         g_string_append_c(result, '\n');
       }
@@ -398,6 +531,84 @@ static void close_fd(int *fd) {
   }
 }
 
+#if defined(__linux__) || defined(__APPLE__)
+static gboolean spawn_with_pty(char **argv,
+                               gboolean need_stdin,
+                               GPid *pid_out,
+                               gint *stdin_fd_out,
+                               gint *stdout_fd_out,
+                               gint *stderr_fd_out,
+                               gchar **out_error) {
+  int master_fd = -1;
+  pid_t pid = forkpty(&master_fd, NULL, NULL, NULL);
+  if (pid < 0) {
+    if (out_error) {
+      *out_error = g_strdup_printf("forkpty failed: %s", g_strerror(errno));
+    }
+    return FALSE;
+  }
+
+  if (pid == 0) {
+    execvp(argv[0], argv);
+    _exit(127);
+  }
+
+  if (stdout_fd_out) {
+    *stdout_fd_out = master_fd;
+  } else {
+    close(master_fd);
+  }
+
+  if (stderr_fd_out) {
+    *stderr_fd_out = -1;
+  }
+
+  if (need_stdin && stdin_fd_out) {
+    int dup_fd = dup(master_fd);
+    if (dup_fd < 0) {
+      int status = 0;
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      if (stdout_fd_out && *stdout_fd_out >= 0) {
+        close_fd(stdout_fd_out);
+      }
+      if (out_error) {
+        *out_error = g_strdup_printf("dup failed: %s", g_strerror(errno));
+      }
+      return FALSE;
+    }
+    *stdin_fd_out = dup_fd;
+  } else if (stdin_fd_out) {
+    *stdin_fd_out = -1;
+  }
+
+  if (pid_out) {
+    *pid_out = pid;
+  }
+
+  return TRUE;
+}
+#else
+static gboolean spawn_with_pty(char **argv,
+                               gboolean need_stdin,
+                               GPid *pid_out,
+                               gint *stdin_fd_out,
+                               gint *stdout_fd_out,
+                               gint *stderr_fd_out,
+                               gchar **out_error) {
+  (void)argv;
+  (void)need_stdin;
+  (void)pid_out;
+  (void)stdin_fd_out;
+  (void)stdout_fd_out;
+  (void)stderr_fd_out;
+  if (out_error) {
+    *out_error = g_strdup("PTY spawning not supported on this platform");
+  }
+  return FALSE;
+}
+#endif
+
 static gboolean drain_fd(int *fd_ptr, GString *buffer, GCancellable *cancellable, gchar **out_error) {
   if (!fd_ptr || *fd_ptr < 0) {
     return TRUE;
@@ -422,6 +633,10 @@ static gboolean drain_fd(int *fd_ptr, GString *buffer, GCancellable *cancellable
     }
     if (errno == EINTR) {
       continue;
+    }
+    if (errno == EIO) {
+      close_fd(fd_ptr);
+      return TRUE;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
       return TRUE;
@@ -474,6 +689,7 @@ gboolean ai_cli_generate_with_timeout(const AiProvider *provider, const gchar *p
   }
 
   gboolean need_stdin = FALSE;
+  gboolean uses_pty = ai_provider_requires_pty(provider);
   gchar **argv = build_argv(provider, payload, &need_stdin);
 
   GPid pid = 0;
@@ -482,28 +698,53 @@ gboolean ai_cli_generate_with_timeout(const AiProvider *provider, const gchar *p
   gint stderr_fd = -1;
   GError *spawn_error = NULL;
 
-  gboolean spawned = g_spawn_async_with_pipes(
-    NULL,
-    argv,
-    NULL,
-    G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD,
-    NULL,
-    NULL,
-    &pid,
-    need_stdin ? &stdin_fd : NULL,
-    &stdout_fd,
-    &stderr_fd,
-    &spawn_error
-  );
+  gboolean spawned = FALSE;
+
+  if (uses_pty) {
+    gchar *spawn_error_msg = NULL;
+    spawned = spawn_with_pty(argv,
+                             need_stdin,
+                             &pid,
+                             need_stdin ? &stdin_fd : NULL,
+                             &stdout_fd,
+                             &stderr_fd,
+                             &spawn_error_msg);
+    if (!spawned) {
+      if (out_error) {
+        *out_error = spawn_error_msg ? spawn_error_msg : g_strdup("Failed to spawn provider");
+      } else {
+        g_free(spawn_error_msg);
+      }
+      free_argv(argv);
+      return FALSE;
+    }
+    g_free(spawn_error_msg);
+  } else {
+    spawned = g_spawn_async_with_pipes(
+      NULL,
+      argv,
+      NULL,
+      G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD,
+      NULL,
+      NULL,
+      &pid,
+      need_stdin ? &stdin_fd : NULL,
+      &stdout_fd,
+      &stderr_fd,
+      &spawn_error
+    );
+  }
 
   free_argv(argv);
 
   if (!spawned) {
-    if (out_error) {
-      *out_error = g_strdup(spawn_error ? spawn_error->message : "Failed to spawn provider");
-    }
-    if (spawn_error) {
-      g_error_free(spawn_error);
+    if (!uses_pty) {
+      if (out_error) {
+        *out_error = g_strdup(spawn_error ? spawn_error->message : "Failed to spawn provider");
+      }
+      if (spawn_error) {
+        g_error_free(spawn_error);
+      }
     }
     return FALSE;
   }
@@ -657,10 +898,17 @@ gboolean ai_cli_generate_with_timeout(const AiProvider *provider, const gchar *p
   }
 
   if (!success) {
+    ai_cli_debug_write("REVEL_AI_DEBUG_STDOUT", "/tmp/ai_stdout.txt", stdout_buffer->len ? stdout_buffer->str : NULL);
+    ai_cli_debug_write("REVEL_AI_DEBUG_STDERR", "/tmp/ai_stderr.txt", stderr_buffer->len ? stderr_buffer->str : NULL);
+    const gchar *fallback = NULL;
+    if (stderr_buffer->len > 0) {
+      fallback = stderr_buffer->str;
+    } else if (uses_pty && stdout_buffer->len > 0) {
+      fallback = stdout_buffer->str;
+    }
     g_string_free(stdout_buffer, TRUE);
     if (out_error && !*out_error) {
-      const gchar *stderr_text = stderr_buffer->len ? stderr_buffer->str : "unknown error";
-      *out_error = g_strdup(stderr_text);
+      *out_error = g_strdup(fallback ? fallback : "unknown error");
     }
     g_string_free(stderr_buffer, TRUE);
     return FALSE;
@@ -679,8 +927,10 @@ gboolean ai_cli_generate_with_timeout(const AiProvider *provider, const gchar *p
   if (out_dsl) {
     char *raw_output = g_string_free(stdout_buffer, FALSE);
     char *raw_copy = g_strdup(raw_output ? raw_output : "");
+    ai_cli_debug_write("REVEL_AI_DEBUG_STDOUT", "/tmp/ai_stdout.txt", raw_copy);
     char *normalized = ai_cli_normalize_output(raw_output);
     if (!normalized) {
+      ai_cli_debug_write("REVEL_AI_DEBUG_STDERR", "/tmp/ai_stderr.txt", stderr_buffer->len ? stderr_buffer->str : NULL);
       g_string_free(stderr_buffer, TRUE);
       if (out_error) {
         if (raw_copy && *raw_copy) {
@@ -697,6 +947,8 @@ gboolean ai_cli_generate_with_timeout(const AiProvider *provider, const gchar *p
   } else {
     g_string_free(stdout_buffer, TRUE);
   }
+
+  ai_cli_debug_write("REVEL_AI_DEBUG_STDERR", "/tmp/ai_stderr.txt", stderr_buffer->len ? stderr_buffer->str : NULL);
 
   if (stderr_buffer->len > 0 && out_error && !*out_error) {
     *out_error = g_string_free(stderr_buffer, FALSE);
