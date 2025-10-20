@@ -1,5 +1,6 @@
 #include "animation.h"
 #include "canvas/canvas_core.h"
+#include "dsl/dsl_utils.h"
 #include "elements/element.h"
 #include "model.h"
 #include <glib.h>
@@ -67,47 +68,38 @@ static double back(double t) {
     return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2);
 }
 
-// Parse color string to RGBA components
-// Supports formats: (r,g,b,a), #RRGGBB, #RRGGBBAA
-static bool parse_color(const char *color_str, double *r, double *g, double *b, double *a) {
-    if (!color_str) return false;
-
-    // Handle (r,g,b,a) format
-    if (color_str[0] == '(') {
-        int count = sscanf(color_str, "(%lf,%lf,%lf,%lf)", r, g, b, a);
-        if (count == 4) return true;
-        if (count == 3) {
-            *a = 1.0;
-            return true;
-        }
+// Parse color definitions from DSL animation commands
+static bool animation_parse_color(const char *color_str,
+                                  double *r,
+                                  double *g,
+                                  double *b,
+                                  double *a) {
+    if (!color_str) {
         return false;
     }
 
-    // Handle #RRGGBB or #RRGGBBAA format
-    if (color_str[0] == '#') {
-        int len = strlen(color_str);
-        unsigned int ir, ig, ib, ia = 255;
+    double rr = 0.0;
+    double gg = 0.0;
+    double bb = 0.0;
+    double aa = 0.0;
 
-        if (len == 7) { // #RRGGBB
-            if (sscanf(color_str, "#%02x%02x%02x", &ir, &ig, &ib) == 3) {
-                *r = ir / 255.0;
-                *g = ig / 255.0;
-                *b = ib / 255.0;
-                *a = 1.0;
-                return true;
-            }
-        } else if (len == 9) { // #RRGGBBAA
-            if (sscanf(color_str, "#%02x%02x%02x%02x", &ir, &ig, &ib, &ia) == 4) {
-                *r = ir / 255.0;
-                *g = ig / 255.0;
-                *b = ib / 255.0;
-                *a = ia / 255.0;
-                return true;
-            }
-        }
+    if (!parse_color_token(color_str, &rr, &gg, &bb, &aa)) {
+        return false;
     }
 
-    return false;
+    if (r) {
+        *r = rr;
+    }
+    if (g) {
+        *g = gg;
+    }
+    if (b) {
+        *b = bb;
+    }
+    if (a) {
+        *a = aa;
+    }
+    return true;
 }
 
 double animation_interpolate(double t, AnimInterpolationType type) {
@@ -456,7 +448,7 @@ bool animation_engine_get_color(AnimationEngine *engine, const char *element_uui
 
         if (engine->elapsed_time < anim->start_time) {
             if (!current_anim) {
-                parse_color(anim->from_color, out_r, out_g, out_b, out_a);
+                animation_parse_color(anim->from_color, out_r, out_g, out_b, out_a);
                 return true;
             }
             continue;
@@ -476,8 +468,8 @@ bool animation_engine_get_color(AnimationEngine *engine, const char *element_uui
         double from_r, from_g, from_b, from_a;
         double to_r, to_g, to_b, to_a;
 
-        if (!parse_color(current_anim->from_color, &from_r, &from_g, &from_b, &from_a) ||
-            !parse_color(current_anim->to_color, &to_r, &to_g, &to_b, &to_a)) {
+        if (!animation_parse_color(current_anim->from_color, &from_r, &from_g, &from_b, &from_a) ||
+            !animation_parse_color(current_anim->to_color, &to_r, &to_g, &to_b, &to_a)) {
             return false;
         }
 
@@ -493,7 +485,7 @@ bool animation_engine_get_color(AnimationEngine *engine, const char *element_uui
     }
 
     if (last_completed) {
-        parse_color(last_completed->to_color, out_r, out_g, out_b, out_a);
+        animation_parse_color(last_completed->to_color, out_r, out_g, out_b, out_a);
         return true;
     }
 
