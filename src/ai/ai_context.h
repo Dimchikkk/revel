@@ -7,12 +7,12 @@
 typedef struct _CanvasData CanvasData;
 
 typedef struct {
-  guint max_context_bytes;      // Maximum bytes for context DSL; 0 uses default (8192)
+  guint max_context_bytes;      // Maximum bytes for context DSL; 0 uses default (4096)
   gboolean include_grammar;     // Whether to include DSL grammar snippet
   guint history_limit;          // How many previous exchanges to include
 } AiContextOptions;
 
-#define AI_CONTEXT_DEFAULT_MAX_BYTES (8 * 1024)
+#define AI_CONTEXT_DEFAULT_MAX_BYTES (4 * 1024)
 
 char *ai_context_build_payload(CanvasData *data,
                                AiSessionState *session,

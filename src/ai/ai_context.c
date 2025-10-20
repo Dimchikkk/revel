@@ -297,6 +297,275 @@ static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
   return g_string_free(summary, FALSE);
 }
 
+static gint compare_element_by_x_desc(gconstpointer a, gconstpointer b) {
+  const ElementIndexEntry *ea = *(const ElementIndexEntry * const *)a;
+  const ElementIndexEntry *eb = *(const ElementIndexEntry * const *)b;
+  if (!ea || !eb || !ea->element || !eb->element) {
+    return 0;
+  }
+  int ax = ea->element->position ? ea->element->position->x : 0;
+  int bx = eb->element->position ? eb->element->position->x : 0;
+  if (ax == bx) {
+    return 0;
+  }
+  return (bx - ax);
+}
+
+static gchar *build_spatial_hint(CanvasData *data, guint max_items) {
+  if (!data || !data->model || !data->model->elements) {
+    return NULL;
+  }
+
+  const gchar *current_space = data->model->current_space_uuid;
+  if (!current_space) {
+    return NULL;
+  }
+
+  int min_x = G_MAXINT;
+  int max_x = G_MININT;
+
+  GPtrArray *entries = g_ptr_array_new_with_free_func(g_free);
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, data->model->elements);
+
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *element = value;
+    if (!element || element->state == MODEL_STATE_DELETED) {
+      continue;
+    }
+    if (g_strcmp0(element->space_uuid, current_space) != 0) {
+      continue;
+    }
+    int ex = element->position ? element->position->x : 0;
+    if (ex < min_x) {
+      min_x = ex;
+    }
+    if (ex > max_x) {
+      max_x = ex;
+    }
+    ElementIndexEntry *entry = g_new0(ElementIndexEntry, 1);
+    entry->element = element;
+    g_ptr_array_add(entries, entry);
+  }
+
+  if (entries->len == 0 || max_x - min_x < 400) {
+    g_ptr_array_free(entries, TRUE);
+    return NULL;
+  }
+
+  const int split_x = min_x + ((max_x - min_x) / 2);
+
+  // Filter to elements on the right half
+  GPtrArray *right_half = g_ptr_array_new();
+  for (guint i = 0; i < entries->len; i++) {
+    ElementIndexEntry *entry = g_ptr_array_index(entries, i);
+    if (!entry || !entry->element || !entry->element->position) {
+      continue;
+    }
+    if (entry->element->position->x >= split_x) {
+      g_ptr_array_add(right_half, entry);
+    }
+  }
+
+  if (right_half->len == 0) {
+    g_ptr_array_free(right_half, FALSE);
+    g_ptr_array_free(entries, TRUE);
+    return NULL;
+  }
+
+  g_ptr_array_sort(right_half, compare_element_by_x_desc);
+
+  guint limit = MIN(right_half->len, max_items > 0 ? max_items : right_half->len);
+  GString *summary = g_string_new(NULL);
+
+  g_string_append_printf(summary,
+                         "Horizontal span: min_x=%d max_x=%d (Δ=%d)\n",
+                         min_x,
+                         max_x,
+                         max_x - min_x);
+  g_string_append(summary, "Elements near the far edge:\n");
+
+  for (guint i = 0; i < limit; i++) {
+    ElementIndexEntry *entry = g_ptr_array_index(right_half, i);
+    ModelElement *element = entry ? entry->element : NULL;
+    if (!element) {
+      continue;
+    }
+
+    const gchar *identifier = element->uuid ? element->uuid : "";
+
+    const char *type_name = element_get_type_name(element->type ? element->type->type : ELEMENT_SHAPE);
+    const char *shape_name = NULL;
+    if (element->type && element->type->type == ELEMENT_SHAPE) {
+      shape_name = shape_type_to_name(element->shape_type);
+    }
+
+    int ex = element->position ? element->position->x : 0;
+    g_string_append(summary, "  • ");
+    g_string_append(summary, (identifier && *identifier) ? identifier : "(unnamed)");
+    g_string_append(summary, " (");
+    g_string_append(summary, type_name);
+    if (shape_name && *shape_name) {
+      g_string_append(summary, ": ");
+      g_string_append(summary, shape_name);
+    }
+    g_string_append(summary, ") x=");
+    g_string_append_printf(summary, "%d\n", ex);
+  }
+
+  g_ptr_array_free(right_half, FALSE);
+  g_ptr_array_free(entries, TRUE);
+  return g_string_free(summary, FALSE);
+}
+
+static void append_full_reference_sections(GString *payload, gboolean include_grammar) {
+  if (!payload) {
+    return;
+  }
+
+  g_string_append(payload, "### DSL_QUICK_REFERENCE\n");
+  g_string_append(payload, "**Variables:**\n");
+  g_string_append(payload, "  int count 0\n");
+  g_string_append(payload, "  real temp 98.6\n");
+  g_string_append(payload, "  bool active true\n");
+  g_string_append(payload, "  string label \"Hello\"\n");
+  g_string_append(payload, "  int cells[100] 0      # Arrays\n");
+  g_string_append(payload, "  set count {count + 1} # Assignment (events only)\n\n");
+
+  g_string_append(payload, "**Text/Notes (standalone text blocks):**\n");
+  g_string_append(payload, "  note_create id \"Text\" (x,y) (w,h) [bg color(...)] [text_color color(...)] [font \"Ubuntu Bold 24\"]\n");
+  g_string_append(payload, "  paper_note_create id \"Sticky\" (x,y) (w,h)\n");
+  g_string_append(payload, "  text_create id \"Label\" (x,y) (w,h) [text_color color(...)]\n");
+  g_string_append(payload, "  NOTE: Do NOT use text_create to label shapes - use shape label parameter instead!\n\n");
+
+  g_string_append(payload, "**Shapes (text label is rendered INSIDE the shape):**\n");
+  g_string_append(payload, "  shape_create id TYPE \"label\" (x,y) (w,h) [filled true|false] [bg color(...)] [stroke N] [stroke_color color(...)]\n");
+  g_string_append(payload, "  The \"label\" parameter puts text INSIDE the shape. This is ONE element, not two.\n");
+  g_string_append(payload, "  Types: circle, rectangle, roundedrect, triangle, diamond, vcylinder, hcylinder, trapezoid, line, arrow, bezier, oval, cube, plot\n");
+  g_string_append(payload, "  Example: shape_create node1 rectangle \"Input Layer\" (100,100) (200,80) creates a box with centered text inside.\n\n");
+
+  g_string_append(payload, "**Plots/Graphs:**\n");
+  g_string_append(payload, "  shape_create id plot \"DATA\" (x,y) (w,h) [stroke_width N] [stroke_color color(...)]\n");
+  g_string_append(payload, "  Data formats (use \\n between lines/points):\n");
+  g_string_append(payload, "    • Multi-line: \"line Temp 0,10 1,25 2,20\\nline Humidity 0,15 1,22\"\n");
+  g_string_append(payload, "    • X,Y pairs: \"0,10\\n1,25\\n2,20\\n3,35\"\n");
+  g_string_append(payload, "    • Y only: \"10\\n25\\n20\\n35\" (auto-indexed)\n");
+  g_string_append(payload, "  Features: auto-scaling axes from 0, gridlines, legend for multi-line plots\n");
+  g_string_append(payload, "  Example: shape_create sales plot \"line Q1 0,100 1,150 2,180\\nline Q2 0,90 1,140 2,200\" (100,100) (500,350) stroke_width 2\n\n");
+
+  g_string_append(payload, "**Media:**\n");
+  g_string_append(payload, "  image_create id /path/to/file.png (x,y) (w,h)\n");
+  g_string_append(payload, "  video_create id /path/to/file.mp4 (x,y) (w,h)\n");
+  g_string_append(payload, "  audio_create id /path/to/file.mp3 (x,y) (w,h)\n\n");
+
+  g_string_append(payload, "**Connections:**\n");
+  g_string_append(payload, "  connect from_id to_id [parallel|straight] [none|single|double] [color(...)]\n\n");
+
+  g_string_append(payload, "**Animations (immediate effect - use 0 0 for instant):**\n");
+  g_string_append(payload, "  animate_move id (x,y) (x,y) 0 0          # Instant move\n");
+  g_string_append(payload, "  animate_resize id (w,h) (w,h) 0 0        # Instant resize\n");
+  g_string_append(payload, "  animate_color id color(old_r,old_g,old_b,old_a) color(new_r,new_g,new_b,new_a) 0 0\n");
+  g_string_append(payload, "  animate_rotate id degrees 0 0\n");
+  g_string_append(payload, "  Interpolation: linear, bezier, ease-in, ease-out, bounce, elastic, back\n\n");
+
+  g_string_append(payload, "**Loops:**\n");
+  g_string_append(payload, "  for i 0 9\n");
+  g_string_append(payload, "    shape_create box${i} rectangle \"\" ({i*50},{i*50}) (40,40) filled true bg color(1,0,0,1)\n");
+  g_string_append(payload, "  end\n\n");
+
+  g_string_append(payload, "**Events:**\n");
+  g_string_append(payload, "  on click button_id\n");
+  g_string_append(payload, "    set count {count + 1}\n");
+  g_string_append(payload, "    text_update label \"Count: ${count}\"\n");
+  g_string_append(payload, "    element_delete button_id  # Delete element\n");
+  g_string_append(payload, "  end\n");
+  g_string_append(payload, "  on variable count == 10\n");
+  g_string_append(payload, "    text_update status \"Done!\"\n");
+  g_string_append(payload, "  end\n\n");
+
+  if (include_grammar) {
+    gchar *grammar = load_grammar_snippet();
+    if (grammar && *grammar) {
+      g_string_append(payload, "### DSL_GRAMMAR_SNIPPET\n");
+      g_string_append(payload, grammar);
+      gsize grammar_len = strlen(grammar);
+      if (grammar_len > 0 && grammar[grammar_len - 1] != '\n') {
+        g_string_append_c(payload, '\n');
+      }
+    }
+    g_free(grammar);
+  }
+
+  g_string_append(payload, "### COMMON_PATTERNS\n");
+  g_string_append(payload, "Move element: animate_move id (current_x,current_y) (new_x,new_y) 0 0\n");
+  g_string_append(payload, "Resize element: animate_resize id (current_w,current_h) (new_w,new_h) 0 0\n");
+  g_string_append(payload, "Change color: animate_color id color(old_r,old_g,old_b,old_a) color(new_r,new_g,new_b,new_a) 0 0\n");
+  g_string_append(payload, "Update text: text_update id \"New text with ${variable}\"\n");
+  g_string_append(payload, "Delete element: element_delete id\n");
+  g_string_append(payload, "Add shape: shape_create new_id circle \"Label\" (x,y) (w,h) filled true bg color(r,g,b,a)\n");
+  g_string_append(payload, "Connect: connect id1 id2 parallel single color(1,1,1,1)\n\n");
+
+  g_string_append(payload, "### LAYOUT_GUIDELINES\n");
+  g_string_append(payload, "**CRITICAL - Shapes with text labels (COMMON ERROR):**\n");
+  g_string_append(payload, "RULE: shape_create already includes text. DO NOT follow it with text_create.\n\n");
+  g_string_append(payload, "EXAMPLE - Creating 3 labeled boxes:\n");
+  g_string_append(payload, "  ✓ CORRECT:\n");
+  g_string_append(payload, "    shape_create box1 rectangle \"Label 1\" (100,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n");
+  g_string_append(payload, "    shape_create box2 rectangle \"Label 2\" (350,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n");
+  g_string_append(payload, "    shape_create box3 rectangle \"Label 3\" (600,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n\n");
+  g_string_append(payload, "  ✗ WRONG (creates duplicate overlapping text):\n");
+  g_string_append(payload, "    shape_create box1 rectangle \"\" (100,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n");
+  g_string_append(payload, "    text_create box1_text \"Label 1\" (100,100) (200,80)\n");
+  g_string_append(payload, "    ^ This is WRONG - now you have 2 elements at same position\n\n");
+  g_string_append(payload, "Empty shapes: Use empty string: shape_create line rectangle \"\" (x,y) (w,h)\n\n");
+  g_string_append(payload, "**Connected diagrams:**\n");
+  g_string_append(payload, "- Position boxes with 200-300px horizontal spacing to prevent overlap\n");
+  g_string_append(payload, "- Vertical spacing: 150-200px between rows to accommodate connections\n");
+  g_string_append(payload, "- For flowcharts: arrange in clear vertical or horizontal flows\n");
+  g_string_append(payload, "- Connections auto-route between shapes - ensure adequate spacing\n");
+  g_string_append(payload, "- Keep coordinates within the active canvas (roughly x < 3000, y < 2000).\n");
+  g_string_append(payload, "- When simplifying, delete or update superseded elements instead of pushing them off-canvas.\n\n");
+  g_string_append(payload, "**VALIDATION CHECKLIST before outputting DSL:**\n");
+  g_string_append(payload, "□ Did I use text_create after shape_create? → If YES, DELETE the text_create and put text in shape label\n");
+  g_string_append(payload, "□ Are any text_create coordinates within 50px of a shape? → If YES, that text should be the shape's label\n");
+  g_string_append(payload, "□ Did I create empty shape labels (\"\")?  → If YES, and there's a text element nearby, merge them\n");
+  g_string_append(payload, "□ Are elements spaced 150-300px apart? → If NO, increase spacing\n\n");
+  g_string_append(payload, "**Common mistakes to AVOID:**\n");
+  g_string_append(payload, "❌ NEVER: shape_create + text_create at same/nearby position\n");
+  g_string_append(payload, "❌ NEVER: text_create for labeling shapes\n");
+  g_string_append(payload, "❌ NEVER: Tight spacing <100px\n");
+  g_string_append(payload, "✓ ALWAYS: Put text in shape label parameter\n");
+  g_string_append(payload, "✓ ALWAYS: Use text_create ONLY for standalone titles/descriptions\n");
+  g_string_append(payload, "✓ ALWAYS: Space elements 150-300px apart\n");
+  g_string_append(payload, "✓ ALWAYS: Use plot shapes for data visualization (bar charts, line graphs, trends)\n\n");
+}
+
+static void append_compact_reference_sections(GString *payload) {
+  if (!payload) {
+    return;
+  }
+
+  g_string_append(payload, "### DSL_REMINDERS\n");
+  g_string_append(payload, "- Reuse existing element IDs when updating or deleting.\n");
+  g_string_append(payload, "- It is acceptable to use element_delete to remove outdated content and recreate a cleaner layout.\n");
+  g_string_append(payload, "- For major layout changes, deleting the old structure and rebuilding a smaller version is often clearer than moving elements.\n");
+  g_string_append(payload, "- Always keep coordinates within the visible canvas so new content stays in view.\n\n");
+
+  g_string_append(payload, "### COMMON_PATTERNS\n");
+  g_string_append(payload, "Remove element: element_delete id\n");
+  g_string_append(payload, "Rebuild section: use shape_create/note_create to produce the requested layout with fresh coordinates.\n");
+  g_string_append(payload, "Finalise layout before responding; only output DSL that reflects the desired end state.\n\n");
+
+  g_string_append(payload, "### LAYOUT_GUIDELINES\n");
+  g_string_append(payload, "- Remove obsolete elements with element_delete when simplifying the layout; don't just slide them off-screen.\n");
+  g_string_append(payload, "- Place new shapes in open space with clear integer coordinates to avoid overlaps.\n");
+  g_string_append(payload, "- Keep coordinates inside the visible canvas (roughly x < 3000, y < 2000); never park elements off-screen.\n");
+  g_string_append(payload, "- If the scope shrinks, delete the old structure and recreate a cleaner version instead of reusing distant elements.\n");
+  g_string_append(payload, "- Label shapes via the shape_create label parameter; reserve text_create for standalone notes.\n\n");
+}
+
 char *ai_context_truncate_utf8(const char *text, guint max_bytes) {
   if (!text) {
     return g_strdup("");
@@ -379,6 +648,12 @@ char *ai_context_build_payload(CanvasData *data,
     context_section = g_strdup(full_dsl);
   }
 
+  if (truncated && history_limit > 1) {
+    history_limit = 1;
+  }
+
+  gboolean compact_reference = truncated;
+
   GString *payload = g_string_new(NULL);
   g_string_append(payload, "### INSTRUCTIONS\n");
   g_string_append(payload, "You are a Revel DSL assistant. Generate valid DSL scripts to modify the infinite canvas.\n\n");
@@ -406,7 +681,8 @@ char *ai_context_build_payload(CanvasData *data,
     g_string_append_c(payload, '\n');
   }
 
-  gchar *element_index = build_recent_element_index(data, 20);
+  guint index_limit = compact_reference ? 30 : 20;
+  gchar *element_index = build_recent_element_index(data, index_limit);
   if (element_index && *element_index) {
     g_string_append(payload, "### ELEMENT_INDEX\n");
     g_string_append(payload, element_index);
@@ -416,6 +692,17 @@ char *ai_context_build_payload(CanvasData *data,
     }
   }
   g_free(element_index);
+
+  gchar *spatial_hint = compact_reference ? build_spatial_hint(data, 12) : NULL;
+  if (spatial_hint && *spatial_hint) {
+    g_string_append(payload, "### SPATIAL_HINTS\n");
+    g_string_append(payload, spatial_hint);
+    gsize hint_len = strlen(spatial_hint);
+    if (hint_len > 0 && spatial_hint[hint_len - 1] != '\n') {
+      g_string_append_c(payload, '\n');
+    }
+  }
+  g_free(spatial_hint);
 
   g_string_append(payload, "### USER_REQUEST\n");
   g_string_append(payload, prompt);
@@ -438,119 +725,11 @@ char *ai_context_build_payload(CanvasData *data,
   g_string_append(payload, "### RESPONSE_FORMAT\n");
   g_string_append(payload, "Output ONLY valid Revel DSL script. No explanations, comments, or markdown.\n\n");
 
-  g_string_append(payload, "### DSL_QUICK_REFERENCE\n");
-  g_string_append(payload, "**Variables:**\n");
-  g_string_append(payload, "  int count 0\n");
-  g_string_append(payload, "  real temp 98.6\n");
-  g_string_append(payload, "  bool active true\n");
-  g_string_append(payload, "  string label \"Hello\"\n");
-  g_string_append(payload, "  int cells[100] 0      # Arrays\n");
-  g_string_append(payload, "  set count {count + 1} # Assignment (events only)\n\n");
-
-  g_string_append(payload, "**Text/Notes (standalone text blocks):**\n");
-  g_string_append(payload, "  note_create id \"Text\" (x,y) (w,h) [bg color(...)] [text_color color(...)] [font \"Ubuntu Bold 24\"]\n");
-  g_string_append(payload, "  paper_note_create id \"Sticky\" (x,y) (w,h)\n");
-  g_string_append(payload, "  text_create id \"Label\" (x,y) (w,h) [text_color color(...)]\n");
-  g_string_append(payload, "  NOTE: Do NOT use text_create to label shapes - use shape label parameter instead!\n\n");
-
-  g_string_append(payload, "**Shapes (text label is rendered INSIDE the shape):**\n");
-  g_string_append(payload, "  shape_create id TYPE \"label\" (x,y) (w,h) [filled true|false] [bg color(...)] [stroke N] [stroke_color color(...)]\n");
-  g_string_append(payload, "  The \"label\" parameter puts text INSIDE the shape. This is ONE element, not two.\n");
-  g_string_append(payload, "  Types: circle, rectangle, roundedrect, triangle, diamond, vcylinder, hcylinder, trapezoid, line, arrow, bezier, oval, cube, plot\n");
-  g_string_append(payload, "  Example: shape_create node1 rectangle \"Input Layer\" (100,100) (200,80) creates a box with centered text inside.\n\n");
-
-  g_string_append(payload, "**Plots/Graphs:**\n");
-  g_string_append(payload, "  shape_create id plot \"DATA\" (x,y) (w,h) [stroke_width N] [stroke_color color(...)]\n");
-  g_string_append(payload, "  Data formats (use \\n between lines/points):\n");
-  g_string_append(payload, "    • Multi-line: \"line Temp 0,10 1,25 2,20\\nline Humidity 0,15 1,22\"\n");
-  g_string_append(payload, "    • X,Y pairs: \"0,10\\n1,25\\n2,20\\n3,35\"\n");
-  g_string_append(payload, "    • Y only: \"10\\n25\\n20\\n35\" (auto-indexed)\n");
-  g_string_append(payload, "  Features: auto-scaling axes from 0, gridlines, legend for multi-line plots\n");
-  g_string_append(payload, "  Example: shape_create sales plot \"line Q1 0,100 1,150 2,180\\nline Q2 0,90 1,140 2,200\" (100,100) (500,350) stroke_width 2\n\n");
-
-  g_string_append(payload, "**Media:**\n");
-  g_string_append(payload, "  image_create id /path/to/file.png (x,y) (w,h)\n");
-  g_string_append(payload, "  video_create id /path/to/file.mp4 (x,y) (w,h)\n");
-  g_string_append(payload, "  audio_create id /path/to/file.mp3 (x,y) (w,h)\n\n");
-
-  g_string_append(payload, "**Connections:**\n");
-  g_string_append(payload, "  connect from_id to_id [parallel|straight] [none|single|double] [color(...)]\n\n");
-
-  g_string_append(payload, "**Animations (immediate effect - use 0 0 for instant):**\n");
-  g_string_append(payload, "  animate_move id (x,y) (x,y) 0 0          # Instant move\n");
-  g_string_append(payload, "  animate_resize id (w,h) (w,h) 0 0        # Instant resize\n");
-  g_string_append(payload, "  animate_color id color(...) color(...) 0 0\n");
-  g_string_append(payload, "  animate_rotate id degrees 0 0\n");
-  g_string_append(payload, "  Interpolation: linear, bezier, ease-in, ease-out, bounce, elastic, back\n\n");
-
-  g_string_append(payload, "**Loops:**\n");
-  g_string_append(payload, "  for i 0 9\n");
-  g_string_append(payload, "    shape_create box${i} rectangle \"\" ({i*50},{i*50}) (40,40) filled true bg color(1,0,0,1)\n");
-  g_string_append(payload, "  end\n\n");
-
-  g_string_append(payload, "**Events:**\n");
-  g_string_append(payload, "  on click button_id\n");
-  g_string_append(payload, "    set count {count + 1}\n");
-  g_string_append(payload, "    text_update label \"Count: ${count}\"\n");
-  g_string_append(payload, "    element_delete button_id  # Delete element\n");
-  g_string_append(payload, "  end\n");
-  g_string_append(payload, "  on variable count == 10\n");
-  g_string_append(payload, "    text_update status \"Done!\"\n");
-  g_string_append(payload, "  end\n\n");
-
-  if (include_grammar) {
-    gchar *grammar = load_grammar_snippet();
-    if (grammar && *grammar) {
-      g_string_append(payload, "### DSL_GRAMMAR_SNIPPET\n");
-      g_string_append(payload, grammar);
-      gsize grammar_len = strlen(grammar);
-      if (grammar_len > 0 && grammar[grammar_len - 1] != '\n') {
-        g_string_append_c(payload, '\n');
-      }
-    }
-    g_free(grammar);
+  if (compact_reference) {
+    append_compact_reference_sections(payload);
+  } else {
+    append_full_reference_sections(payload, include_grammar);
   }
-
-  g_string_append(payload, "### COMMON_PATTERNS\n");
-  g_string_append(payload, "Move element: animate_move id (current_x,current_y) (new_x,new_y) 0 0\n");
-  g_string_append(payload, "Resize element: animate_resize id (current_w,current_h) (new_w,new_h) 0 0\n");
-  g_string_append(payload, "Change color: animate_color id color(old_r,old_g,old_b,old_a) color(new_r,new_g,new_b,new_a) 0 0\n");
-  g_string_append(payload, "Update text: text_update id \"New text with ${variable}\"\n");
-  g_string_append(payload, "Delete element: element_delete id\n");
-  g_string_append(payload, "Add shape: shape_create new_id circle \"Label\" (x,y) (w,h) filled true bg color(r,g,b,a)\n");
-  g_string_append(payload, "Connect: connect id1 id2 parallel single color(1,1,1,1)\n\n");
-
-  g_string_append(payload, "### LAYOUT_GUIDELINES\n");
-  g_string_append(payload, "**CRITICAL - Shapes with text labels (COMMON ERROR):**\n");
-  g_string_append(payload, "RULE: shape_create already includes text. DO NOT follow it with text_create.\n\n");
-  g_string_append(payload, "EXAMPLE - Creating 3 labeled boxes:\n");
-  g_string_append(payload, "  ✓ CORRECT:\n");
-  g_string_append(payload, "    shape_create box1 rectangle \"Label 1\" (100,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n");
-  g_string_append(payload, "    shape_create box2 rectangle \"Label 2\" (350,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n");
-  g_string_append(payload, "    shape_create box3 rectangle \"Label 3\" (600,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n\n");
-  g_string_append(payload, "  ✗ WRONG (creates duplicate overlapping text):\n");
-  g_string_append(payload, "    shape_create box1 rectangle \"\" (100,100) (200,80) filled true bg color(0.9,0.7,0.2,1)\n");
-  g_string_append(payload, "    text_create box1_text \"Label 1\" (100,100) (200,80)\n");
-  g_string_append(payload, "    ^ This is WRONG - now you have 2 elements at same position\n\n");
-  g_string_append(payload, "Empty shapes: Use empty string: shape_create line rectangle \"\" (x,y) (w,h)\n\n");
-  g_string_append(payload, "**Connected diagrams:**\n");
-  g_string_append(payload, "- Position boxes with 200-300px horizontal spacing to prevent overlap\n");
-  g_string_append(payload, "- Vertical spacing: 150-200px between rows to accommodate connections\n");
-  g_string_append(payload, "- For flowcharts: arrange in clear vertical or horizontal flows\n");
-  g_string_append(payload, "- Connections auto-route between shapes - ensure adequate spacing\n\n");
-  g_string_append(payload, "**VALIDATION CHECKLIST before outputting DSL:**\n");
-  g_string_append(payload, "□ Did I use text_create after shape_create? → If YES, DELETE the text_create and put text in shape label\n");
-  g_string_append(payload, "□ Are any text_create coordinates within 50px of a shape? → If YES, that text should be the shape's label\n");
-  g_string_append(payload, "□ Did I create empty shape labels (\"\")?  → If YES, and there's a text element nearby, merge them\n");
-  g_string_append(payload, "□ Are elements spaced 150-300px apart? → If NO, increase spacing\n\n");
-  g_string_append(payload, "**Common mistakes to AVOID:**\n");
-  g_string_append(payload, "❌ NEVER: shape_create + text_create at same/nearby position\n");
-  g_string_append(payload, "❌ NEVER: text_create for labeling shapes\n");
-  g_string_append(payload, "❌ NEVER: Tight spacing <100px\n");
-  g_string_append(payload, "✓ ALWAYS: Put text in shape label parameter\n");
-  g_string_append(payload, "✓ ALWAYS: Use text_create ONLY for standalone titles/descriptions\n");
-  g_string_append(payload, "✓ ALWAYS: Space elements 150-300px apart\n");
-  g_string_append(payload, "✓ ALWAYS: Use plot shapes for data visualization (bar charts, line graphs, trends)\n\n");
 
   if (out_snapshot) {
     *out_snapshot = full_dsl;
