@@ -104,6 +104,10 @@ struct _CanvasData {
   GtkWidget *ai_toggle_button;
   GtkWidget *ai_dialog;
 
+  gchar *ai_last_payload;
+  gchar *ai_last_response;
+  gchar *ai_last_error;
+
   // Space name display
   gboolean show_space_name;
 

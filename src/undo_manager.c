@@ -44,7 +44,8 @@ static void update_log_window(UndoManager *manager) {
 
   // Add actions from redo stack (alternative timeline) with negative positions
   int redo_position = -1;
-  for (GList *l = g_list_reverse(g_list_copy(manager->redo_stack)); l != NULL; l = l->next) {
+  GList *reversed_redo = g_list_reverse(g_list_copy(manager->redo_stack));
+  for (GList *l = reversed_redo; l != NULL; l = l->next) {
     Action *action = (Action*)l->data;
 
     GtkTreeIter iter;
@@ -61,7 +62,7 @@ static void update_log_window(UndoManager *manager) {
     g_free(description);
     redo_position--;
   }
-  g_list_free(g_list_reverse(g_list_copy(manager->redo_stack)));
+  g_list_free(reversed_redo);
 }
 
 static const char* get_element_type_name_for_element(ModelElement *element) {

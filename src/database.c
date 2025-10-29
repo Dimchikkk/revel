@@ -1347,35 +1347,109 @@ int database_get_current_space_uuid(sqlite3 *db, char **space_uuid) {
 }
 
 int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
-  // First, clear any current space
-  const char *sql = "UPDATE spaces SET is_current = 0";
+  // Begin transaction to ensure atomicity
+  if (!database_begin_transaction(db)) {
+    fprintf(stderr, "Failed to begin transaction\n");
+    return 0;
+  }
+
+  // Verify the target space exists
+  const char *check_sql = "SELECT uuid FROM spaces WHERE uuid = ?";
+  sqlite3_stmt *check_stmt;
+  int space_exists = 0;
+
+  if (sqlite3_prepare_v2(db, check_sql, -1, &check_stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_text(check_stmt, 1, space_uuid, -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(check_stmt) == SQLITE_ROW) {
+      space_exists = 1;
+    }
+    sqlite3_finalize(check_stmt);
+  }
+
+  // If target doesn't exist, find a fallback
+  char *target_uuid = NULL;
+  if (!space_exists) {
+    fprintf(stderr, "Space UUID %s not found, selecting fallback\n", space_uuid);
+
+    // Try to find root space (parent_uuid IS NULL)
+    const char *fallback_sql = "SELECT uuid FROM spaces WHERE parent_uuid IS NULL LIMIT 1";
+    sqlite3_stmt *fallback_stmt;
+
+    if (sqlite3_prepare_v2(db, fallback_sql, -1, &fallback_stmt, NULL) == SQLITE_OK) {
+      if (sqlite3_step(fallback_stmt) == SQLITE_ROW) {
+        target_uuid = g_strdup((const char*)sqlite3_column_text(fallback_stmt, 0));
+      }
+      sqlite3_finalize(fallback_stmt);
+    }
+
+    // If no root space, just pick any space
+    if (!target_uuid) {
+      const char *any_sql = "SELECT uuid FROM spaces LIMIT 1";
+      sqlite3_stmt *any_stmt;
+
+      if (sqlite3_prepare_v2(db, any_sql, -1, &any_stmt, NULL) == SQLITE_OK) {
+        if (sqlite3_step(any_stmt) == SQLITE_ROW) {
+          target_uuid = g_strdup((const char*)sqlite3_column_text(any_stmt, 0));
+        }
+        sqlite3_finalize(any_stmt);
+      }
+    }
+
+    // If still no space found, rollback and fail
+    if (!target_uuid) {
+      fprintf(stderr, "No valid space found in database\n");
+      database_rollback_transaction(db);
+      return 0;
+    }
+  } else {
+    target_uuid = g_strdup(space_uuid);
+  }
+
+  // Clear all current space flags
+  const char *clear_sql = "UPDATE spaces SET is_current = 0";
   char *err_msg = NULL;
 
-  if (sqlite3_exec(db, sql, NULL, 0, &err_msg) != SQLITE_OK) {
+  if (sqlite3_exec(db, clear_sql, NULL, 0, &err_msg) != SQLITE_OK) {
     fprintf(stderr, "SQL error: %s\n", err_msg);
     sqlite3_free(err_msg);
+    g_free(target_uuid);
+    database_rollback_transaction(db);
     return 0;
   }
 
   // Set the new current space
-  sql = "UPDATE spaces SET is_current = 1 WHERE uuid = ?";
-  sqlite3_stmt *stmt;
+  const char *set_sql = "UPDATE spaces SET is_current = 1 WHERE uuid = ?";
+  sqlite3_stmt *set_stmt;
 
-  if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+  if (sqlite3_prepare_v2(db, set_sql, -1, &set_stmt, NULL) != SQLITE_OK) {
     fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+    g_free(target_uuid);
+    database_rollback_transaction(db);
     return 0;
   }
 
-  sqlite3_bind_text(stmt, 1, space_uuid, -1, SQLITE_STATIC);
+  sqlite3_bind_text(set_stmt, 1, target_uuid, -1, SQLITE_TRANSIENT);
 
-  if (sqlite3_step(stmt) != SQLITE_DONE) {
+  int result = 1;
+  if (sqlite3_step(set_stmt) != SQLITE_DONE) {
     fprintf(stderr, "Failed to set current space: %s\n", sqlite3_errmsg(db));
-    sqlite3_finalize(stmt);
-    return 0;
+    result = 0;
   }
 
-  sqlite3_finalize(stmt);
-  return 1;
+  sqlite3_finalize(set_stmt);
+
+  if (result) {
+    if (!database_commit_transaction(db)) {
+      fprintf(stderr, "Failed to commit transaction\n");
+      g_free(target_uuid);
+      return 0;
+    }
+  } else {
+    database_rollback_transaction(db);
+  }
+
+  g_free(target_uuid);
+  return result;
 }
 
 int database_load_space(sqlite3 *db, Model *model) {

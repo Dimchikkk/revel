@@ -435,6 +435,10 @@ void canvas_data_free(CanvasData *data) {
     gtk_window_destroy(GTK_WINDOW(data->ai_dialog));
   }
 
+  g_clear_pointer(&data->ai_last_payload, g_free);
+  g_clear_pointer(&data->ai_last_response, g_free);
+  g_clear_pointer(&data->ai_last_error, g_free);
+
   // Don't free the model here - it's freed in canvas_on_app_shutdown
 
   g_free(data);

@@ -437,6 +437,14 @@ int model_update_text(Model *model, ModelElement *element, const char *text) {
     element->text->text = g_strdup(text);
     element->text->ref_count = 1;
 
+    // Initialize default font and colors
+    element->text->font_description = g_strdup("Sans 14");
+    element->text->r = 1.0;
+    element->text->g = 1.0;
+    element->text->b = 1.0;
+    element->text->a = 1.0;
+    element->text->strikethrough = FALSE;
+
     // Set default alignment based on element type
     if (element->type && element->type->type == ELEMENT_PAPER_NOTE) {
       element->text->alignment = g_strdup("top-left");

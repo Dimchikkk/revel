@@ -164,6 +164,25 @@ typedef struct {
   ModelElement *element;
 } ElementIndexEntry;
 
+typedef struct {
+  gchar *id;
+  gchar *label;
+  ElementType type;
+  gint shape_type;
+  gint x;
+  gint y;
+} ElementLabelEntry;
+
+static void element_label_entry_free(gpointer data) {
+  ElementLabelEntry *entry = data;
+  if (!entry) {
+    return;
+  }
+  g_free(entry->id);
+  g_free(entry->label);
+  g_free(entry);
+}
+
 static const char *shape_type_to_name(int shape_type) {
   switch (shape_type) {
     case SHAPE_CIRCLE: return "circle";
@@ -204,6 +223,21 @@ static gint compare_element_entries(gconstpointer a, gconstpointer b) {
     return 1;
   }
   return g_strcmp0(eb->element->uuid, ea->element->uuid);
+}
+
+static gint compare_label_entries(gconstpointer a, gconstpointer b) {
+  const ElementLabelEntry *ea = *(const ElementLabelEntry * const *)a;
+  const ElementLabelEntry *eb = *(const ElementLabelEntry * const *)b;
+  if (!ea || !eb) {
+    return 0;
+  }
+  if (ea->y != eb->y) {
+    return ea->y - eb->y;
+  }
+  if (ea->x != eb->x) {
+    return ea->x - eb->x;
+  }
+  return g_strcmp0(ea->id, eb->id);
 }
 
 static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
@@ -294,6 +328,123 @@ static gchar *build_recent_element_index(CanvasData *data, guint max_items) {
 
   g_ptr_array_free(entries, TRUE);
   g_hash_table_destroy(uuid_to_alias);
+  return g_string_free(summary, FALSE);
+}
+
+static gchar *truncate_label_text(const gchar *text) {
+  if (!text) {
+    return g_strdup("");
+  }
+  const gsize limit = 120;
+  if (g_utf8_strlen(text, -1) <= limit) {
+    return g_strdup(text);
+  }
+  gchar *prefix = g_utf8_substring(text, 0, limit);
+  gchar *result = g_strdup_printf("%s…", prefix);
+  g_free(prefix);
+  return result;
+}
+
+static gchar *build_element_label_summary(CanvasData *data, guint max_items) {
+  if (!data || !data->model || !data->model->elements) {
+    return NULL;
+  }
+
+  const gchar *current_space = data->model->current_space_uuid;
+  if (!current_space) {
+    return NULL;
+  }
+
+  GHashTable *uuid_to_alias = g_hash_table_new(g_str_hash, g_str_equal);
+  if (data->dsl_aliases) {
+    GHashTableIter alias_iter;
+    gpointer alias_key, alias_value;
+    g_hash_table_iter_init(&alias_iter, data->dsl_aliases);
+    while (g_hash_table_iter_next(&alias_iter, &alias_key, &alias_value)) {
+      const gchar *alias = alias_key;
+      const gchar *uuid = alias_value;
+      g_hash_table_insert(uuid_to_alias, (gpointer)uuid, (gpointer)alias);
+    }
+  }
+
+  GPtrArray *entries = g_ptr_array_new_with_free_func(element_label_entry_free);
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, data->model->elements);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    ModelElement *element = value;
+    if (!element || element->state == MODEL_STATE_DELETED) {
+      continue;
+    }
+    if (g_strcmp0(element->space_uuid, current_space) != 0) {
+      continue;
+    }
+    if (!element->type || (element->type->type != ELEMENT_NOTE &&
+                           element->type->type != ELEMENT_PAPER_NOTE &&
+                           element->type->type != ELEMENT_SHAPE)) {
+      continue;
+    }
+    const gchar *label_text = (element->text && element->text->text) ? element->text->text : NULL;
+    if (!label_text || *label_text == '\0') {
+      continue;
+    }
+
+    ElementLabelEntry *entry = g_new0(ElementLabelEntry, 1);
+    const gchar *alias = element->uuid;
+    if (element->uuid) {
+      const gchar *mapped = g_hash_table_lookup(uuid_to_alias, element->uuid);
+      if (mapped) {
+        alias = mapped;
+      }
+    }
+    entry->id = g_strdup(alias ? alias : "");
+    entry->label = truncate_label_text(label_text);
+    entry->type = element->type->type;
+    entry->shape_type = element->shape_type;
+    entry->x = element->position ? element->position->x : 0;
+    entry->y = element->position ? element->position->y : 0;
+    g_ptr_array_add(entries, entry);
+  }
+
+  g_hash_table_destroy(uuid_to_alias);
+
+  if (entries->len == 0) {
+    g_ptr_array_free(entries, TRUE);
+    return NULL;
+  }
+
+  g_ptr_array_sort(entries, compare_label_entries);
+
+  guint limit = max_items > 0 ? MIN(entries->len, max_items) : entries->len;
+  GString *summary = g_string_new(NULL);
+
+  for (guint i = 0; i < limit; i++) {
+    ElementLabelEntry *entry = g_ptr_array_index(entries, i);
+    if (!entry || !entry->id) {
+      continue;
+    }
+    gchar *escaped = g_strescape(entry->label ? entry->label : "", NULL);
+    const char *type_name = element_get_type_name(entry->type);
+    const char *shape_name = NULL;
+    if (entry->type == ELEMENT_SHAPE) {
+      shape_name = shape_type_to_name(entry->shape_type);
+    }
+    g_string_append(summary, "- ");
+    g_string_append(summary, entry->id);
+    g_string_append(summary, " -> \"");
+    g_string_append(summary, escaped ? escaped : "");
+    g_string_append(summary, "\" (");
+    g_string_append(summary, type_name ? type_name : "Element");
+    if (shape_name && *shape_name) {
+      g_string_append(summary, ": ");
+      g_string_append(summary, shape_name);
+    }
+    g_string_append(summary, ")\n");
+    g_free(escaped);
+  }
+
+  g_ptr_array_free(entries, TRUE);
   return g_string_free(summary, FALSE);
 }
 
@@ -665,6 +816,10 @@ char *ai_context_build_payload(CanvasData *data,
   g_string_append(payload, "2. **Shape text**: Shapes have built-in labels. Use shape_create with label parameter, not separate text_create.\n");
   g_string_append(payload, "3. **Coordinates**: Always use explicit integer coordinates (x,y).\n\n");
 
+  g_string_append(payload, "### COMMAND_LIMITATIONS\n");
+  g_string_append(payload, "- Commands such as shape_update do not exist. Use text_update on the existing ID to change labels for shapes, notes, and other text-bearing elements.\n");
+  g_string_append(payload, "- If layout changes are extensive, delete the old element (element_delete id) and recreate it with shape_create/note_create.\n\n");
+
   if (summary && *summary) {
     g_string_append(payload, "### CURRENT_DSL_SUMMARY\n");
     g_string_append(payload, summary);
@@ -681,7 +836,7 @@ char *ai_context_build_payload(CanvasData *data,
     g_string_append_c(payload, '\n');
   }
 
-  guint index_limit = compact_reference ? 30 : 20;
+  guint index_limit = compact_reference ? 60 : 30;
   gchar *element_index = build_recent_element_index(data, index_limit);
   if (element_index && *element_index) {
     g_string_append(payload, "### ELEMENT_INDEX\n");
@@ -692,6 +847,18 @@ char *ai_context_build_payload(CanvasData *data,
     }
   }
   g_free(element_index);
+
+  guint label_limit = compact_reference ? 120 : 80;
+  gchar *label_summary = build_element_label_summary(data, label_limit);
+  if (label_summary && *label_summary) {
+    g_string_append(payload, "### ELEMENT_LABELS\n");
+    g_string_append(payload, label_summary);
+    gsize label_len = strlen(label_summary);
+    if (label_len > 0 && label_summary[label_len - 1] != '\n') {
+      g_string_append_c(payload, '\n');
+    }
+  }
+  g_free(label_summary);
 
   gchar *spatial_hint = compact_reference ? build_spatial_hint(data, 12) : NULL;
   if (spatial_hint && *spatial_hint) {

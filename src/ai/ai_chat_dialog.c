@@ -51,6 +51,11 @@ typedef struct {
   GtkSpinButton *context_spin;
   GtkSpinButton *history_spin;
   GtkCheckButton *grammar_check;
+  GtkWidget *debug_button;
+  GtkWidget *debug_dialog;
+  GtkTextBuffer *debug_payload_buffer;
+  GtkTextBuffer *debug_response_buffer;
+  GtkTextBuffer *debug_error_buffer;
   GtkWidget *pending_row;
   GtkLabel *pending_label;
   GtkSpinner *pending_spinner;
@@ -82,6 +87,9 @@ static void ai_chat_dialog_state_free(AiChatDialogState *state) {
   g_clear_object(&state->cancellable);
   g_free(state->base_prompt);
   g_free(state->last_error);
+  if (state->debug_dialog && GTK_IS_WIDGET(state->debug_dialog)) {
+    gtk_window_destroy(GTK_WINDOW(state->debug_dialog));
+  }
   g_free(state);
 }
 
@@ -171,6 +179,107 @@ static void attach_copy_support(GtkWidget *widget, const gchar *text) {
     gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(gesture));
     g_object_set_data(G_OBJECT(widget), "copy-gesture", gesture);
   }
+}
+
+static GtkWidget *create_debug_text_view(GtkTextBuffer **out_buffer) {
+  GtkWidget *scrolled = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_hexpand(scrolled, TRUE);
+  gtk_widget_set_vexpand(scrolled, TRUE);
+
+  GtkWidget *view = gtk_text_view_new();
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), FALSE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+  gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), view);
+
+  if (out_buffer) {
+    *out_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+  }
+
+  return scrolled;
+}
+
+static void ai_chat_dialog_update_debug_buffers(AiChatDialogState *state) {
+  if (!state || !state->data) {
+    return;
+  }
+
+  const gchar *payload = state->data->ai_last_payload ? state->data->ai_last_payload : "(none)";
+  const gchar *response = state->data->ai_last_response ? state->data->ai_last_response : "(none)";
+  const gchar *error_text = state->data->ai_last_error ? state->data->ai_last_error : "(none)";
+
+  if (state->debug_payload_buffer) {
+    gtk_text_buffer_set_text(state->debug_payload_buffer, payload, -1);
+  }
+  if (state->debug_response_buffer) {
+    gtk_text_buffer_set_text(state->debug_response_buffer, response, -1);
+  }
+  if (state->debug_error_buffer) {
+    gtk_text_buffer_set_text(state->debug_error_buffer, error_text, -1);
+  }
+}
+
+static void on_debug_dialog_response(GtkDialog *dialog, int response, gpointer user_data) {
+  (void)response;
+  (void)user_data;
+  gtk_widget_hide(GTK_WIDGET(dialog));
+}
+
+static GtkWidget *ensure_debug_dialog(AiChatDialogState *state) {
+  if (!state) {
+    return NULL;
+  }
+  if (state->debug_dialog) {
+    return state->debug_dialog;
+  }
+
+  GtkWidget *dialog = gtk_dialog_new();
+  gtk_window_set_title(GTK_WINDOW(dialog), "AI Debug");
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(state->dialog));
+  gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 520, 420);
+
+  GtkWidget *close_button = gtk_dialog_add_button(GTK_DIALOG(dialog), "Close", GTK_RESPONSE_CLOSE);
+  if (close_button) {
+    gtk_widget_set_focusable(close_button, FALSE);
+  }
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *notebook = gtk_notebook_new();
+  gtk_widget_set_hexpand(notebook, TRUE);
+  gtk_widget_set_vexpand(notebook, TRUE);
+  gtk_box_append(GTK_BOX(content), notebook);
+
+  GtkWidget *payload_view = create_debug_text_view(&state->debug_payload_buffer);
+  GtkWidget *response_view = create_debug_text_view(&state->debug_response_buffer);
+  GtkWidget *error_view = create_debug_text_view(&state->debug_error_buffer);
+
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), payload_view, gtk_label_new("Payload"));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), response_view, gtk_label_new("Response"));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), error_view, gtk_label_new("Error"));
+
+  g_signal_connect(dialog, "response", G_CALLBACK(on_debug_dialog_response), state);
+  g_signal_connect(dialog, "close-request", G_CALLBACK(on_debug_dialog_response), state);
+
+  state->debug_dialog = dialog;
+  ai_chat_dialog_update_debug_buffers(state);
+  return dialog;
+}
+
+static void on_debug_clicked(GtkButton *button, gpointer user_data) {
+  (void)button;
+  AiChatDialogState *state = user_data;
+  if (!state) {
+    return;
+  }
+  GtkWidget *dialog = ensure_debug_dialog(state);
+  if (!dialog) {
+    return;
+  }
+  ai_chat_dialog_update_debug_buffers(state);
+  gtk_window_present(GTK_WINDOW(dialog));
 }
 
 static GtkWidget *transcript_append_message(AiChatDialogState *state,
@@ -398,6 +507,19 @@ static void ai_chat_task_thread(GTask *task, gpointer source_object, gpointer ta
   gchar *dsl = NULL;
   gchar *cli_error = NULL;
   guint timeout_ms = ai_runtime_get_timeout(runtime);
+  gsize payload_size = job->payload ? strlen(job->payload) : 0;
+  if (job->truncated) {
+    guint scaled = timeout_ms * 2;
+    if (scaled < timeout_ms + 30000) {
+      scaled = timeout_ms + 30000;
+    }
+    if (scaled > 180000) {
+      scaled = 180000;
+    }
+    timeout_ms = scaled;
+  } else if (payload_size > 12000 && timeout_ms < 90000) {
+    timeout_ms = MIN(180000, MAX(timeout_ms, 90000));
+  }
   gboolean ok = ai_cli_generate_with_timeout(provider, job->payload, timeout_ms, cancellable, &dsl, &cli_error);
   if (ok) {
     g_task_return_pointer(task, dsl, g_free);
@@ -449,6 +571,13 @@ static void ai_chat_task_finish(GObject *source, GAsyncResult *result, gpointer 
       database_insert_action_log(data->model->db, "ai", job->prompt, NULL, error->message);
     }
 
+    if (data) {
+      g_clear_pointer(&data->ai_last_response, g_free);
+      g_free(data->ai_last_error);
+      data->ai_last_error = g_strdup(error->message);
+      ai_chat_dialog_update_debug_buffers(state);
+    }
+
     if (job->attempt < job->max_attempts) {
       gchar *retry_msg = g_strdup_printf("Attempt %u failed: %s. Retrying…", job->attempt, error->message);
       transcript_set_pending(state, retry_msg, TRUE);
@@ -487,6 +616,13 @@ static void ai_chat_task_finish(GObject *source, GAsyncResult *result, gpointer 
       database_insert_action_log(data->model->db, "ai", job->prompt, dsl, runner_error);
     }
 
+    if (data) {
+      g_clear_pointer(&data->ai_last_response, g_free);
+      g_free(data->ai_last_error);
+      data->ai_last_error = g_strdup(runner_error);
+      ai_chat_dialog_update_debug_buffers(state);
+    }
+
     if (job->attempt < job->max_attempts) {
       gchar *retry_msg = g_strdup_printf("Attempt %u invalid: %s. Retrying…", job->attempt, runner_error);
       transcript_set_pending(state, retry_msg, TRUE);
@@ -517,6 +653,13 @@ static void ai_chat_task_finish(GObject *source, GAsyncResult *result, gpointer 
   append_session_entry(data, job->prompt, dsl, NULL);
   if (data && data->model) {
     database_insert_action_log(data->model->db, "ai", job->prompt, dsl, NULL);
+  }
+
+  if (data) {
+    g_free(data->ai_last_response);
+    data->ai_last_response = g_strdup(dsl);
+    g_clear_pointer(&data->ai_last_error, g_free);
+    ai_chat_dialog_update_debug_buffers(state);
   }
 
   transcript_set_pending(state, dsl, FALSE);
@@ -571,6 +714,14 @@ static void ai_chat_dialog_start_attempt(AiChatDialogState *state) {
   job->truncated = truncated;
   job->attempt = state->current_attempt;
   job->max_attempts = state->max_attempts;
+
+  if (state->data) {
+    g_free(state->data->ai_last_payload);
+    state->data->ai_last_payload = g_strdup(payload);
+    g_clear_pointer(&state->data->ai_last_response, g_free);
+    g_clear_pointer(&state->data->ai_last_error, g_free);
+    ai_chat_dialog_update_debug_buffers(state);
+  }
 
   g_clear_object(&state->cancellable);
   state->cancellable = g_cancellable_new();
@@ -727,6 +878,13 @@ static GtkWidget *build_dialog(CanvasData *data) {
   gtk_menu_button_set_child(GTK_MENU_BUTTON(settings_button), settings_icon);
   gtk_box_append(GTK_BOX(provider_box), settings_button);
 
+  GtkWidget *debug_button = gtk_button_new();
+  gtk_widget_set_focusable(debug_button, FALSE);
+  GtkWidget *debug_icon = gtk_image_new_from_icon_name("dialog-information-symbolic");
+  gtk_button_set_child(GTK_BUTTON(debug_button), debug_icon);
+  gtk_widget_set_tooltip_text(debug_button, "Show last AI payload and response");
+  gtk_box_append(GTK_BOX(provider_box), debug_button);
+
   GtkWidget *popover = gtk_popover_new();
   GtkWidget *settings_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
   gtk_widget_set_margin_top(settings_box, 8);
@@ -816,6 +974,7 @@ static GtkWidget *build_dialog(CanvasData *data) {
   state->context_spin = GTK_SPIN_BUTTON(context_spin);
   state->history_spin = GTK_SPIN_BUTTON(history_spin);
   state->grammar_check = GTK_CHECK_BUTTON(grammar_check);
+  state->debug_button = debug_button;
   state->busy = FALSE;
 
   g_signal_connect(send_button, "clicked", G_CALLBACK(on_send_clicked), state);
@@ -823,6 +982,7 @@ static GtkWidget *build_dialog(CanvasData *data) {
   g_signal_connect(provider_combo, "changed", G_CALLBACK(on_provider_changed), state);
   g_signal_connect(save_button, "clicked", G_CALLBACK(on_settings_save), state);
   g_signal_connect(popover, "show", G_CALLBACK(on_settings_show), state);
+  g_signal_connect(debug_button, "clicked", G_CALLBACK(on_debug_clicked), state);
   g_signal_connect(dialog, "close-request", G_CALLBACK(on_dialog_close), state);
   GtkEventController *key_controller = gtk_event_controller_key_new();
   g_signal_connect(key_controller, "key-pressed", G_CALLBACK(on_prompt_key_pressed), state);
