@@ -19,7 +19,8 @@ typedef enum {
   SHAPE_CUBE,
   SHAPE_PLOT,
   SHAPE_OVAL,
-  SHAPE_TEXT_OUTLINE
+  SHAPE_TEXT_OUTLINE,
+  SHAPE_ASCII_ART
 } ShapeType;
 
 typedef enum {

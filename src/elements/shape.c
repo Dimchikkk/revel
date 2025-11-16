@@ -535,6 +535,832 @@ static const BrushStroke BRUSH_DEFAULT_STROKES[] = {
 
 static const BrushGlyph brush_default_glyph = BRUSH_GLYPH_ENTRY('?', 0.95, BRUSH_DEFAULT_STROKES);
 
+// ASCII Art character mappings (Spring Boot banner style, 6 lines per character)
+static const char* ascii_art_chars[] = {
+  // Space (index 0, char 32)
+  "      \n"
+  "      \n"
+  "      \n"
+  "      \n"
+  "      \n"
+  "      \n",
+
+  // ! (index 1, char 33)
+  "  _   \n"
+  " | |  \n"
+  " | |  \n"
+  " |_|  \n"
+  " (_)  \n"
+  "      \n",
+
+  // " (index 2, char 34)
+  " _ _  \n"
+  "( | ) \n"
+  " V V  \n"
+  "      \n"
+  "      \n"
+  "      \n",
+
+  // # (index 3, char 35)
+  "  _ _  \n"
+  " |_|_| \n"
+  " |_|_| \n"
+  " |_|_| \n"
+  "       \n"
+  "       \n",
+
+  // $ (index 4, char 36)
+  "  _  \n"
+  " / | \n"
+  "| |  \n"
+  " | | \n"
+  " |_| \n"
+  "     \n",
+
+  // % (index 5, char 37)
+  " _   \n"
+  "/ /  \n"
+  " /   \n"
+  "/ /  \n"
+  " /_  \n"
+  "     \n",
+
+  // & (index 6, char 38)
+  "  ___  \n"
+  " ( _ ) \n"
+  " / _ \\ \n"
+  "| (_| |\n"
+  " \\___/ \n"
+  "       \n",
+
+  // ' (index 7, char 39)
+  "  _  \n"
+  " ( ) \n"
+  " |/  \n"
+  "     \n"
+  "     \n"
+  "     \n",
+
+  // ( (index 8, char 40)
+  "   __\n"
+  "  / /\n"
+  " | | \n"
+  " | | \n"
+  "  \\_\\\n"
+  "     \n",
+
+  // ) (index 9, char 41)
+  "__   \n"
+  "\\ \\  \n"
+  " | | \n"
+  " | | \n"
+  "/_/  \n"
+  "     \n",
+
+  // * (index 10, char 42)
+  "      \n"
+  " \\_/_ \n"
+  " /o\\ \n"
+  "      \n"
+  "      \n"
+  "      \n",
+
+  // + (index 11, char 43)
+  "     \n"
+  "  _  \n"
+  "_| |_\n"
+  " |_| \n"
+  "     \n"
+  "     \n",
+
+  // , (index 12, char 44)
+  "    \n"
+  "    \n"
+  "    \n"
+  " _  \n"
+  "( ) \n"
+  "|/  \n",
+
+  // - (index 13, char 45)
+  "      \n"
+  "      \n"
+  " ____ \n"
+  "|____|\n"
+  "      \n"
+  "      \n",
+
+  // . (index 14, char 46)
+  "    \n"
+  "    \n"
+  "    \n"
+  " _  \n"
+  "(_) \n"
+  "    \n",
+
+  // / (index 15, char 47)
+  "    __\n"
+  "   / /\n"
+  "  / / \n"
+  " / /  \n"
+  "/_/   \n"
+  "      \n",
+
+  // 0 (index 16, char 48)
+  "  ___  \n"
+  " / _ \\ \n"
+  "| | | |\n"
+  "| |_| |\n"
+  " \\___/ \n"
+  "       \n",
+
+  // 1 (index 17, char 49)
+  " __  \n"
+  "/_ | \n"
+  " | | \n"
+  " | | \n"
+  " |_| \n"
+  "     \n",
+
+  // 2 (index 18, char 50)
+  " ___   \n"
+  "|__ \\  \n"
+  "   ) | \n"
+  "  / /  \n"
+  " |___| \n"
+  "       \n",
+
+  // 3 (index 19, char 51)
+  " ____  \n"
+  "|___ \\ \n"
+  "  __) |\n"
+  " |__ < \n"
+  " |___/ \n"
+  "       \n",
+
+  // 4 (index 20, char 52)
+  " _  _   \n"
+  "| || |  \n"
+  "| || |_ \n"
+  "|__   _|\n"
+  "   |_|  \n"
+  "        \n",
+
+  // 5 (index 21, char 53)
+  " _____ \n"
+  "| ____|\n"
+  "| |__  \n"
+  "|___ \\ \n"
+  " ___) |\n"
+  "|____/ \n",
+
+  // 6 (index 22, char 54)
+  "   __  \n"
+  "  / /  \n"
+  " / /_  \n"
+  "| '_ \\ \n"
+  "| (_) |\n"
+  " \\___/ \n",
+
+  // 7 (index 23, char 55)
+  " _____ \n"
+  "|___  |\n"
+  "   / / \n"
+  "  / /  \n"
+  " /_/   \n"
+  "       \n",
+
+  // 8 (index 24, char 56)
+  "  ___  \n"
+  " / _ \\ \n"
+  "| (_) |\n"
+  " > _ < \n"
+  "| (_) |\n"
+  " \\___/ \n",
+
+  // 9 (index 25, char 57)
+  "  ___  \n"
+  " / _ \\ \n"
+  "| (_) |\n"
+  " \\__, |\n"
+  "   / / \n"
+  "  /_/  \n",
+
+  // : (index 26, char 58)
+  "    \n"
+  " _  \n"
+  "(_) \n"
+  " _  \n"
+  "(_) \n"
+  "    \n",
+
+  // ; (index 27, char 59)
+  "    \n"
+  " _  \n"
+  "(_) \n"
+  " _  \n"
+  "( ) \n"
+  "|/  \n",
+
+  // < (index 28, char 60)
+  "   __\n"
+  "  / /\n"
+  " / / \n"
+  " \\ \\ \n"
+  "  \\_\\\n"
+  "     \n",
+
+  // = (index 29, char 61)
+  "      \n"
+  " ____ \n"
+  "|____|\n"
+  "|____|\n"
+  "      \n"
+  "      \n",
+
+  // > (index 30, char 62)
+  "__   \n"
+  "\\ \\  \n"
+  " \\ \\ \n"
+  " / / \n"
+  "/_/  \n"
+  "     \n",
+
+  // ? (index 31, char 63)
+  "  ___  \n"
+  " |__ \\ \n"
+  "   / / \n"
+  "  |_|  \n"
+  "  (_)  \n"
+  "       \n",
+
+  // @ (index 32, char 64)
+  "   ____  \n"
+  "  / __ \\ \n"
+  " / / _` |\n"
+  "| | (_| |\n"
+  " \\ \\__,_|\n"
+  "  \\____/ \n",
+
+  // A (index 33, char 65)
+  "          \n"
+  "    /\\    \n"
+  "   /  \\   \n"
+  "  / /\\ \\  \n"
+  " / ____ \\ \n"
+  "/_/    \\_\\\n",
+
+  // B (index 34, char 66)
+  " ____  \n"
+  "|  _ \\ \n"
+  "| |_) |\n"
+  "|  _ < \n"
+  "| |_) |\n"
+  "|____/ \n",
+
+  // C (index 35, char 67)
+  "  _____ \n"
+  " / ____|\n"
+  "| |     \n"
+  "| |     \n"
+  "| |____ \n"
+  " \\_____|\n",
+
+  // D (index 36, char 68)
+  " _____  \n"
+  "|  __ \\ \n"
+  "| |  | |\n"
+  "| |  | |\n"
+  "| |__| |\n"
+  "|_____/ \n",
+
+  // E (index 37, char 69)
+  " ______ \n"
+  "|  ____|\n"
+  "| |__   \n"
+  "|  __|  \n"
+  "| |____ \n"
+  "|______|\n",
+
+  // F (index 38, char 70)
+  " ______ \n"
+  "|  ____|\n"
+  "| |__   \n"
+  "|  __|  \n"
+  "| |     \n"
+  "|_|     \n",
+
+  // G (index 39, char 71)
+  "  _____ \n"
+  " / ____|\n"
+  "| |  __ \n"
+  "| | |_ |\n"
+  "| |__| |\n"
+  " \\_____|\n",
+
+  // H (index 40, char 72)
+  " _    _ \n"
+  "| |  | |\n"
+  "| |__| |\n"
+  "|  __  |\n"
+  "| |  | |\n"
+  "|_|  |_|\n",
+
+  // I (index 41, char 73)
+  " _____ \n"
+  "|_   _|\n"
+  "  | |  \n"
+  "  | |  \n"
+  " _| |_ \n"
+  "|_____|\n",
+
+  // J (index 42, char 74)
+  "      _ \n"
+  "     | |\n"
+  "     | |\n"
+  " _   | |\n"
+  "| |__| |\n"
+  " \\____/ \n",
+
+  // K (index 43, char 75)
+  " _  __\n"
+  "| |/ /\n"
+  "| ' / \n"
+  "|  <  \n"
+  "| . \\ \n"
+  "|_|\\_\\\n",
+
+  // L (index 44, char 76)
+  " _      \n"
+  "| |     \n"
+  "| |     \n"
+  "| |     \n"
+  "| |____ \n"
+  "|______|\n",
+
+  // M (index 45, char 77)
+  " __  __ \n"
+  "|  \\/  |\n"
+  "| \\  / |\n"
+  "| |\\/| |\n"
+  "| |  | |\n"
+  "|_|  |_|\n",
+
+  // N (index 46, char 78)
+  " _   _ \n"
+  "| \\ | |\n"
+  "|  \\| |\n"
+  "| . ` |\n"
+  "| |\\  |\n"
+  "|_| \\_|\n",
+
+  // O (index 47, char 79)
+  "  ____  \n"
+  " / __ \\ \n"
+  "| |  | |\n"
+  "| |  | |\n"
+  "| |__| |\n"
+  " \\____/ \n",
+
+  // P (index 48, char 80)
+  " _____  \n"
+  "|  __ \\ \n"
+  "| |__) |\n"
+  "|  ___/ \n"
+  "| |     \n"
+  "|_|     \n",
+
+  // Q (index 49, char 81)
+  "  ____  \n"
+  " / __ \\ \n"
+  "| |  | |\n"
+  "| |  | |\n"
+  "| |__| |\n"
+  " \\___\\_\\\n",
+
+  // R (index 50, char 82)
+  " _____  \n"
+  "|  __ \\ \n"
+  "| |__) |\n"
+  "|  _  / \n"
+  "| | \\ \\ \n"
+  "|_|  \\_\\\n",
+
+  // S (index 51, char 83)
+  "  _____ \n"
+  " / ____|\n"
+  "| (___  \n"
+  " \\___ \\ \n"
+  " ____) |\n"
+  "|_____/ \n",
+
+  // T (index 52, char 84)
+  " _______ \n"
+  "|__   __|\n"
+  "   | |   \n"
+  "   | |   \n"
+  "   | |   \n"
+  "   |_|   \n",
+
+  // U (index 53, char 85)
+  " _    _ \n"
+  "| |  | |\n"
+  "| |  | |\n"
+  "| |  | |\n"
+  "| |__| |\n"
+  " \\____/ \n",
+
+  // V (index 54, char 86)
+  "__      __\n"
+  "\\ \\    / /\n"
+  " \\ \\  / / \n"
+  "  \\ \\/ /  \n"
+  "   \\  /   \n"
+  "    \\/    \n",
+
+  // W (index 55, char 87)
+  "__          __\n"
+  "\\ \\        / /\n"
+  " \\ \\  /\\  / / \n"
+  "  \\ \\/  \\/ /  \n"
+  "   \\  /\\  /   \n"
+  "    \\/  \\/    \n",
+
+  // X (index 56, char 88)
+  "__   __\n"
+  "\\ \\ / /\n"
+  " \\ V / \n"
+  "  > <  \n"
+  " / . \\ \n"
+  "/_/ \\_\\\n",
+
+  // Y (index 57, char 89)
+  "__     __\n"
+  "\\ \\   / /\n"
+  " \\ \\_/ / \n"
+  "  \\   /  \n"
+  "   | |   \n"
+  "   |_|   \n",
+
+  // Z (index 58, char 90)
+  " ______\n"
+  "|___  /\n"
+  "   / / \n"
+  "  / /  \n"
+  " / /__ \n"
+  "/______|\n",
+
+  // [ (index 59, char 91)
+  " ___ \n"
+  "|  _|\n"
+  "| |  \n"
+  "| |  \n"
+  "| |_ \n"
+  "|___|\n",
+
+  // \\ (index 60, char 92)
+  "__    \n"
+  "\\ \\   \n"
+  " \\ \\  \n"
+  "  \\ \\ \n"
+  "   \\_\\\n"
+  "      \n",
+
+  // ] (index 61, char 93)
+  " ___ \n"
+  "|_  |\n"
+  "  | |\n"
+  "  | |\n"
+  " _| |\n"
+  "|___|\n",
+
+  // ^ (index 62, char 94)
+  " /\\ \n"
+  "|/\\|\n"
+  "    \n"
+  "    \n"
+  "    \n"
+  "    \n",
+
+  // _ (index 63, char 95)
+  "        \n"
+  "        \n"
+  "        \n"
+  "        \n"
+  " ______ \n"
+  "|______|\n",
+
+  // ` (index 64, char 96)
+  " _  \n"
+  "( ) \n"
+  " \\| \n"
+  "    \n"
+  "    \n"
+  "    \n",
+
+  // a (index 65, char 97)
+  "        \n"
+  "        \n"
+  "  __ _  \n"
+  " / _` | \n"
+  "| (_| | \n"
+  " \\__,_| \n",
+
+  // b (index 66, char 98)
+  " _     \n"
+  "| |    \n"
+  "| |__  \n"
+  "| '_ \\ \n"
+  "| |_) |\n"
+  "|_.__/ \n",
+
+  // c (index 67, char 99)
+  "       \n"
+  "       \n"
+  "  ___  \n"
+  " / __| \n"
+  "| (__  \n"
+  " \\___| \n",
+
+  // d (index 68, char 100)
+  "     _ \n"
+  "    | |\n"
+  "  __| |\n"
+  " / _` |\n"
+  "| (_| |\n"
+  " \\__,_|\n",
+
+  // e (index 69, char 101)
+  "       \n"
+  "       \n"
+  "  ___  \n"
+  " / _ \\ \n"
+  "|  __/ \n"
+  " \\___| \n",
+
+  // f (index 70, char 102)
+  "  __ \n"
+  " / _|\n"
+  "| |_ \n"
+  "|  _|\n"
+  "| |  \n"
+  "|_|  \n",
+
+  // g (index 71, char 103)
+  "        \n"
+  "        \n"
+  "  __ _  \n"
+  " / _` | \n"
+  " \\__, | \n"
+  " |___/  \n",
+
+  // h (index 72, char 104)
+  " _     \n"
+  "| |    \n"
+  "| |__  \n"
+  "| '_ \\ \n"
+  "| | | |\n"
+  "|_| |_|\n",
+
+  // i (index 73, char 105)
+  " _ \n"
+  "(_)\n"
+  " _ \n"
+  "| |\n"
+  "| |\n"
+  "|_|\n",
+
+  // j (index 74, char 106)
+  "    _ \n"
+  "   (_)\n"
+  "    _ \n"
+  "   | |\n"
+  "   | |\n"
+  "  _/ |\n",
+
+  // k (index 75, char 107)
+  " _    \n"
+  "| |   \n"
+  "| | __\n"
+  "| |/ /\n"
+  "|   < \n"
+  "|_|\\_\\\n",
+
+  // l (index 76, char 108)
+  " _ \n"
+  "| |\n"
+  "| |\n"
+  "| |\n"
+  "| |\n"
+  "|_|\n",
+
+  // m (index 77, char 109)
+  "            \n"
+  "            \n"
+  " _ __ ___   \n"
+  "| '_ ` _ \\  \n"
+  "| | | | | | \n"
+  "|_| |_| |_| \n",
+
+  // n (index 78, char 110)
+  "        \n"
+  "        \n"
+  " _ __   \n"
+  "| '_ \\  \n"
+  "| | | | \n"
+  "|_| |_| \n",
+
+  // o (index 79, char 111)
+  "        \n"
+  "        \n"
+  "  ___   \n"
+  " / _ \\  \n"
+  "| (_) | \n"
+  " \\___/  \n",
+
+  // p (index 80, char 112)
+  "        \n"
+  "        \n"
+  " _ __   \n"
+  "| '_ \\  \n"
+  "| .__/  \n"
+  "|_|     \n",
+
+  // q (index 81, char 113)
+  "        \n"
+  "        \n"
+  "  __ _  \n"
+  " / _` | \n"
+  " \\__, | \n"
+  "    |_| \n",
+
+  // r (index 82, char 114)
+  "       \n"
+  "       \n"
+  " _ __  \n"
+  "| '__| \n"
+  "| |    \n"
+  "|_|    \n",
+
+  // s (index 83, char 115)
+  "      \n"
+  "      \n"
+  " ___  \n"
+  "/ __| \n"
+  "\\__ \\ \n"
+  "|___/ \n",
+
+  // t (index 84, char 116)
+  " _   \n"
+  "| |  \n"
+  "| |_ \n"
+  "| __|\n"
+  "| |_ \n"
+  " \\__|\n",
+
+  // u (index 85, char 117)
+  "        \n"
+  "        \n"
+  " _   _  \n"
+  "| | | | \n"
+  "| |_| | \n"
+  " \\__,_| \n",
+
+  // v (index 86, char 118)
+  "        \n"
+  "        \n"
+  "__   __ \n"
+  "\\ \\ / / \n"
+  " \\ V /  \n"
+  "  \\_/   \n",
+
+  // w (index 87, char 119)
+  "            \n"
+  "            \n"
+  "__      __  \n"
+  "\\ \\ /\\ / /  \n"
+  " \\ V  V /   \n"
+  "  \\_/\\_/    \n",
+
+  // x (index 88, char 120)
+  "       \n"
+  "       \n"
+  "__  __ \n"
+  "\\ \\/ / \n"
+  " >  <  \n"
+  "/_/\\_\\ \n",
+
+  // y (index 89, char 121)
+  "        \n"
+  "        \n"
+  " _   _  \n"
+  "| | | | \n"
+  " \\__, | \n"
+  " |___/  \n",
+
+  // z (index 90, char 122)
+  "      \n"
+  "      \n"
+  " ____ \n"
+  "|_  / \n"
+  " / /  \n"
+  "/___| \n",
+
+  // { (index 91, char 123)
+  "   __\n"
+  "  / /\n"
+  " | | \n"
+  "/ /  \n"
+  "\\ \\  \n"
+  " |_| \n",
+
+  // | (index 92, char 124)
+  " _ \n"
+  "| |\n"
+  "| |\n"
+  "| |\n"
+  "| |\n"
+  "|_|\n",
+
+  // } (index 93, char 125)
+  "__   \n"
+  "\\ \\  \n"
+  " | | \n"
+  "  \\ \\\n"
+  "  / /\n"
+  " |_| \n",
+
+  // ~ (index 94, char 126)
+  " /\\/| \n"
+  "|/\\/ \n"
+  "     \n"
+  "     \n"
+  "     \n"
+  "     \n",
+};
+
+static const char* ascii_art_get_char(char c) {
+  // Map character to array index
+  if (c >= 32 && c <= 126) {
+    return ascii_art_chars[c - 32];
+  }
+  // Return space for unknown characters
+  return ascii_art_chars[0];
+}
+
+static char* text_to_ascii_art(const char *text) {
+  if (!text || strlen(text) == 0) {
+    return g_strdup("");
+  }
+
+  // Split each character's art into lines
+  GArray *lines[6];  // 6 lines per character
+  for (int i = 0; i < 6; i++) {
+    lines[i] = g_array_new(FALSE, FALSE, sizeof(char*));
+  }
+
+  // Track all split results for cleanup
+  GPtrArray *split_results = g_ptr_array_new();
+
+  // Process each character in the input text
+  for (const char *p = text; *p; p++) {
+    const char *art = ascii_art_get_char(*p);
+
+    // Split art string into 6 lines
+    char **art_lines = g_strsplit(art, "\n", -1);
+    g_ptr_array_add(split_results, art_lines);
+
+    for (int i = 0; i < 6 && art_lines[i]; i++) {
+      char *line = art_lines[i];
+      g_array_append_val(lines[i], line);
+    }
+  }
+
+  // Concatenate each line horizontally
+  GString *result = g_string_new("");
+  for (int i = 0; i < 6; i++) {
+    for (guint j = 0; j < lines[i]->len; j++) {
+      char *segment = g_array_index(lines[i], char*, j);
+      g_string_append(result, segment);
+    }
+    if (i < 5) {
+      g_string_append_c(result, '\n');
+    }
+  }
+
+  // Cleanup
+  for (guint i = 0; i < split_results->len; i++) {
+    char **split = g_ptr_array_index(split_results, i);
+    g_strfreev(split);
+  }
+  g_ptr_array_free(split_results, TRUE);
+
+  for (int i = 0; i < 6; i++) {
+    g_array_free(lines[i], TRUE);
+  }
+
+  return g_string_free(result, FALSE);
+}
+
 static const BrushGlyph* brush_find_glyph(gunichar codepoint) {
   for (guint i = 0; i < G_N_ELEMENTS(brush_glyphs); i++) {
     if (brush_glyphs[i].codepoint == codepoint) {
@@ -1232,6 +2058,52 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
         cairo_save(cr);
         text_outline_draw(shape, cr);
         cairo_restore(cr);
+      }
+      break;
+    case SHAPE_ASCII_ART:
+      {
+        // Render ASCII art text
+        if (shape->text && strlen(shape->text) > 0) {
+          char *ascii_art = text_to_ascii_art(shape->text);
+
+          // Use Pango to render the ASCII art with monospace font
+          PangoLayout *layout = pango_cairo_create_layout(cr);
+          PangoFontDescription *font_desc = pango_font_description_from_string("Monospace 10");
+          pango_layout_set_font_description(layout, font_desc);
+          pango_font_description_free(font_desc);
+
+          pango_layout_set_text(layout, ascii_art, -1);
+
+          // Get the size of the rendered ASCII art
+          int text_width, text_height;
+          pango_layout_get_pixel_size(layout, &text_width, &text_height);
+
+          // Calculate scale to fit within element bounds
+          double padding = 10.0;
+          double scale_x = (element->width - 2 * padding) / (double)text_width;
+          double scale_y = (element->height - 2 * padding) / (double)text_height;
+          double scale = MIN(scale_x, scale_y);
+          if (scale > 1.0) scale = 1.0; // Don't upscale
+
+          // Center the ASCII art within the element
+          double scaled_width = text_width * scale;
+          double scaled_height = text_height * scale;
+          double offset_x = (element->width - scaled_width) / 2.0;
+          double offset_y = (element->height - scaled_height) / 2.0;
+
+          cairo_save(cr);
+          cairo_translate(cr, element->x + offset_x, element->y + offset_y);
+          cairo_scale(cr, scale, scale);
+
+          // Render the ASCII art
+          cairo_set_source_rgba(cr, shape->text_r, shape->text_g, shape->text_b, shape->text_a);
+          pango_cairo_show_layout(cr, layout);
+
+          cairo_restore(cr);
+
+          g_object_unref(layout);
+          g_free(ascii_art);
+        }
       }
       break;
     case SHAPE_CYLINDER_VERTICAL:
@@ -1998,7 +2870,7 @@ static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   }
 
   // Draw text if not editing and text exists (but not for plots - their text is data)
-  if (!shape->editing && shape->text && strlen(shape->text) > 0 && shape->shape_type != SHAPE_PLOT && shape->shape_type != SHAPE_TEXT_OUTLINE) {
+  if (!shape->editing && shape->text && strlen(shape->text) > 0 && shape->shape_type != SHAPE_PLOT && shape->shape_type != SHAPE_TEXT_OUTLINE && shape->shape_type != SHAPE_ASCII_ART) {
     PangoLayout *layout = pango_cairo_create_layout(cr);
     PangoFontDescription *font_desc = pango_font_description_from_string(shape->font_description);
     pango_layout_set_font_description(layout, font_desc);
@@ -2295,7 +3167,12 @@ Shape* shape_create(ElementPosition position,
   shape->stroke_a = shape_config.stroke_color.a;
   shape->base.canvas_data = data;
 
-  shape->text = g_strdup(text.text);
+  // Set default text for ASCII art shapes
+  if (shape_type == SHAPE_ASCII_ART && (!text.text || strlen(text.text) == 0)) {
+    shape->text = g_strdup("ASCII");
+  } else {
+    shape->text = g_strdup(text.text);
+  }
   shape->text_r = text.text_color.r;
   shape->text_g = text.text_color.g;
   shape->text_b = text.text_color.b;

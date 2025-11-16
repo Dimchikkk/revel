@@ -27,6 +27,7 @@ typedef struct {
   GtkWidget *plot_btn;
   GtkWidget *oval_btn;
   GtkWidget *text_outline_btn;
+  GtkWidget *ascii_art_btn;
   GtkStringList *fill_model;
   GtkStringList *stroke_model;
 } ShapeDialogData;
@@ -344,6 +345,33 @@ static void draw_shape_icon(GtkDrawingArea *area, cairo_t *cr, int width, int he
                                      1.0);
     return;
   }
+  case SHAPE_ASCII_ART: {
+    // Draw simple ASCII art sample
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+
+    // Create pango layout for monospace text
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *font_desc = pango_font_description_from_string("Monospace 5");
+    pango_layout_set_font_description(layout, font_desc);
+    pango_font_description_free(font_desc);
+
+    // Simple ASCII art sample (letter "M" in banner font style)
+    const char *sample =
+      " __  __ \n"
+      "|  \\/  |\n"
+      "| |\\/| |\n"
+      "|_|  |_|";
+    pango_layout_set_text(layout, sample, -1);
+
+    // Center the text
+    int text_w, text_h;
+    pango_layout_get_pixel_size(layout, &text_w, &text_h);
+    cairo_move_to(cr, (width - text_w) / 2.0, (height - text_h) / 2.0);
+    pango_cairo_show_layout(cr, layout);
+
+    g_object_unref(layout);
+    return;
+  }
   case SHAPE_CUBE: {
     double offset = MIN(draw_width, draw_height) * 0.35;
     // Front face
@@ -497,7 +525,7 @@ static void on_shape_button_clicked(GtkButton *button, gpointer user_data) {
   data->canvas_data->shape_stroke_style = data->stroke_style;
   data->canvas_data->shape_fill_style = data->fill_style;
   data->canvas_data->selected_shape_type = shape_type;
-  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW || shape_type == SHAPE_TEXT_OUTLINE) {
+  if (shape_type == SHAPE_LINE || shape_type == SHAPE_ARROW || shape_type == SHAPE_BEZIER || shape_type == SHAPE_CURVED_ARROW || shape_type == SHAPE_TEXT_OUTLINE || shape_type == SHAPE_ASCII_ART) {
     data->canvas_data->shape_filled = FALSE;
     data->filled = FALSE;
   } else {
@@ -565,6 +593,9 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
       break;
     case GDK_KEY_x:
       button = data->text_outline_btn;
+      break;
+    case GDK_KEY_m:
+      button = data->ascii_art_btn;
       break;
     case GDK_KEY_k:
       button = data->cube_btn;
@@ -796,6 +827,9 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
 
   data->text_outline_btn = create_shape_button("Outline Text (X)", "X", SHAPE_TEXT_OUTLINE, data);
   gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->text_outline_btn, -1);
+
+  data->ascii_art_btn = create_shape_button("ASCII Art (M)", "M", SHAPE_ASCII_ART, data);
+  gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->ascii_art_btn, -1);
 
   data->vcylinder_btn = create_shape_button("V-Cylinder (V)", "V", SHAPE_CYLINDER_VERTICAL, data);
   gtk_flow_box_insert(GTK_FLOW_BOX(shapes_flowbox), data->vcylinder_btn, -1);
