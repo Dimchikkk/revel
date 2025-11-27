@@ -2,11 +2,19 @@ CC = gcc
 PKG_CFLAGS = `pkg-config --cflags gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0 json-glib-1.0`
 PKG_LIBS = `pkg-config --libs gtk4 sqlite3 gstreamer-1.0 gstreamer-video-1.0 gstreamer-app-1.0 json-glib-1.0`
 
+# Detect OS
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    PLATFORM_LIBS = -luuid -lutil
+else ifeq ($(UNAME_S),Darwin)
+    PLATFORM_LIBS =
+endif
+
 # Build modes: make (debug) or make RELEASE=1 (optimized production)
 DEBUG_FLAGS = -Wall -g
 RELEASE_FLAGS = -Wall -O3 -DNDEBUG
 CFLAGS = $(if $(RELEASE),$(RELEASE_FLAGS),$(DEBUG_FLAGS)) $(PKG_CFLAGS) -Isrc
-LIBS = $(PKG_LIBS) -lm -luuid -lutil
+LIBS = $(PKG_LIBS) -lm $(PLATFORM_LIBS)
 
 SRC_DIR = src
 TEST_DIR = tests

@@ -13,7 +13,6 @@
 #include "../elements/connection.h"
 #include "../elements/space.h"
 #include <pango/pangocairo.h>
-#include <gtk/gtkdialog.h>
 #include <math.h>
 #include "../undo_manager.h"
 #include "../dsl/dsl_executor.h"
