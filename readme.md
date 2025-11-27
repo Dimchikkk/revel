@@ -43,17 +43,24 @@ Handles large datasets. Viewport culling means only visible stuff gets rendered.
 
 ## Building
 
-Dependencies (Ubuntu/Debian):
+**Linux (Ubuntu/Debian):**
 ```bash
 sudo apt install libgtk-4-dev libsqlite3-dev libjson-glib-dev \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav
 ```
 
-Build:
+**macOS (Homebrew):**
+```bash
+brew install gtk4 gstreamer gstreamer-development pkgconf sqlite font-ubuntu-mono
+```
+
+**Build:**
 ```bash
 make -j$(nproc) && ./revel
 ```
+
+*Note: Primary development is on Linux. macOS build uses Command (⌘) key for shortcuts.*
 
 Try the demo:
 ```bash
