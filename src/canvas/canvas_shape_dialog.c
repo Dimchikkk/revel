@@ -28,8 +28,6 @@ typedef struct {
   GtkWidget *oval_btn;
   GtkWidget *text_outline_btn;
   GtkWidget *ascii_art_btn;
-  GtkStringList *fill_model;
-  GtkStringList *stroke_model;
 } ShapeDialogData;
 
 static void on_dialog_response(GtkDialog *dialog, gint response_id, gpointer user_data);
@@ -45,8 +43,6 @@ static void shape_dialog_data_free(ShapeDialogData *data) {
   if (data->icon_widgets) {
     g_ptr_array_free(data->icon_widgets, TRUE);
   }
-  g_clear_object(&data->fill_model);
-  g_clear_object(&data->stroke_model);
   g_free(data);
 }
 
@@ -737,8 +733,8 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   gtk_grid_attach(GTK_GRID(style_grid), fill_label, 0, 0, 1, 1);
 
   const char *fill_options[] = {"Outline", "Solid", "Hachure", "Cross Hatch", NULL};
-  data->fill_model = gtk_string_list_new(fill_options);
-  GtkWidget *fill_combo = gtk_drop_down_new(G_LIST_MODEL(data->fill_model), NULL);
+  GtkStringList *fill_model = gtk_string_list_new(fill_options);
+  GtkWidget *fill_combo = gtk_drop_down_new(G_LIST_MODEL(fill_model), NULL);
   gtk_widget_set_hexpand(fill_combo, TRUE);
   int fill_index = 0;
   if (data->filled) {
@@ -765,8 +761,8 @@ void canvas_show_shape_selection_dialog(GtkButton *button, gpointer user_data) {
   gtk_grid_attach(GTK_GRID(style_grid), stroke_label, 0, 1, 1, 1);
 
   const char *stroke_options[] = {"Solid", "Dashed", "Dotted", NULL};
-  data->stroke_model = gtk_string_list_new(stroke_options);
-  GtkWidget *stroke_combo = gtk_drop_down_new(G_LIST_MODEL(data->stroke_model), NULL);
+  GtkStringList *stroke_model = gtk_string_list_new(stroke_options);
+  GtkWidget *stroke_combo = gtk_drop_down_new(G_LIST_MODEL(stroke_model), NULL);
   gtk_widget_set_hexpand(stroke_combo, TRUE);
   int stroke_index = 0;
   switch (data->stroke_style) {

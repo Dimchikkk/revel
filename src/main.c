@@ -521,9 +521,9 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   g_object_unref(provider);
 
-  // Force light color scheme for macOS compatibility
+  // Force dark theme consistently on all platforms
   GtkSettings *settings = gtk_settings_get_default();
-  g_object_set(settings, "gtk-application-prefer-dark-theme", FALSE, NULL);
+  g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, NULL);
 
   gtk_window_present(GTK_WINDOW(window));
 
