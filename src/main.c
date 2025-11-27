@@ -521,6 +521,10 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
 
   g_object_unref(provider);
 
+  // Force light color scheme for macOS compatibility
+  GtkSettings *settings = gtk_settings_get_default();
+  g_object_set(settings, "gtk-application-prefer-dark-theme", FALSE, NULL);
+
   gtk_window_present(GTK_WINDOW(window));
 
   // Execute DSL file if specified via command line
