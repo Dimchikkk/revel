@@ -10,6 +10,7 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
 #include "../undo_manager.h"
+#include "../platform.h"
 
 gboolean gst_initialized = FALSE;
 
@@ -640,7 +641,7 @@ void media_note_toggle_audio_playback(Element *element) {
 gboolean media_note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   MediaNote *media_note = (MediaNote*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & GDK_CONTROL_MASK) {
+    if (state & REVEL_MOD_MASK) {
       // Enter finishes editing
       GtkTextView *text_view = GTK_TEXT_VIEW(media_note->text_view);
       GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);

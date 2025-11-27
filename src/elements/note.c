@@ -5,6 +5,7 @@
 #include <pango/pangocairo.h>
 #include <math.h>
 #include "../undo_manager.h"
+#include "../platform.h"
 
 static ElementVTable note_vtable = {
   .draw = note_draw,
@@ -69,7 +70,7 @@ static void note_update_text_view_position(Note *note) {
 gboolean note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   Note *note = (Note*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & GDK_CONTROL_MASK) {
+    if (state & REVEL_MOD_MASK) {
       // Ctrl+Enter inserts a newline
       GtkTextView *text_view = GTK_TEXT_VIEW(note->text_view);
       GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);

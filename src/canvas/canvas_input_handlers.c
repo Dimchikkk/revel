@@ -23,6 +23,7 @@
 #include "canvas/canvas_clone_dialog.h"
 #include "../ui_event_bus.h"
 #include "../ai/ai_chat_dialog.h"
+#include "../platform.h"
 
 #include <graphene.h>
 #include <math.h>
@@ -806,7 +807,7 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
   }
 
   if (element && element->type == ELEMENT_MEDIA_FILE &&
-      (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK)))) {
+      (n_press == 2 || (n_press == 1 && (data->modifier_state & REVEL_MOD_MASK)))) {
     MediaNote *media_note = (MediaNote*)element;
     if (media_note->media_type == MEDIA_TYPE_VIDEO) {
       media_note_toggle_video_playback(element);
@@ -822,7 +823,7 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
   }
 
   if (element && element->type == ELEMENT_SPACE &&
-      (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK)))) {
+      (n_press == 2 || (n_press == 1 && (data->modifier_state & REVEL_MOD_MASK)))) {
     model_save_elements(data->model);
     ModelElement *model_element = model_get_by_visual(data->model, element);
     switch_to_space(data, model_element->target_space_uuid);
@@ -982,7 +983,7 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
 
     element_bring_to_front(element, &data->next_z_index);
 
-    if (n_press == 2 || (n_press == 1 && (data->modifier_state & GDK_CONTROL_MASK))) {
+    if (n_press == 2 || (n_press == 1 && (data->modifier_state & REVEL_MOD_MASK))) {
       element_start_editing(element, data->overlay);
       gtk_widget_queue_draw(data->drawing_area);
       return;
@@ -1854,18 +1855,18 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
   g_list_free(visual_elements);
 
   if (!data->selected_elements &&
-      !(state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) &&
+      !(state & (REVEL_MOD_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) &&
       keyval >= 0x20 && keyval <= 0x7E) {
     canvas_on_add_text(NULL, data);
     return;
   }
 
-  if (keyval == GDK_KEY_F1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) {
+  if (keyval == GDK_KEY_F1 && (state & (REVEL_MOD_MASK | GDK_SHIFT_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) {
     canvas_show_shortcuts_dialog(data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_c) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_c) {
     if (data->selected_elements) {
       if (data->copied_elements) {
         g_list_free(data->copied_elements);
@@ -1886,32 +1887,32 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_v) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_v) {
     canvas_on_paste(data->drawing_area, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_s) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_s) {
     canvas_show_search_dialog(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_N) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_N) {
     canvas_on_add_note(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_n) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_n) {
     canvas_on_add_text(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_e) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_e) {
     canvas_show_script_dialog(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_r) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_r) {
     if (data->ai_toggle_button) {
       if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->ai_toggle_button))) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->ai_toggle_button), TRUE);
@@ -1924,45 +1925,45 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_d) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_d) {
     canvas_toggle_drawing_mode(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_l) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_l) {
     extern void canvas_reset_view(GtkButton *button, gpointer user_data);
     canvas_reset_view(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_o) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_o) {
     canvas_show_shape_selection_dialog(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_P) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_P) {
     canvas_on_add_paper_note(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_S) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_S) {
     canvas_on_add_space(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_t) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_t) {
     extern void toggle_toolbar_visibility(CanvasData *data);
     toggle_toolbar_visibility(data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_T) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_T) {
     extern void toggle_toolbar_auto_hide(CanvasData *data);
     toggle_toolbar_auto_hide(data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_j) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_j) {
     if (data->tree_toggle_button) {
       gboolean is_active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->tree_toggle_button));
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->tree_toggle_button), !is_active);
@@ -1970,17 +1971,17 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_z) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_z) {
     on_undo_clicked(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_y) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_y) {
     on_redo_clicked(NULL, data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && (keyval == GDK_KEY_a || keyval == GDK_KEY_A)) {
+  if ((state & REVEL_MOD_MASK) && (keyval == GDK_KEY_a || keyval == GDK_KEY_A)) {
     canvas_clear_selection(data);
     GList *elements = canvas_get_visual_elements(data);
     for (GList *l = elements; l != NULL; l = l->next) {
@@ -1995,7 +1996,7 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && (keyval == GDK_KEY_plus || keyval == GDK_KEY_equal)) {
+  if ((state & REVEL_MOD_MASK) && (keyval == GDK_KEY_plus || keyval == GDK_KEY_equal)) {
     if (data->selected_elements) {
       for (GList *l = data->selected_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
@@ -2025,7 +2026,7 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && (keyval == GDK_KEY_minus || keyval == GDK_KEY_underscore)) {
+  if ((state & REVEL_MOD_MASK) && (keyval == GDK_KEY_minus || keyval == GDK_KEY_underscore)) {
     if (data->selected_elements) {
       for (GList *l = data->selected_elements; l != NULL; l = l->next) {
         Element *element = (Element*)l->data;
@@ -2088,13 +2089,13 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_Right) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_Right) {
     extern void canvas_presentation_next_slide(CanvasData *data);
     canvas_presentation_next_slide(data);
     return;
   }
 
-  if ((state & GDK_CONTROL_MASK) && keyval == GDK_KEY_Left) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_Left) {
     extern void canvas_presentation_prev_slide(CanvasData *data);
     canvas_presentation_prev_slide(data);
     return;

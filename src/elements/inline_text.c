@@ -5,6 +5,7 @@
 #include "../canvas/canvas_actions.h"
 #include "../model.h"
 #include "../undo_manager.h"
+#include "../platform.h"
 #include <math.h>
 #include <string.h>
 
@@ -260,7 +261,7 @@ gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, gu
   InlineText *text = (InlineText*)user_data;
 
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & GDK_CONTROL_MASK) {
+    if (state & REVEL_MOD_MASK) {
       // Ctrl+Enter does nothing special for inline text (allow newline)
       return FALSE;
     } else {
