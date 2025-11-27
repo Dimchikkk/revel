@@ -52,7 +52,7 @@ sudo apt install libgtk-4-dev libsqlite3-dev libjson-glib-dev \
 
 **macOS (Homebrew):**
 ```bash
-brew install gtk4 gstreamer gstreamer-development pkgconf sqlite font-ubuntu-mono
+brew install gtk4 gstreamer gstreamer-development pkgconf sqlite json-glib font-ubuntu-mono
 ```
 
 **Build:**
