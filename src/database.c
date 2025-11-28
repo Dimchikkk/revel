@@ -1347,11 +1347,7 @@ int database_get_current_space_uuid(sqlite3 *db, char **space_uuid) {
 }
 
 int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
-  // Begin transaction to ensure atomicity
-  if (!database_begin_transaction(db)) {
-    fprintf(stderr, "Failed to begin transaction\n");
-    return 0;
-  }
+  // Note: This function should be called within an existing transaction
 
   // Verify the target space exists
   const char *check_sql = "SELECT uuid FROM spaces WHERE uuid = ?";
@@ -1395,10 +1391,9 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
       }
     }
 
-    // If still no space found, rollback and fail
+    // If still no space found, fail
     if (!target_uuid) {
       fprintf(stderr, "No valid space found in database\n");
-      database_rollback_transaction(db);
       return 0;
     }
   } else {
@@ -1413,7 +1408,6 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
     fprintf(stderr, "SQL error: %s\n", err_msg);
     sqlite3_free(err_msg);
     g_free(target_uuid);
-    database_rollback_transaction(db);
     return 0;
   }
 
@@ -1424,7 +1418,6 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
   if (sqlite3_prepare_v2(db, set_sql, -1, &set_stmt, NULL) != SQLITE_OK) {
     fprintf(stderr, "Failed to prepare statement: %s\n", sqlite3_errmsg(db));
     g_free(target_uuid);
-    database_rollback_transaction(db);
     return 0;
   }
 
@@ -1437,17 +1430,6 @@ int database_set_current_space_uuid(sqlite3 *db, const char *space_uuid) {
   }
 
   sqlite3_finalize(set_stmt);
-
-  if (result) {
-    if (!database_commit_transaction(db)) {
-      fprintf(stderr, "Failed to commit transaction\n");
-      g_free(target_uuid);
-      return 0;
-    }
-  } else {
-    database_rollback_transaction(db);
-  }
-
   g_free(target_uuid);
   return result;
 }
