@@ -14,7 +14,7 @@ int database_init(sqlite3 **db, const char *filename) {
 
   // Performance optimizations for faster loading
   sqlite3_exec(*db, "PRAGMA foreign_keys = ON;", NULL, NULL, NULL);
-  sqlite3_exec(*db, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
+  // sqlite3_exec(*db, "PRAGMA journal_mode = WAL;", NULL, NULL, NULL);
   sqlite3_exec(*db, "PRAGMA synchronous = NORMAL;", NULL, NULL, NULL);
   sqlite3_exec(*db, "PRAGMA cache_size = -64000;", NULL, NULL, NULL);  // 64MB cache
   sqlite3_exec(*db, "PRAGMA temp_store = MEMORY;", NULL, NULL, NULL);
