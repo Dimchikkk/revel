@@ -20,4 +20,14 @@ gboolean on_window_motion(GtkEventControllerMotion *controller, double x, double
 void canvas_input_register_event_handlers(CanvasData *data);
 void canvas_input_unregister_event_handlers(CanvasData *data);
 
+// Drag gesture handlers (for proper macOS support)
+void canvas_on_drag_begin(GtkGestureDrag *gesture, double start_x, double start_y, gpointer user_data);
+void canvas_on_drag_update(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data);
+void canvas_on_drag_end(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data);
+
+// Right-click drag gesture handlers (for proper macOS panning support)
+void canvas_on_right_drag_begin(GtkGestureDrag *gesture, double start_x, double start_y, gpointer user_data);
+void canvas_on_right_drag_update(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data);
+void canvas_on_right_drag_end(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data);
+
 #endif

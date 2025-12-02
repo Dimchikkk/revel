@@ -14,6 +14,9 @@ typedef enum {
   UI_EVENT_POINTER_LEAVE,
   UI_EVENT_SCROLL,
   UI_EVENT_KEY_PRESS,
+  UI_EVENT_DRAG_BEGIN,
+  UI_EVENT_DRAG_UPDATE,
+  UI_EVENT_DRAG_END,
   UI_EVENT_TYPE_COUNT
 } UIEventType;
 
@@ -37,6 +40,14 @@ typedef struct {
 } UIScrollEventData;
 
 typedef struct {
+  double start_x;
+  double start_y;
+  double offset_x;
+  double offset_y;
+  GdkModifierType modifiers;
+} UIDragEventData;
+
+typedef struct {
   UIEventType type;
   CanvasData *canvas;
   GdkEvent *gdk_event;
@@ -44,6 +55,7 @@ typedef struct {
     UIPointerEventData pointer;
     UIKeyEventData key;
     UIScrollEventData scroll;
+    UIDragEventData drag;
   } data;
 } UIEvent;
 

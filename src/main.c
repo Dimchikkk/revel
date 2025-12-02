@@ -366,10 +366,17 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_widget_set_focusable(drawing_area, TRUE);
   gtk_overlay_set_child(GTK_OVERLAY(overlay), drawing_area);
 
-  // Use the database filename from command line args or default
-  const char *db_filename = g_database_filename ? g_database_filename : "revel.db";
+  // Use the database filename from command line args or default to home directory
+  char *db_filename;
+  if (g_database_filename) {
+    db_filename = g_strdup(g_database_filename);
+  } else {
+    const char *home = g_get_home_dir();
+    db_filename = g_build_filename(home, "revel.db", NULL);
+  }
 
   CanvasData *data = canvas_data_new_with_db(drawing_area, overlay, db_filename);
+  g_free(db_filename);
   data->zoom_entry = zoom_entry;
   data->toolbar = toolbar;
   data->toolbar_revealer = toolbar_revealer;
@@ -416,6 +423,22 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(left_click_controller, "pressed", G_CALLBACK(canvas_on_left_click), data);
   g_signal_connect(left_click_controller, "released", G_CALLBACK(canvas_on_left_click_release), data);
   gtk_widget_add_controller(drawing_area, GTK_EVENT_CONTROLLER(left_click_controller));
+
+  // Drag gesture controller (for proper macOS drag handling)
+  GtkGesture *drag_controller = gtk_gesture_drag_new();
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag_controller), GDK_BUTTON_PRIMARY);
+  g_signal_connect(drag_controller, "drag-begin", G_CALLBACK(canvas_on_drag_begin), data);
+  g_signal_connect(drag_controller, "drag-update", G_CALLBACK(canvas_on_drag_update), data);
+  g_signal_connect(drag_controller, "drag-end", G_CALLBACK(canvas_on_drag_end), data);
+  gtk_widget_add_controller(drawing_area, GTK_EVENT_CONTROLLER(drag_controller));
+
+  // Right-click drag gesture controller (for proper macOS panning)
+  GtkGesture *right_drag_controller = gtk_gesture_drag_new();
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(right_drag_controller), GDK_BUTTON_SECONDARY);
+  g_signal_connect(right_drag_controller, "drag-begin", G_CALLBACK(canvas_on_right_drag_begin), data);
+  g_signal_connect(right_drag_controller, "drag-update", G_CALLBACK(canvas_on_right_drag_update), data);
+  g_signal_connect(right_drag_controller, "drag-end", G_CALLBACK(canvas_on_right_drag_end), data);
+  gtk_widget_add_controller(drawing_area, GTK_EVENT_CONTROLLER(right_drag_controller));
 
   GtkEventController *motion_controller = gtk_event_controller_motion_new();
   g_signal_connect(motion_controller, "motion", G_CALLBACK(canvas_on_motion), data);
