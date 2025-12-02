@@ -208,6 +208,12 @@ void canvas_on_motion(GtkEventControllerMotion *controller, double x, double y, 
 void canvas_on_right_click_release(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
 
+  // If a right-drag gesture is active, let the drag-end handler process the release instead
+  // This prevents the click release from prematurely ending panning on macOS
+  if (data->right_drag_gesture_active) {
+    return;
+  }
+
   GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
   if (event) {
     data->modifier_state = gdk_event_get_modifier_state(event);
@@ -227,6 +233,12 @@ void canvas_on_right_click_release(GtkGestureClick *gesture, int n_press, double
 
 void canvas_on_left_click_release(GtkGestureClick *gesture, int n_press, double x, double y, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
+
+  // If a drag gesture is active, let the drag-end handler process the release instead
+  // This prevents the click release from prematurely ending drags on macOS
+  if (data->drag_gesture_active) {
+    return;
+  }
 
   GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
   if (event) {
@@ -419,7 +431,12 @@ void canvas_update_cursor(CanvasData *data, int x, int y) {
       }
     }
 
-    canvas_set_cursor(data, gdk_cursor_new_from_name("move", NULL));
+    // Only show move cursor if element is selected
+    if (canvas_is_element_selected(data, element)) {
+      canvas_set_cursor(data, gdk_cursor_new_from_name("move", NULL));
+    } else {
+      canvas_set_cursor(data, gdk_cursor_new_from_name("default", NULL));
+    }
     return;
   } else {
     canvas_set_cursor(data, gdk_cursor_new_from_name("default", NULL));
@@ -812,4 +829,150 @@ gboolean on_window_motion(GtkEventControllerMotion *controller, double x, double
   }
 
   return FALSE;
+}
+
+void canvas_on_drag_begin(GtkGestureDrag *gesture, double start_x, double start_y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
+  if (event) {
+    data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  // Store the drag start position
+  data->drag_gesture_start_x = start_x;
+  data->drag_gesture_start_y = start_y;
+  data->drag_gesture_active = TRUE;
+
+  UIEvent ui_event = {0};
+  ui_event.type = UI_EVENT_DRAG_BEGIN;
+  ui_event.canvas = data;
+  ui_event.gdk_event = event;
+  ui_event.data.drag.start_x = start_x;
+  ui_event.data.drag.start_y = start_y;
+  ui_event.data.drag.offset_x = 0;
+  ui_event.data.drag.offset_y = 0;
+  ui_event.data.drag.modifiers = data->modifier_state;
+
+  ui_event_bus_emit(&ui_event);
+}
+
+void canvas_on_drag_update(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if (!data->drag_gesture_active) {
+    return;
+  }
+
+  GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
+  if (event) {
+    data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  UIEvent ui_event = {0};
+  ui_event.type = UI_EVENT_DRAG_UPDATE;
+  ui_event.canvas = data;
+  ui_event.gdk_event = event;
+  ui_event.data.drag.start_x = data->drag_gesture_start_x;
+  ui_event.data.drag.start_y = data->drag_gesture_start_y;
+  ui_event.data.drag.offset_x = offset_x;
+  ui_event.data.drag.offset_y = offset_y;
+  ui_event.data.drag.modifiers = data->modifier_state;
+
+  ui_event_bus_emit(&ui_event);
+}
+
+void canvas_on_drag_end(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
+  if (event) {
+    data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  data->drag_gesture_active = FALSE;
+
+  UIEvent ui_event = {0};
+  ui_event.type = UI_EVENT_DRAG_END;
+  ui_event.canvas = data;
+  ui_event.gdk_event = event;
+  ui_event.data.drag.start_x = data->drag_gesture_start_x;
+  ui_event.data.drag.start_y = data->drag_gesture_start_y;
+  ui_event.data.drag.offset_x = offset_x;
+  ui_event.data.drag.offset_y = offset_y;
+  ui_event.data.drag.modifiers = data->modifier_state;
+
+  ui_event_bus_emit(&ui_event);
+}
+
+void canvas_on_right_drag_begin(GtkGestureDrag *gesture, double start_x, double start_y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
+  if (event) {
+    data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  // Store the drag start position
+  data->right_drag_gesture_start_x = start_x;
+  data->right_drag_gesture_start_y = start_y;
+  data->right_drag_gesture_active = TRUE;
+
+  // Convert to canvas coordinates to check if we're over an element
+  int cx, cy;
+  canvas_screen_to_canvas(data, (int)start_x, (int)start_y, &cx, &cy);
+  Element *element = canvas_pick_element_including_locked(data, cx, cy);
+
+  // If not over an element, start panning
+  if (!element) {
+    data->panning = TRUE;
+    data->pan_start_x = (int)start_x;
+    data->pan_start_y = (int)start_y;
+    canvas_set_cursor(data, gdk_cursor_new_from_name("grabbing", NULL));
+  }
+}
+
+void canvas_on_right_drag_update(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+
+  if (!data->right_drag_gesture_active) {
+    return;
+  }
+
+  GdkEvent *event = gtk_gesture_get_last_event(GTK_GESTURE(gesture), NULL);
+  if (event) {
+    data->modifier_state = gdk_event_get_modifier_state(event);
+  }
+
+  if (data->panning) {
+    // Calculate actual current position
+    double current_x = data->right_drag_gesture_start_x + offset_x;
+    double current_y = data->right_drag_gesture_start_y + offset_y;
+
+    int dx = (int)current_x - data->pan_start_x;
+    int dy = (int)current_y - data->pan_start_y;
+
+    data->offset_x += dx;
+    data->offset_y += dy;
+
+    data->pan_start_x = (int)current_x;
+    data->pan_start_y = (int)current_y;
+
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+}
+
+void canvas_on_right_drag_end(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data) {
+  (void)gesture;
+  (void)offset_x;
+  (void)offset_y;
+
+  CanvasData *data = (CanvasData*)user_data;
+
+  data->right_drag_gesture_active = FALSE;
+
+  if (data->panning) {
+    data->panning = FALSE;
+    canvas_set_cursor(data, data->default_cursor);
+  }
 }

@@ -152,6 +152,16 @@ struct _CanvasData {
   GHashTable *dsl_aliases;   // alias string -> uuid string
 
   AiRuntime *ai_runtime;
+
+  // Drag gesture state (for proper macOS drag handling)
+  double drag_gesture_start_x;
+  double drag_gesture_start_y;
+  gboolean drag_gesture_active;
+
+  // Right-drag gesture state (for proper macOS panning)
+  double right_drag_gesture_start_x;
+  double right_drag_gesture_start_y;
+  gboolean right_drag_gesture_active;
 };
 
 #endif

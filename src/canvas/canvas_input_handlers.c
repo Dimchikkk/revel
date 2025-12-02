@@ -1039,7 +1039,10 @@ static void canvas_process_motion(CanvasData *data, double x, double y) {
   int cx, cy;
   canvas_screen_to_canvas(data, (int)x, (int)y, &cx, &cy);
 
-  if (data->shape_mode) {
+  // Don't update cursor while panning - keep the grabbing cursor
+  if (data->panning) {
+    // Cursor is already set to grabbing, don't change it
+  } else if (data->shape_mode) {
     canvas_set_cursor(data, data->draw_cursor);
   } else if (data->drawing_mode) {
     if (data->modifier_state & GDK_SHIFT_MASK) {
@@ -1663,7 +1666,7 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
     data->panning = TRUE;
     data->pan_start_x = (int)x;
     data->pan_start_y = (int)y;
-    canvas_set_cursor(data, data->move_cursor);
+    canvas_set_cursor(data, gdk_cursor_new_from_name("grabbing", NULL));
     return;
   }
 
@@ -2244,6 +2247,48 @@ static gboolean canvas_handle_scroll(const UIEvent *event, gpointer user_data) {
                                event->data.scroll.dy);
 }
 
+static gboolean canvas_handle_drag_begin(const UIEvent *event, gpointer user_data) {
+  (void)event;
+  (void)user_data;
+  // Drag begin is handled by the left press event
+  // This is just to track that a drag gesture has started
+  return TRUE;
+}
+
+static gboolean canvas_handle_drag_update(const UIEvent *event, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  if (!data || !event) {
+    return FALSE;
+  }
+
+  // Calculate actual position from start + offset
+  double x = event->data.drag.start_x + event->data.drag.offset_x;
+  double y = event->data.drag.start_y + event->data.drag.offset_y;
+
+  data->modifier_state = event->data.drag.modifiers;
+
+  // Use the drag gesture's motion during active drags for reliable updates on macOS
+  canvas_process_motion(data, x, y);
+  return TRUE;
+}
+
+static gboolean canvas_handle_drag_end(const UIEvent *event, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  if (!data || !event) {
+    return FALSE;
+  }
+
+  // Calculate final position from start + offset
+  double x = event->data.drag.start_x + event->data.drag.offset_x;
+  double y = event->data.drag.start_y + event->data.drag.offset_y;
+
+  data->modifier_state = event->data.drag.modifiers;
+
+  // Process the release to finalize any dragging operations
+  canvas_process_left_release(data, 1, x, y);
+  return TRUE;
+}
+
 void canvas_input_register_event_handlers(CanvasData *data) {
   if (!data) {
     return;
@@ -2268,6 +2313,12 @@ void canvas_input_register_event_handlers(CanvasData *data) {
     ui_event_bus_subscribe(UI_EVENT_SCROLL, canvas_handle_scroll, data, NULL);
   data->ui_event_subscriptions[UI_EVENT_KEY_PRESS] =
     ui_event_bus_subscribe(UI_EVENT_KEY_PRESS, canvas_handle_key_press, data, NULL);
+  data->ui_event_subscriptions[UI_EVENT_DRAG_BEGIN] =
+    ui_event_bus_subscribe(UI_EVENT_DRAG_BEGIN, canvas_handle_drag_begin, data, NULL);
+  data->ui_event_subscriptions[UI_EVENT_DRAG_UPDATE] =
+    ui_event_bus_subscribe(UI_EVENT_DRAG_UPDATE, canvas_handle_drag_update, data, NULL);
+  data->ui_event_subscriptions[UI_EVENT_DRAG_END] =
+    ui_event_bus_subscribe(UI_EVENT_DRAG_END, canvas_handle_drag_end, data, NULL);
 }
 
 void canvas_input_unregister_event_handlers(CanvasData *data) {
