@@ -51,10 +51,10 @@ static int on_command_line(GtkApplication *app, GApplicationCommandLine *command
 
 static void on_activate(GtkApplication *app, gpointer user_data) {
   GtkWidget *window = gtk_application_window_new(app);
-  gtk_window_set_default_size(GTK_WINDOW(window), 1000, 700);
   gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
   gtk_widget_set_size_request(window, 200, 200);  // Set minimum window size
   gtk_window_set_title(GTK_WINDOW(window), "revel");
+  gtk_window_maximize(GTK_WINDOW(window));
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_window_set_child(GTK_WINDOW(window), vbox);
