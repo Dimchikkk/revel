@@ -261,8 +261,8 @@ gboolean inline_text_on_textview_key_press(GtkEventControllerKey *controller, gu
   InlineText *text = (InlineText*)user_data;
 
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & REVEL_MOD_MASK) {
-      // Ctrl+Enter does nothing special for inline text (allow newline)
+    if (state & GDK_SHIFT_MASK) {
+      // Shift+Enter does nothing special for inline text (allow newline)
       return FALSE;
     } else {
       // Regular Enter finishes editing
