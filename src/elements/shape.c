@@ -1705,8 +1705,8 @@ static void text_outline_draw(Shape *shape, cairo_t *cr) {
 gboolean shape_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   Shape *shape = (Shape*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & REVEL_MOD_MASK) {
-      // Ctrl+Enter inserts a newline
+    if (state & GDK_SHIFT_MASK) {
+      // Shift+Enter inserts a newline
       GtkTextView *text_view = GTK_TEXT_VIEW(shape->text_view);
       GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);
 

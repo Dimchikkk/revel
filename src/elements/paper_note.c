@@ -67,8 +67,8 @@ static void note_update_text_view_position(PaperNote *note) {
 gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data) {
   PaperNote *note = (PaperNote*)user_data;
   if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) {
-    if (state & REVEL_MOD_MASK) {
-      // Enter finishes editing
+    if (state & GDK_SHIFT_MASK) {
+      // Shift+Enter inserts a newline
       GtkTextView *text_view = GTK_TEXT_VIEW(note->text_view);
       GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);
 
@@ -78,7 +78,7 @@ gboolean paper_note_on_textview_key_press(GtkEventControllerKey *controller, gui
 
       return TRUE; // Handled - prevent default behavior
     } else {
-      // Ctrl+Enter inserts a newline
+      // Enter finishes editing
       paper_note_finish_editing((Element*)note);
       return TRUE;
     }
