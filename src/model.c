@@ -1183,6 +1183,7 @@ int model_search_elements(Model *model, const char *search_term, GList **results
     model_result->text_content = g_strdup(db_result->text_content);
     model_result->space_uuid = g_strdup(db_result->space_uuid);
     model_result->space_name = g_strdup(db_result->space_name);
+    model_result->target_space_uuid = db_result->target_space_uuid ? g_strdup(db_result->target_space_uuid) : NULL;
 
     *results = g_list_append(*results, model_result);
   }
@@ -1198,6 +1199,7 @@ void model_free_search_result(ModelSearchResult *result) {
     g_free(result->text_content);
     g_free(result->space_uuid);
     g_free(result->space_name);
+    g_free(result->target_space_uuid);
     g_free(result);
   }
 }

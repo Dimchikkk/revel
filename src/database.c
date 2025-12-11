@@ -2267,9 +2267,10 @@ int database_search_elements(sqlite3 *db, const char *search_term, GList **resul
   }
 
   const char *sql =
-    "SELECT ets.element_uuid, ets.text_content, ets.space_uuid, s.name as space_name "
+    "SELECT ets.element_uuid, ets.text_content, ets.space_uuid, s.name as space_name, e.target_space_uuid "
     "FROM element_text_fts ets "
     "JOIN spaces s ON ets.space_uuid = s.uuid "
+    "JOIN elements e ON ets.element_uuid = e.uuid "
     "WHERE ets.text_content MATCH ? "
     "ORDER BY bm25(element_text_fts)";
 
@@ -2291,6 +2292,8 @@ int database_search_elements(sqlite3 *db, const char *search_term, GList **resul
     result->text_content = g_strdup((const char*)sqlite3_column_text(stmt, 1));
     result->space_uuid = g_strdup((const char*)sqlite3_column_text(stmt, 2));
     result->space_name = g_strdup((const char*)sqlite3_column_text(stmt, 3));
+    const char *target_uuid = (const char*)sqlite3_column_text(stmt, 4);
+    result->target_space_uuid = target_uuid ? g_strdup(target_uuid) : NULL;
 
     *results = g_list_append(*results, result);
   }
@@ -2306,6 +2309,7 @@ void database_free_search_result(SearchResult *result) {
     g_free(result->text_content);
     g_free(result->space_uuid);
     g_free(result->space_name);
+    g_free(result->target_space_uuid);
     g_free(result);
   }
 }

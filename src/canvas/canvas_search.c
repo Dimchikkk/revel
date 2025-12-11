@@ -138,9 +138,13 @@ static void on_result_selected(GtkListBox *list, GtkListBoxRow *row, gpointer us
         return;
     }
 
-    if (g_strcmp0(result->space_uuid, dialog_data->canvas_data->model->current_space_uuid) != 0) {
+    // If this is a space element, navigate to the target space
+    // Otherwise, navigate to the space containing the element
+    const gchar *destination_space = result->target_space_uuid ? result->target_space_uuid : result->space_uuid;
+
+    if (g_strcmp0(destination_space, dialog_data->canvas_data->model->current_space_uuid) != 0) {
         model_save_elements(dialog_data->canvas_data->model);
-        switch_to_space(dialog_data->canvas_data, result->space_uuid);
+        switch_to_space(dialog_data->canvas_data, destination_space);
     }
 
     gtk_window_close(dialog);
