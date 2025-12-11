@@ -215,6 +215,7 @@ typedef struct {
     char *text_content;
     char *space_uuid;
     char *space_name;
+    char *target_space_uuid;  // For space elements, the space to navigate to
 } ModelSearchResult;
 
 int model_search_elements(Model *model, const char *search_term, GList **results);
