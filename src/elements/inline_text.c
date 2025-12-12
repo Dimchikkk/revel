@@ -298,7 +298,13 @@ void inline_text_start_editing(Element *element, GtkWidget *overlay) {
     // Set font to match inline text using CSS
     PangoFontDescription *font_desc = pango_font_description_from_string(text->font_description);
     const char *family = pango_font_description_get_family(font_desc);
-    int size = pango_font_description_get_size(font_desc);
+
+    // Platform-specific font size (macOS needs larger fonts)
+#ifdef __APPLE__
+    int font_size = 18;
+#else
+    int font_size = 14;
+#endif
 
     // Create combined CSS for font, transparency, and precise positioning
     gchar *combined_css = g_strdup_printf(
@@ -316,7 +322,7 @@ void inline_text_start_editing(Element *element, GtkWidget *overlay) {
       "margin: 0px; "
       "}",
       family ? family : "Ubuntu Mono",
-      size > 0 ? size / PANGO_SCALE : 12);
+      font_size);
 
     GtkCssProvider *css_provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css_provider, combined_css, -1);
@@ -356,7 +362,7 @@ void inline_text_start_editing(Element *element, GtkWidget *overlay) {
 
   // Set initial size with some padding
   gtk_widget_set_size_request(text->scrolled_window, element->width + 20, element->height + 20);
-  gtk_widget_set_hexpand(text->scrolled_window, TRUE);
+  gtk_widget_set_hexpand(text->scrolled_window, FALSE);
   gtk_widget_set_vexpand(text->scrolled_window, FALSE);
 
   // Convert canvas coordinates to screen coordinates
