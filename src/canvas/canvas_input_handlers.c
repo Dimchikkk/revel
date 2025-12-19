@@ -782,7 +782,10 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
                   }
               }
 
-              element_bring_to_front(selected_element, &data->next_z_index);
+              // Don't bring media elements to front - keep them below other elements
+              if (selected_element->type != ELEMENT_MEDIA_FILE) {
+                  element_bring_to_front(selected_element, &data->next_z_index);
+              }
               selected_element->rotating = TRUE;
 
               ModelElement *model_element = model_get_by_visual(data->model, selected_element);
@@ -981,7 +984,10 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
       return;
     }
 
-    element_bring_to_front(element, &data->next_z_index);
+    // Don't bring media elements to front - keep them below other elements
+    if (element->type != ELEMENT_MEDIA_FILE) {
+      element_bring_to_front(element, &data->next_z_index);
+    }
 
     if (n_press == 2 || (n_press == 1 && (data->modifier_state & REVEL_MOD_MASK))) {
       element_start_editing(element, data->overlay);
