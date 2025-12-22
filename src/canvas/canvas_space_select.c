@@ -8,6 +8,7 @@
 // Structure to hold space selection data
 typedef struct {
   GList *spaces;  // List of ModelSpaceInfo* (filtered to exclude current space)
+  GList *filtered_spaces;  // List of ModelSpaceInfo* (currently displayed after search filtering)
   CanvasData *canvas_data;
 } SpaceSelectData;
 
@@ -15,6 +16,10 @@ static void free_space_select_data(gpointer data) {
   SpaceSelectData *select_data = (SpaceSelectData*)data;
   if (select_data) {
     g_list_free_full(select_data->spaces, (GDestroyNotify)model_free_space_info);
+    // filtered_spaces contains pointers to spaces, so just free the list, not the data
+    if (select_data->filtered_spaces) {
+      g_list_free(select_data->filtered_spaces);
+    }
     g_free(select_data);
   }
 }
@@ -48,7 +53,8 @@ static void on_space_selected(GtkListBox *list, GtkListBoxRow *row, gpointer use
   // FIX: Use GTK's built-in function to get the row index
   gint index = gtk_list_box_row_get_index(row);
 
-  ModelSpaceInfo *space = g_list_nth_data(select_data->spaces, index);
+  // Get space from filtered list, not the full list
+  ModelSpaceInfo *space = g_list_nth_data(select_data->filtered_spaces, index);
 
   if (!space || !space->uuid) {
     g_printerr("Error: Invalid space or space UUID\n");
@@ -95,16 +101,39 @@ static void on_search_entry_changed(GtkEntry *entry, gpointer user_data) {
   SpaceSelectData *select_data = g_object_get_data(G_OBJECT(dialog), "space_select_data");
   if (!select_data || !select_data->spaces) return;
 
-  int index = 0;
-  for (GList *iter = select_data->spaces; iter != NULL; iter = iter->next, index++) {
+  // Clear previous filtered list and rebuild it
+  if (select_data->filtered_spaces) {
+    g_list_free(select_data->filtered_spaces);
+    select_data->filtered_spaces = NULL;
+  }
+
+  // Convert search text to lowercase for case-insensitive comparison
+  gchar *search_lower = NULL;
+  if (search_text && strlen(search_text) > 0) {
+    search_lower = g_utf8_strdown(search_text, -1);
+  }
+
+  for (GList *iter = select_data->spaces; iter != NULL; iter = iter->next) {
     ModelSpaceInfo *space = (ModelSpaceInfo*)iter->data;
 
-    // Filter by search text if provided
-    if (search_text && strlen(search_text) > 0) {
-      if (!strstr(space->name, search_text) && !strstr(space->uuid, search_text)) {
+    // Filter by search text if provided (case-insensitive)
+    if (search_lower) {
+      gchar *name_lower = g_utf8_strdown(space->name, -1);
+      gchar *uuid_lower = g_utf8_strdown(space->uuid, -1);
+
+      gboolean matches = (strstr(name_lower, search_lower) != NULL ||
+                          strstr(uuid_lower, search_lower) != NULL);
+
+      g_free(name_lower);
+      g_free(uuid_lower);
+
+      if (!matches) {
         continue;
       }
     }
+
+    // Add to filtered list
+    select_data->filtered_spaces = g_list_append(select_data->filtered_spaces, space);
 
     GtkWidget *row_widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_widget_set_margin_start(row_widget, 10);
@@ -128,6 +157,10 @@ static void on_search_entry_changed(GtkEntry *entry, gpointer user_data) {
     gtk_box_append(GTK_BOX(row_widget), date_label);
 
     gtk_list_box_append(GTK_LIST_BOX(spaces_list), row_widget);
+  }
+
+  if (search_lower) {
+    g_free(search_lower);
   }
 }
 
@@ -201,6 +234,7 @@ void canvas_show_space_select_dialog(CanvasData *data, const gchar *element_uuid
   // Store the filtered spaces in dialog data
   SpaceSelectData *select_data = g_new0(SpaceSelectData, 1);
   select_data->spaces = filtered_spaces;
+  select_data->filtered_spaces = NULL;  // Will be populated by on_search_entry_changed
   select_data->canvas_data = data;
 
   g_object_set_data_full(G_OBJECT(dialog), "space_select_data",
