@@ -8,6 +8,10 @@
 #include "../elements/paper_note.h"
 #include "../elements/note.h"
 #include "../elements/space.h"
+#include "../elements/inline_text.h"
+#include "../elements/shape.h"
+#include "../elements/connection.h"
+#include "../elements/media_note.h"
 #include "../undo_manager.h"
 #include "../model.h"
 
@@ -33,18 +37,9 @@ void canvas_on_add_paper_note(GtkButton *button, gpointer user_data) {
     .y = smart_y,
     .z = data->next_z_index++,
   };
-  ElementColor bg_color = {
-    .r = 1.0,
-    .g = 1.0,
-    .b = 0.8,
-    .a = 1.0,
-  };
-  ElementColor text_color = {
-    .r = 0.2,
-    .g = 0.2,
-    .b = 0.2,
-    .a = 1.0,
-  };
+  // Use hardcoded default colors (not toolbar colors)
+  ElementColor bg_color = {1.0, 1.0, 0.8, 1.0}; // Light yellow
+  ElementColor text_color = {0.2, 0.2, 0.2, 1.0}; // Dark gray
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
     .from_element_uuid = NULL,
@@ -105,18 +100,9 @@ void canvas_on_add_note(GtkButton *button, gpointer user_data) {
     .y = smart_y,
     .z = data->next_z_index++,
   };
-  ElementColor bg_color = {
-    .r = 1.0,
-    .g = 1.0,
-    .b = 1.0,
-    .a = 1.0,
-  };
-  ElementColor text_color = {
-    .r = 0.2,
-    .g = 0.2,
-    .b = 0.2,
-    .a = 1.0,
-  };
+  // Use hardcoded default colors (not toolbar colors)
+  ElementColor bg_color = {1.0, 1.0, 1.0, 1.0}; // White
+  ElementColor text_color = {0.2, 0.2, 0.2, 1.0}; // Dark gray
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
     .from_element_uuid = NULL,
@@ -179,18 +165,9 @@ void canvas_on_add_text(GtkButton *button, gpointer user_data) {
     .y = smart_y,
     .z = data->next_z_index++,
   };
-  ElementColor bg_color = {
-    .r = 0.0,
-    .g = 0.0,
-    .b = 0.0,
-    .a = 0.0,
-  };
-  ElementColor text_color = {
-    .r = 0.9,
-    .g = 0.9,
-    .b = 0.9,
-    .a = 1.0,
-  };
+  // Inline text uses transparent background and white text by default (not toolbar colors)
+  ElementColor bg_color = {0.0, 0.0, 0.0, 0.0};
+  ElementColor text_color = {0.9, 0.9, 0.9, 1.0};
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
   ElementConnection connection = {
     .from_element_uuid = NULL,
@@ -318,15 +295,102 @@ void on_drawing_color_changed(GtkColorButton *button, gpointer user_data) {
   GdkRGBA color;
   gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &color);
 
+  // Update default for new drawings
   data->drawing_color.r = color.red;
   data->drawing_color.g = color.green;
   data->drawing_color.b = color.blue;
   data->drawing_color.a = color.alpha;
+
+  // Apply to selected freehand drawings only
+  if (data->selected_elements) {
+    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+      Element *el = (Element*)l->data;
+      if (el->type == ELEMENT_FREEHAND_DRAWING) {
+        el->bg_r = color.red;
+        el->bg_g = color.green;
+        el->bg_b = color.blue;
+        el->bg_a = color.alpha;
+        ModelElement *model_el = model_get_by_visual(data->model, el);
+        if (model_el) {
+          model_update_color(data->model, model_el, color.red, color.green, color.blue, color.alpha);
+        }
+      }
+    }
+    gtk_widget_queue_draw(data->drawing_area);
+  }
 }
 
 void on_drawing_width_changed(GtkSpinButton *button, gpointer user_data) {
   CanvasData *data = (CanvasData*)user_data;
   data->drawing_stroke_width = gtk_spin_button_get_value_as_int(button);
+}
+
+// Forward declarations for helper functions
+static void apply_stroke_color_to_element(CanvasData *data, Element *element, const GdkRGBA *color);
+static void apply_text_color_to_element(CanvasData *data, Element *element, const GdkRGBA *color);
+static void apply_background_color_to_element(CanvasData *data, Element *element, const GdkRGBA *color);
+
+void on_stroke_color_changed(GtkColorButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &color);
+
+  // Update default for new elements
+  data->stroke_color.r = color.red;
+  data->stroke_color.g = color.green;
+  data->stroke_color.b = color.blue;
+  data->stroke_color.a = color.alpha;
+
+  // Apply to selected elements (live update)
+  if (data->selected_elements) {
+    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+      Element *el = (Element*)l->data;
+      apply_stroke_color_to_element(data, el, &color);
+    }
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+}
+
+void on_text_color_changed(GtkColorButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &color);
+
+  // Update default for new elements
+  data->text_color.r = color.red;
+  data->text_color.g = color.green;
+  data->text_color.b = color.blue;
+  data->text_color.a = color.alpha;
+
+  // Apply to selected elements (live update)
+  if (data->selected_elements) {
+    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+      Element *el = (Element*)l->data;
+      apply_text_color_to_element(data, el, &color);
+    }
+    gtk_widget_queue_draw(data->drawing_area);
+  }
+}
+
+void on_background_color_changed(GtkColorButton *button, gpointer user_data) {
+  CanvasData *data = (CanvasData*)user_data;
+  GdkRGBA color;
+  gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &color);
+
+  // Update default for new elements
+  data->background_color.r = color.red;
+  data->background_color.g = color.green;
+  data->background_color.b = color.blue;
+  data->background_color.a = color.alpha;
+
+  // Apply to selected elements (live update)
+  if (data->selected_elements) {
+    for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+      Element *el = (Element*)l->data;
+      apply_background_color_to_element(data, el, &color);
+    }
+    gtk_widget_queue_draw(data->drawing_area);
+  }
 }
 
 // Callback for background dialog response
@@ -461,9 +525,9 @@ void canvas_on_add_inline_text(GtkButton *button, gpointer user_data) {
     .a = 0.0,
   };
   ElementColor text_color = {
-    .r = 0.6,
-    .g = 0.6,
-    .b = 0.6,
+    .r = 1.0,
+    .g = 1.0,
+    .b = 1.0,
     .a = 1.0,
   };
   ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
@@ -531,5 +595,227 @@ void canvas_toggle_tree_view(GtkToggleButton *button, gpointer user_data) {
     // Hide tree view
     gtk_widget_set_visible(data->tree_scrolled, FALSE);
     data->tree_view_visible = FALSE;
+  }
+}
+
+// Helper function to apply stroke color to selected element (shapes and connections only)
+static void apply_stroke_color_to_element(CanvasData *data, Element *element, const GdkRGBA *color) {
+  ModelElement *model_el = model_get_by_visual(data->model, element);
+  if (!model_el) return;
+
+  switch (element->type) {
+    case ELEMENT_SHAPE: {
+      Shape *shape = (Shape*)element;
+      shape->stroke_r = color->red;
+      shape->stroke_g = color->green;
+      shape->stroke_b = color->blue;
+      shape->stroke_a = color->alpha;
+      // Update model's stroke_color hex string
+      g_free(model_el->stroke_color);
+      model_el->stroke_color = g_strdup_printf("#%02x%02x%02x%02x",
+        (int)(color->red * 255),
+        (int)(color->green * 255),
+        (int)(color->blue * 255),
+        (int)(color->alpha * 255));
+      break;
+    }
+    case ELEMENT_CONNECTION: {
+      // Connections use base element bg color for line color
+      element->bg_r = color->red;
+      element->bg_g = color->green;
+      element->bg_b = color->blue;
+      element->bg_a = color->alpha;
+      model_update_color(data->model, model_el,
+                        color->red, color->green,
+                        color->blue, color->alpha);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+// Helper function to apply text color to selected element
+static void apply_text_color_to_element(CanvasData *data, Element *element, const GdkRGBA *color) {
+  ModelElement *model_el = model_get_by_visual(data->model, element);
+  if (!model_el) return;
+
+  switch (element->type) {
+    case ELEMENT_NOTE: {
+      Note *note = (Note*)element;
+      note->text_r = color->red;
+      note->text_g = color->green;
+      note->text_b = color->blue;
+      note->text_a = color->alpha;
+      model_update_text_color(data->model, model_el,
+                              color->red, color->green, color->blue, color->alpha);
+      break;
+    }
+    case ELEMENT_PAPER_NOTE: {
+      PaperNote *pn = (PaperNote*)element;
+      pn->text_r = color->red;
+      pn->text_g = color->green;
+      pn->text_b = color->blue;
+      pn->text_a = color->alpha;
+      model_update_text_color(data->model, model_el,
+                              color->red, color->green, color->blue, color->alpha);
+      break;
+    }
+    case ELEMENT_INLINE_TEXT: {
+      InlineText *it = (InlineText*)element;
+      it->text_r = color->red;
+      it->text_g = color->green;
+      it->text_b = color->blue;
+      it->text_a = color->alpha;
+      model_update_text_color(data->model, model_el,
+                              color->red, color->green, color->blue, color->alpha);
+      break;
+    }
+    case ELEMENT_SPACE: {
+      SpaceElement *space = (SpaceElement*)element;
+      space->text_r = color->red;
+      space->text_g = color->green;
+      space->text_b = color->blue;
+      space->text_a = color->alpha;
+      model_update_text_color(data->model, model_el,
+                              color->red, color->green, color->blue, color->alpha);
+      break;
+    }
+    case ELEMENT_MEDIA_FILE: {
+      MediaNote *media = (MediaNote*)element;
+      media->text_r = color->red;
+      media->text_g = color->green;
+      media->text_b = color->blue;
+      media->text_a = color->alpha;
+      model_update_text_color(data->model, model_el,
+                              color->red, color->green, color->blue, color->alpha);
+      break;
+    }
+    case ELEMENT_SHAPE: {
+      // Shape label text color
+      Shape *shape = (Shape*)element;
+      shape->text_r = color->red;
+      shape->text_g = color->green;
+      shape->text_b = color->blue;
+      shape->text_a = color->alpha;
+      model_update_text_color(data->model, model_el,
+                              color->red, color->green, color->blue, color->alpha);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+// Helper function to apply background color to selected element
+static void apply_background_color_to_element(CanvasData *data, Element *element, const GdkRGBA *color) {
+  ModelElement *model_el = model_get_by_visual(data->model, element);
+  if (!model_el) return;
+
+  switch (element->type) {
+    case ELEMENT_NOTE:
+    case ELEMENT_PAPER_NOTE:
+    case ELEMENT_INLINE_TEXT:
+    case ELEMENT_SPACE:
+    case ELEMENT_MEDIA_FILE:
+    case ELEMENT_SHAPE:
+    case ELEMENT_CONNECTION: {
+      // All element types use base element bg color
+      element->bg_r = color->red;
+      element->bg_g = color->green;
+      element->bg_b = color->blue;
+      element->bg_a = color->alpha;
+      // Update model
+      model_update_color(data->model, model_el,
+                        color->red, color->green,
+                        color->blue, color->alpha);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+// Update toolbar color buttons based on selected element
+void canvas_update_toolbar_colors_from_selection(CanvasData *data) {
+  if (!data->selected_elements || g_list_length(data->selected_elements) != 1) {
+    return; // Only sync for single selection
+  }
+
+  Element *el = (Element*)data->selected_elements->data;
+
+  // Update drawing color only for freehand drawings
+  if (el->type == ELEMENT_FREEHAND_DRAWING) {
+    GdkRGBA color = {el->bg_r, el->bg_g, el->bg_b, el->bg_a};
+    g_signal_handlers_block_by_func(data->drawing_color_button,
+                                    on_drawing_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->drawing_color_button), &color);
+    g_signal_handlers_unblock_by_func(data->drawing_color_button,
+                                      on_drawing_color_changed, data);
+  }
+
+  // Update stroke color for shapes and connections
+  if (el->type == ELEMENT_SHAPE) {
+    Shape *shape = (Shape*)el;
+    GdkRGBA stroke_color = {shape->stroke_r, shape->stroke_g, shape->stroke_b, shape->stroke_a};
+    g_signal_handlers_block_by_func(data->stroke_color_button,
+                                    on_stroke_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->stroke_color_button), &stroke_color);
+    g_signal_handlers_unblock_by_func(data->stroke_color_button,
+                                      on_stroke_color_changed, data);
+  } else if (el->type == ELEMENT_CONNECTION) {
+    // Connections use base element bg color for line color
+    GdkRGBA line_color = {el->bg_r, el->bg_g, el->bg_b, el->bg_a};
+    g_signal_handlers_block_by_func(data->stroke_color_button,
+                                    on_stroke_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->stroke_color_button), &line_color);
+    g_signal_handlers_unblock_by_func(data->stroke_color_button,
+                                      on_stroke_color_changed, data);
+  }
+
+  // Update text color for text elements
+  if (el->type == ELEMENT_NOTE) {
+    Note *note = (Note*)el;
+    GdkRGBA text_color = {note->text_r, note->text_g, note->text_b, note->text_a};
+    g_signal_handlers_block_by_func(data->text_color_button,
+                                    on_text_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->text_color_button), &text_color);
+    g_signal_handlers_unblock_by_func(data->text_color_button,
+                                      on_text_color_changed, data);
+  } else if (el->type == ELEMENT_PAPER_NOTE) {
+    PaperNote *pn = (PaperNote*)el;
+    GdkRGBA text_color = {pn->text_r, pn->text_g, pn->text_b, pn->text_a};
+    g_signal_handlers_block_by_func(data->text_color_button,
+                                    on_text_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->text_color_button), &text_color);
+    g_signal_handlers_unblock_by_func(data->text_color_button,
+                                      on_text_color_changed, data);
+  } else if (el->type == ELEMENT_INLINE_TEXT) {
+    InlineText *it = (InlineText*)el;
+    GdkRGBA text_color = {it->text_r, it->text_g, it->text_b, it->text_a};
+    g_signal_handlers_block_by_func(data->text_color_button,
+                                    on_text_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->text_color_button), &text_color);
+    g_signal_handlers_unblock_by_func(data->text_color_button,
+                                      on_text_color_changed, data);
+  } else if (el->type == ELEMENT_SHAPE) {
+    // Shape label text color
+    Shape *shape = (Shape*)el;
+    GdkRGBA text_color = {shape->text_r, shape->text_g, shape->text_b, shape->text_a};
+    g_signal_handlers_block_by_func(data->text_color_button,
+                                    on_text_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->text_color_button), &text_color);
+    g_signal_handlers_unblock_by_func(data->text_color_button,
+                                      on_text_color_changed, data);
+  }
+
+  // Update background color for all element types
+  if (el->type != ELEMENT_FREEHAND_DRAWING && el->type != ELEMENT_CONNECTION) {
+    GdkRGBA bg_color = {el->bg_r, el->bg_g, el->bg_b, el->bg_a};
+    g_signal_handlers_block_by_func(data->bg_color_button,
+                                    on_background_color_changed, data);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(data->bg_color_button), &bg_color);
+    g_signal_handlers_unblock_by_func(data->bg_color_button,
+                                      on_background_color_changed, data);
   }
 }

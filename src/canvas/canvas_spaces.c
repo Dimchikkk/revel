@@ -116,18 +116,9 @@ void space_creation_dialog_response(GtkDialog *dialog, gint response_id, gpointe
           .y = smart_y,
           .z = data->next_z_index++,
         };
-        ElementColor bg_color = {
-          .r = 0.8,
-          .g = 0.8,
-          .b = 1.0,
-          .a = 1.0,
-        };
-        ElementColor text_color = {
-          .r = 0.1,
-          .g = 0.1,
-          .b = 0.1,
-          .a = 1.0,
-        };
+        // Use hardcoded default colors (not toolbar colors)
+        ElementColor bg_color = {0.8, 0.8, 1.0, 1.0}; // Light blue
+        ElementColor text_color = {0.1, 0.1, 0.1, 1.0}; // Very dark gray
         ElementMedia media = { .type = MEDIA_TYPE_NONE, .image_data = NULL, .image_size = 0, .video_data = NULL, .video_size = 0, .duration = 0 };
         ElementConnection connection = {
           .from_element_uuid = NULL,

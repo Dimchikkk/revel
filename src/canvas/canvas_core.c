@@ -119,6 +119,9 @@ CanvasData* canvas_data_new_with_db(GtkWidget *drawing_area, GtkWidget *overlay,
   data->drawing_mode = FALSE;
   data->current_drawing = NULL;
   data->drawing_color = (ElementColor) INITIAL_DRAWING_COLOR;
+  data->stroke_color = (ElementColor){0.9, 0.9, 0.9, 1.0};
+  data->text_color = (ElementColor){0.9, 0.9, 0.9, 1.0};
+  data->background_color = (ElementColor){0.2, 0.2, 0.2, 0.8}; // Transparent dark
   data->drawing_stroke_width = 3;
   data->draw_cursor = gdk_cursor_new_from_name("pencil", NULL);
   data->line_cursor = gdk_cursor_new_from_name("crosshair", NULL);

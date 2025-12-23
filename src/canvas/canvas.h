@@ -65,6 +65,9 @@ struct _CanvasData {
   gboolean drawing_mode;
   FreehandDrawing *current_drawing;
   ElementColor drawing_color;
+  ElementColor stroke_color;
+  ElementColor text_color;
+  ElementColor background_color;
   int drawing_stroke_width;
   GdkCursor *draw_cursor;
   GdkCursor *line_cursor;
@@ -103,6 +106,12 @@ struct _CanvasData {
   guint toolbar_hide_timer_id;
   GtkWidget *ai_toggle_button;
   GtkWidget *ai_dialog;
+
+  // Toolbar color widgets (for selection sync)
+  GtkWidget *drawing_color_button;
+  GtkWidget *stroke_color_button;
+  GtkWidget *text_color_button;
+  GtkWidget *bg_color_button;
 
   gchar *ai_last_payload;
   gchar *ai_last_response;

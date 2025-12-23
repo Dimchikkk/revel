@@ -707,25 +707,31 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
     if (!data->current_shape) {
       ElementPosition position = { cx, cy, data->next_z_index++ };
       ElementSize size = { 0, 0 };
-      ElementText text = {
-        .text = "",
-        .text_color = { .r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0 },
-        .font_description = "Ubuntu Mono 12"
-      };
-      ElementColor stroke_color = data->drawing_color;
+      // Use toolbar stroke color for shape stroke
+      ElementColor stroke_color = data->stroke_color;
       if (stroke_color.a <= 0.0) {
         stroke_color.a = 1.0;
       }
+
+      // Use toolbar text color for shape text
+      ElementColor text_color = data->text_color;
+      if (text_color.a <= 0.0) {
+        text_color.a = 1.0;
+      }
+
+      ElementText text = {
+        .text = "",
+        .text_color = text_color,
+        .font_description = "Ubuntu Mono 12"
+      };
+
       if (data->selected_shape_type == SHAPE_TEXT_OUTLINE) {
         text.text = "TXT";
         text.font_description = "Brush Script MT Bold 96";
-        stroke_color.r = 0.95;
-        stroke_color.g = 0.95;
-        stroke_color.b = 0.95;
-        stroke_color.a = 1.0;
-        text.text_color = stroke_color;
       }
-      ElementColor bg_color = stroke_color;
+
+      // Use toolbar background color for shape fill
+      ElementColor bg_color = data->background_color;
       ElementShape shape_config = {
         .shape_type = data->selected_shape_type,
         .stroke_width = data->drawing_stroke_width,
@@ -779,6 +785,7 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
               } else {
                   if (!canvas_is_element_selected(data, selected_element)) {
                       data->selected_elements = g_list_append(data->selected_elements, selected_element);
+                      canvas_update_toolbar_colors_from_selection(data);
                   }
               }
 
@@ -875,6 +882,7 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
       }
       if (!canvas_is_element_selected(data, element)) {
         data->selected_elements = g_list_append(data->selected_elements, element);
+        canvas_update_toolbar_colors_from_selection(data);
 
         ModelElement *model_element = model_get_by_visual(data->model, element);
         if (model_element && model_element->position) {
@@ -1005,6 +1013,7 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
       }
       if (!canvas_is_element_selected(data, element)) {
         data->selected_elements = g_list_append(data->selected_elements, element);
+        canvas_update_toolbar_colors_from_selection(data);
 
         ModelElement *model_element = model_get_by_visual(data->model, element);
         if (model_element && model_element->position) {
@@ -1522,6 +1531,7 @@ static void canvas_process_left_release(CanvasData *data, int n_press, double x,
         }
       }
     }
+    canvas_update_toolbar_colors_from_selection(data);
     g_list_free(visual_elements);
   }
 
@@ -1699,10 +1709,11 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
   g_object_set_data_full(G_OBJECT(lock_unlock_action), "element_uuid", g_strdup(model_element->uuid), g_free);
   g_signal_connect(lock_unlock_action, "activate", G_CALLBACK(on_lock_unlock_element_action), NULL);
 
-  GSimpleAction *change_color_action = g_simple_action_new("change-color", NULL);
-  g_object_set_data(G_OBJECT(change_color_action), "canvas_data", data);
-  g_object_set_data_full(G_OBJECT(change_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-  g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
+  // Removed change-color action - colors managed through toolbar and font dialog
+  // GSimpleAction *change_color_action = g_simple_action_new("change-color", NULL);
+  // g_object_set_data(G_OBJECT(change_color_action), "canvas_data", data);
+  // g_object_set_data_full(G_OBJECT(change_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+  // g_signal_connect(change_color_action, "activate", G_CALLBACK(on_change_color_action), NULL);
 
   GSimpleAction *change_thumbnail_action = g_simple_action_new("change-thumbnail", NULL);
   g_object_set_data(G_OBJECT(change_thumbnail_action), "canvas_data", data);
@@ -1738,7 +1749,7 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(description_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(lock_unlock_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(clone_action));
-  g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
+  // g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_color_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_thumbnail_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_space_action));
   g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_text_action));
@@ -1752,11 +1763,12 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
     g_signal_connect(change_shape_style_action, "activate", G_CALLBACK(on_change_shape_style_action), NULL);
     g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_shape_style_action));
 
-    GSimpleAction *change_shape_stroke_color_action = g_simple_action_new("change-shape-stroke-color", NULL);
-    g_object_set_data(G_OBJECT(change_shape_stroke_color_action), "canvas_data", data);
-    g_object_set_data_full(G_OBJECT(change_shape_stroke_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
-    g_signal_connect(change_shape_stroke_color_action, "activate", G_CALLBACK(on_change_shape_stroke_color_action), NULL);
-    g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_shape_stroke_color_action));
+    // Removed change-shape-stroke-color action - use toolbar instead
+    // GSimpleAction *change_shape_stroke_color_action = g_simple_action_new("change-shape-stroke-color", NULL);
+    // g_object_set_data(G_OBJECT(change_shape_stroke_color_action), "canvas_data", data);
+    // g_object_set_data_full(G_OBJECT(change_shape_stroke_color_action), "element_uuid", g_strdup(model_element->uuid), g_free);
+    // g_signal_connect(change_shape_stroke_color_action, "activate", G_CALLBACK(on_change_shape_stroke_color_action), NULL);
+    // g_action_map_add_action(G_ACTION_MAP(action_group), G_ACTION(change_shape_stroke_color_action));
   }
 
   if (element->type == ELEMENT_CONNECTION) {
@@ -1805,13 +1817,15 @@ static void canvas_process_right_click(CanvasData *data, int n_press, double x, 
     g_menu_append(modify_section, "Change Thumbnail", "menu.change-thumbnail");
   }
 
-  if (show_bg_color) {
-    g_menu_append(modify_section, "Change Color", "menu.change-color");
-  }
+  // Removed Change Color - use toolbar and font dialog instead
+  // if (show_bg_color) {
+  //   g_menu_append(modify_section, "Change Color", "menu.change-color");
+  // }
 
   if (element->type == ELEMENT_SHAPE) {
     g_menu_append(modify_section, "Change Shape Style", "menu.change-shape-style");
-    g_menu_append(modify_section, "Change Stroke Color", "menu.change-shape-stroke-color");
+    // Removed Change Stroke Color - use toolbar instead
+    // g_menu_append(modify_section, "Change Stroke Color", "menu.change-shape-stroke-color");
   }
 
   if (element->type == ELEMENT_CONNECTION) {
@@ -2000,6 +2014,7 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
         data->selected_elements = g_list_append(data->selected_elements, element);
       }
     }
+    canvas_update_toolbar_colors_from_selection(data);
     g_list_free(elements);
     gtk_widget_queue_draw(data->drawing_area);
     return;

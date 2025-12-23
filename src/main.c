@@ -217,9 +217,21 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_button_set_child(GTK_BUTTON(drawing_btn), draw_box);
   gtk_widget_set_tooltip_text(drawing_btn, "Toggle Drawing Mode (Ctrl+D)");
 
-  // Color picker
-  GtkWidget *color_btn = gtk_color_button_new();
-  gtk_widget_set_tooltip_text(color_btn, "Drawing Color");
+  // Color pickers for different uses
+  GtkWidget *drawing_color_btn = gtk_color_button_new();
+  gtk_widget_set_tooltip_text(drawing_color_btn, "Drawing Color");
+
+  GtkWidget *stroke_color_btn = gtk_color_button_new();
+  gtk_widget_set_tooltip_text(stroke_color_btn, "Stroke Color");
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(stroke_color_btn), TRUE);
+
+  GtkWidget *text_color_btn = gtk_color_button_new();
+  gtk_widget_set_tooltip_text(text_color_btn, "Text Color");
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(text_color_btn), TRUE);
+
+  GtkWidget *bg_color_btn = gtk_color_button_new();
+  gtk_widget_set_tooltip_text(bg_color_btn, "Background Color");
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(bg_color_btn), TRUE);
 
   // Stroke width with label
   GtkWidget *width_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
@@ -241,8 +253,11 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_button_set_child(GTK_BUTTON(shapes_btn), shapes_box);
   gtk_widget_set_tooltip_text(shapes_btn, "Insert Shapes");
 
+  gtk_box_append(GTK_BOX(draw_group), text_color_btn);
+  gtk_box_append(GTK_BOX(draw_group), stroke_color_btn);
+  gtk_box_append(GTK_BOX(draw_group), bg_color_btn);
+  gtk_box_append(GTK_BOX(draw_group), drawing_color_btn);
   gtk_box_append(GTK_BOX(draw_group), drawing_btn);
-  gtk_box_append(GTK_BOX(draw_group), color_btn);
   gtk_box_append(GTK_BOX(draw_group), width_box);
   gtk_box_append(GTK_BOX(draw_group), shapes_btn);
   gtk_box_append(GTK_BOX(toolbar), draw_group);
@@ -325,8 +340,19 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_box_append(GTK_BOX(toolbar), utils_group);
 
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), 3);
-  GdkRGBA initial_color = INITIAL_DRAWING_COLOR;
-  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_btn), &initial_color);
+
+  // Set initial colors for color buttons
+  GdkRGBA initial_drawing_color = INITIAL_DRAWING_COLOR;
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(drawing_color_btn), &initial_drawing_color);
+
+  GdkRGBA initial_stroke_color = {1.0, 1.0, 1.0, 1.0};
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(stroke_color_btn), &initial_stroke_color);
+
+  GdkRGBA initial_text_color = {1.0, 1.0, 1.0, 1.0};
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(text_color_btn), &initial_text_color);
+
+  GdkRGBA initial_bg_color = {0.2, 0.2, 0.2, 0.8};
+  gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(bg_color_btn), &initial_bg_color);
 
   // Create horizontal paned layout for main content and tree view
   GtkWidget *main_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -385,6 +411,12 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   data->toolbar_hide_timer_id = 0;
   data->ai_toggle_button = ai_btn;
   data->ai_dialog = NULL;
+
+  // Store color widget references for selection sync
+  data->drawing_color_button = drawing_color_btn;
+  data->stroke_color_button = stroke_color_btn;
+  data->text_color_button = text_color_btn;
+  data->bg_color_button = bg_color_btn;
 
   canvas_input_register_event_handlers(data);
 
@@ -465,7 +497,10 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   g_signal_connect(search_btn, "clicked", G_CALLBACK(canvas_show_search_dialog), data);
   g_signal_connect(tree_btn, "toggled", G_CALLBACK(canvas_toggle_tree_view), data);
   g_signal_connect(drawing_btn, "clicked", G_CALLBACK(canvas_toggle_drawing_mode), data);
-  g_signal_connect(color_btn, "color-set", G_CALLBACK(on_drawing_color_changed), data);
+  g_signal_connect(drawing_color_btn, "color-set", G_CALLBACK(on_drawing_color_changed), data);
+  g_signal_connect(stroke_color_btn, "color-set", G_CALLBACK(on_stroke_color_changed), data);
+  g_signal_connect(text_color_btn, "color-set", G_CALLBACK(on_text_color_changed), data);
+  g_signal_connect(bg_color_btn, "color-set", G_CALLBACK(on_background_color_changed), data);
   g_signal_connect(width_spin, "value-changed", G_CALLBACK(on_drawing_width_changed), data);
   g_signal_connect(shapes_btn, "clicked", G_CALLBACK(canvas_show_shape_selection_dialog), data);
   g_signal_connect(background_btn, "clicked", G_CALLBACK(canvas_show_background_dialog), data);
@@ -510,6 +545,16 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     ".toolbar-group button > * {"
     "   margin-left: 2px;"
     "   margin-right: 2px;"
+    "}"
+    ".toolbar-group colorbutton {"
+    "   min-width: 32px;"
+    "   min-height: 32px;"
+    "   padding: 2px;"
+    "   border-radius: 4px;"
+    "   margin: 0 2px;"
+    "}"
+    ".toolbar-group colorbutton:hover {"
+    "   background: rgba(255, 255, 255, 0.1);"
     "}"
     "#toolbar-background {"
     "   background: rgba(18, 18, 18, 0.92);"
