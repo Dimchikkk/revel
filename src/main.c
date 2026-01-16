@@ -233,6 +233,85 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_widget_set_tooltip_text(bg_color_btn, "Background Color");
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(bg_color_btn), TRUE);
 
+  GtkWidget *colors_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+
+  gtk_widget_add_css_class(drawing_color_btn, "small-color");
+  gtk_widget_add_css_class(text_color_btn, "small-color");
+  gtk_widget_add_css_class(stroke_color_btn, "small-color");
+  gtk_widget_add_css_class(bg_color_btn, "small-color");
+
+  // Make color buttons non-interactive (wrapper handles clicks)
+  gtk_widget_set_can_focus(drawing_color_btn, FALSE);
+  gtk_widget_set_can_focus(text_color_btn, FALSE);
+  gtk_widget_set_can_focus(stroke_color_btn, FALSE);
+  gtk_widget_set_can_focus(bg_color_btn, FALSE);
+
+  // Wrap each color picker in button with label
+  // Text
+  GtkWidget *text_wrapper_btn = gtk_button_new();
+  GtkWidget *text_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *text_lbl = gtk_label_new("Text");
+  gtk_widget_set_halign(text_lbl, GTK_ALIGN_CENTER);
+  GtkWidget *text_color_fixed = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_size_request(text_color_fixed, 16, 16);
+  gtk_widget_set_halign(text_color_fixed, GTK_ALIGN_CENTER);
+  gtk_widget_set_overflow(text_color_fixed, GTK_OVERFLOW_HIDDEN);
+  gtk_box_append(GTK_BOX(text_color_fixed), text_color_btn);
+  gtk_box_append(GTK_BOX(text_vbox), text_lbl);
+  gtk_box_append(GTK_BOX(text_vbox), text_color_fixed);
+  gtk_button_set_child(GTK_BUTTON(text_wrapper_btn), text_vbox);
+  g_signal_connect_swapped(text_wrapper_btn, "clicked", G_CALLBACK(gtk_widget_activate), text_color_btn);
+
+  // Stroke
+  GtkWidget *stroke_wrapper_btn = gtk_button_new();
+  GtkWidget *stroke_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *stroke_lbl = gtk_label_new("Stroke");
+  gtk_widget_set_halign(stroke_lbl, GTK_ALIGN_CENTER);
+  GtkWidget *stroke_color_fixed = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_size_request(stroke_color_fixed, 16, 16);
+  gtk_widget_set_halign(stroke_color_fixed, GTK_ALIGN_CENTER);
+  gtk_widget_set_overflow(stroke_color_fixed, GTK_OVERFLOW_HIDDEN);
+  gtk_box_append(GTK_BOX(stroke_color_fixed), stroke_color_btn);
+  gtk_box_append(GTK_BOX(stroke_vbox), stroke_lbl);
+  gtk_box_append(GTK_BOX(stroke_vbox), stroke_color_fixed);
+  gtk_button_set_child(GTK_BUTTON(stroke_wrapper_btn), stroke_vbox);
+  g_signal_connect_swapped(stroke_wrapper_btn, "clicked", G_CALLBACK(gtk_widget_activate), stroke_color_btn);
+
+  // BG
+  GtkWidget *bg_wrapper_btn = gtk_button_new();
+  GtkWidget *bg_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *bg_lbl = gtk_label_new("BG");
+  gtk_widget_set_halign(bg_lbl, GTK_ALIGN_CENTER);
+  GtkWidget *bg_color_fixed = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_size_request(bg_color_fixed, 16, 16);
+  gtk_widget_set_halign(bg_color_fixed, GTK_ALIGN_CENTER);
+  gtk_widget_set_overflow(bg_color_fixed, GTK_OVERFLOW_HIDDEN);
+  gtk_box_append(GTK_BOX(bg_color_fixed), bg_color_btn);
+  gtk_box_append(GTK_BOX(bg_vbox), bg_lbl);
+  gtk_box_append(GTK_BOX(bg_vbox), bg_color_fixed);
+  gtk_button_set_child(GTK_BUTTON(bg_wrapper_btn), bg_vbox);
+  g_signal_connect_swapped(bg_wrapper_btn, "clicked", G_CALLBACK(gtk_widget_activate), bg_color_btn);
+
+  // Draw
+  GtkWidget *draw_wrapper_btn = gtk_button_new();
+  GtkWidget *draw_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *draw_lbl = gtk_label_new("Draw");
+  gtk_widget_set_halign(draw_lbl, GTK_ALIGN_CENTER);
+  GtkWidget *draw_color_fixed = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_size_request(draw_color_fixed, 16, 16);
+  gtk_widget_set_halign(draw_color_fixed, GTK_ALIGN_CENTER);
+  gtk_widget_set_overflow(draw_color_fixed, GTK_OVERFLOW_HIDDEN);
+  gtk_box_append(GTK_BOX(draw_color_fixed), drawing_color_btn);
+  gtk_box_append(GTK_BOX(draw_vbox), draw_lbl);
+  gtk_box_append(GTK_BOX(draw_vbox), draw_color_fixed);
+  gtk_button_set_child(GTK_BUTTON(draw_wrapper_btn), draw_vbox);
+  g_signal_connect_swapped(draw_wrapper_btn, "clicked", G_CALLBACK(gtk_widget_activate), drawing_color_btn);
+
+  gtk_box_append(GTK_BOX(colors_box), text_wrapper_btn);
+  gtk_box_append(GTK_BOX(colors_box), stroke_wrapper_btn);
+  gtk_box_append(GTK_BOX(colors_box), bg_wrapper_btn);
+  gtk_box_append(GTK_BOX(colors_box), draw_wrapper_btn);
+
   // Stroke width with label
   GtkWidget *width_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
   GtkWidget *width_label = gtk_label_new("Width:");
@@ -253,10 +332,7 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_button_set_child(GTK_BUTTON(shapes_btn), shapes_box);
   gtk_widget_set_tooltip_text(shapes_btn, "Insert Shapes");
 
-  gtk_box_append(GTK_BOX(draw_group), text_color_btn);
-  gtk_box_append(GTK_BOX(draw_group), stroke_color_btn);
-  gtk_box_append(GTK_BOX(draw_group), bg_color_btn);
-  gtk_box_append(GTK_BOX(draw_group), drawing_color_btn);
+  gtk_box_append(GTK_BOX(draw_group), colors_box);
   gtk_box_append(GTK_BOX(draw_group), drawing_btn);
   gtk_box_append(GTK_BOX(draw_group), width_box);
   gtk_box_append(GTK_BOX(draw_group), shapes_btn);
@@ -534,6 +610,16 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     "   background: rgba(255, 255, 255, 0.02);"
     "   border: 1px solid transparent;"
     "}"
+    ".toolbar-group button:has(colorbutton.small-color) {"
+    "   padding: 2px 3px;"
+    "   min-height: 0;"
+    "   max-width: 32px;"
+    "}"
+    ".toolbar-group button:has(colorbutton.small-color) label {"
+    "   font-size: 9px;"
+    "   margin: 0;"
+    "   padding: 0;"
+    "}"
     ".toolbar-group button:checked,"
     ".toolbar-group button:focus-visible {"
     "   background-color: rgba(255, 255, 255, 0.12);"
@@ -546,12 +632,31 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
     "   margin-left: 2px;"
     "   margin-right: 2px;"
     "}"
-    ".toolbar-group colorbutton {"
-    "   min-width: 32px;"
-    "   min-height: 32px;"
-    "   padding: 2px;"
-    "   border-radius: 4px;"
-    "   margin: 0 2px;"
+    "colorbutton.small-color {"
+    "   min-width: 16px;"
+    "   max-width: 16px;"
+    "   min-height: 16px;"
+    "   max-height: 16px;"
+    "}"
+    "colorbutton.small-color button {"
+    "   min-width: 16px;"
+    "   max-width: 16px;"
+    "   min-height: 16px;"
+    "   max-height: 16px;"
+    "   padding: 0;"
+    "   margin: 0;"
+    "}"
+    "colorbutton.small-color button > * {"
+    "   min-width: 16px;"
+    "   max-width: 16px;"
+    "   min-height: 16px;"
+    "   max-height: 16px;"
+    "}"
+    "colorbutton.small-color colorswatch {"
+    "   min-width: 14px;"
+    "   max-width: 14px;"
+    "   min-height: 14px;"
+    "   max-height: 14px;"
     "}"
     ".toolbar-group colorbutton:hover {"
     "   background: rgba(255, 255, 255, 0.1);"
