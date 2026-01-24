@@ -998,6 +998,34 @@ static void canvas_process_left_click(CanvasData *data, int n_press, double x, d
     }
 
     if (n_press == 2 || (n_press == 1 && (data->modifier_state & REVEL_MOD_MASK))) {
+      // Finish editing on any currently editing element
+      GHashTableIter iter;
+      gpointer key, value;
+      g_hash_table_iter_init(&iter, data->model->elements);
+      while (g_hash_table_iter_next(&iter, &key, &value)) {
+        ModelElement *model_el = (ModelElement*)value;
+        if (model_el->visual_element && model_el->visual_element != element) {
+          Element *el = model_el->visual_element;
+          if ((el->type == ELEMENT_INLINE_TEXT && ((InlineText*)el)->editing) ||
+              (el->type == ELEMENT_PAPER_NOTE && ((PaperNote*)el)->editing) ||
+              (el->type == ELEMENT_NOTE && ((Note*)el)->editing) ||
+              (el->type == ELEMENT_MEDIA_FILE && ((MediaNote*)el)->editing) ||
+              (el->type == ELEMENT_SHAPE && ((Shape*)el)->editing)) {
+            if (el->type == ELEMENT_INLINE_TEXT) {
+              inline_text_finish_editing(el);
+            } else if (el->type == ELEMENT_PAPER_NOTE) {
+              paper_note_finish_editing(el);
+            } else if (el->type == ELEMENT_NOTE) {
+              note_finish_editing(el);
+            } else if (el->type == ELEMENT_MEDIA_FILE) {
+              media_note_finish_editing(el);
+            } else if (el->type == ELEMENT_SHAPE) {
+              shape_finish_editing(el);
+            }
+          }
+        }
+      }
+
       element_start_editing(element, data->overlay);
       gtk_widget_queue_draw(data->drawing_area);
       return;

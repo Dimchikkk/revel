@@ -306,7 +306,7 @@ void inline_text_start_editing(Element *element, GtkWidget *overlay) {
     int font_size = 14;
 #endif
 
-    // Create combined CSS for font, transparency, and precise positioning
+    // Create combined CSS for font and transparency
     gchar *combined_css = g_strdup_printf(
       "#transparent-textview { "
       "font-family: %s; "
