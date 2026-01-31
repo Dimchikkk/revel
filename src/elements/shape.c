@@ -2981,8 +2981,8 @@ static int shape_pick_resize_handle(Element *element, int x, int y) {
 }
 
 static int shape_pick_connection_point(Element *element, int x, int y) {
-  // Hide connection points for small elements (< 100px on either dimension)
-  if (element->width < 100 || element->height < 100) {
+  // Hide connection points for very small elements
+  if (element->width < 30 || element->height < 30) {
     return -1;
   }
 
@@ -2991,7 +2991,7 @@ static int shape_pick_connection_point(Element *element, int x, int y) {
     shape_get_connection_point(element, i, &px, &py);
     int dx = x - px, dy = y - py;
     int dist_sq = dx * dx + dy * dy;
-    if (dist_sq < 100) {
+    if (dist_sq < 225) { // 15 pixel radius
       return i;
     }
   }

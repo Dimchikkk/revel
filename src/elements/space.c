@@ -173,8 +173,8 @@ int space_element_pick_resize_handle(Element *element, int x, int y) {
 }
 
 int space_element_pick_connection_point(Element *element, int x, int y) {
-  // Hide connection points for small elements (< 100px on either dimension)
-  if (element->width < 100 || element->height < 100) {
+  // Hide connection points for very small elements
+  if (element->width < 30 || element->height < 30) {
     return -1;
   }
 
@@ -182,7 +182,7 @@ int space_element_pick_connection_point(Element *element, int x, int y) {
     int px, py;
     space_element_get_connection_point(element, i, &px, &py);
     int dx = x - px, dy = y - py;
-    if (dx * dx + dy * dy < 100) return i;
+    if (dx * dx + dy * dy < 225) return i; // 15 pixel radius
   }
   return -1;
 }
