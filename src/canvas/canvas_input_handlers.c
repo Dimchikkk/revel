@@ -1963,7 +1963,7 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
     return;
   }
 
-  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_r) {
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_i) {
     if (data->ai_toggle_button) {
       if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->ai_toggle_button))) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->ai_toggle_button), TRUE);
@@ -1972,6 +1972,89 @@ static void canvas_process_key_press(CanvasData *data, guint keyval,
       }
     } else {
       ai_chat_dialog_present(data);
+    }
+    return;
+  }
+
+  if ((state & REVEL_MOD_MASK) && keyval == GDK_KEY_r) {
+    if (data->selected_elements) {
+      int opened_count = 0;
+      for (GList *l = data->selected_elements; l != NULL; l = l->next) {
+        Element *element = (Element*)l->data;
+        ModelElement *model_element = model_get_by_visual(data->model, element);
+
+        if (!model_element) {
+          continue;
+        }
+
+        const char *text = NULL;
+
+        if (model_element->text && model_element->text->text) {
+          text = model_element->text->text;
+        }
+
+        if (text && strlen(text) > 0) {
+          // Extract URLs from text
+          const char *prefixes[] = {"http://", "https://", "www.", NULL};
+          const char *p = text;
+
+          while (*p) {
+            const char *url_start = NULL;
+            const char *prefix = NULL;
+
+            // Find next URL
+            for (int i = 0; prefixes[i] != NULL; i++) {
+              const char *found = strstr(p, prefixes[i]);
+              if (found && (!url_start || found < url_start)) {
+                url_start = found;
+                prefix = prefixes[i];
+              }
+            }
+
+            if (!url_start) {
+              break;
+            }
+
+            // Find end of URL (whitespace, newline, or common punctuation)
+            const char *url_end = url_start;
+            while (*url_end && !g_ascii_isspace(*url_end) &&
+                   *url_end != '"' && *url_end != '\'' && *url_end != '<' &&
+                   *url_end != '>' && *url_end != ')' && *url_end != ']') {
+              url_end++;
+            }
+
+            // Extract URL
+            size_t url_len = url_end - url_start;
+            if (url_len > 0 && url_len < 2048) {
+              char *url = g_strndup(url_start, url_len);
+
+              // Add http:// prefix for www. URLs
+              char *full_url = url;
+              if (strcmp(prefix, "www.") == 0) {
+                full_url = g_strdup_printf("http://%s", url);
+                g_free(url);
+              }
+
+              gtk_show_uri(GTK_WINDOW(gtk_widget_get_root(data->drawing_area)),
+                           full_url, GDK_CURRENT_TIME);
+              opened_count++;
+
+              g_free(full_url);
+            }
+
+            p = url_end;
+          }
+        }
+      }
+
+      if (opened_count > 0) {
+        char message[64];
+        snprintf(message, sizeof(message), "Opened %d URL%s in browser",
+                 opened_count, opened_count == 1 ? "" : "s");
+        canvas_show_notification(data, message);
+      } else {
+        canvas_show_notification(data, "No URLs found in selected elements");
+      }
     }
     return;
   }
