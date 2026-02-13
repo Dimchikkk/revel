@@ -304,3 +304,64 @@ int connection_pick_connection_point(Element *element, int x, int y) {
   return -1;
 }
 
+// Helper function to calculate distance from a point to a line segment
+static double point_to_segment_distance(double px, double py,
+                                         double x1, double y1,
+                                         double x2, double y2) {
+  double dx = x2 - x1;
+  double dy = y2 - y1;
+  double len_sq = dx * dx + dy * dy;
+
+  if (len_sq < 1e-10) {
+    // Degenerate segment - just measure to the point
+    dx = px - x1;
+    dy = py - y1;
+    return sqrt(dx * dx + dy * dy);
+  }
+
+  // Project point onto line segment
+  double t = ((px - x1) * dx + (py - y1) * dy) / len_sq;
+  t = fmax(0.0, fmin(1.0, t));  // Clamp to [0, 1]
+
+  // Find closest point on segment
+  double closest_x = x1 + t * dx;
+  double closest_y = y1 + t * dy;
+
+  // Calculate distance
+  dx = px - closest_x;
+  dy = py - closest_y;
+  return sqrt(dx * dx + dy * dy);
+}
+
+// Check if a point is close to the connection
+gboolean connection_contains_point(Element *element, int x, int y, double threshold) {
+  Connection *conn = (Connection*)element;
+
+  if (!conn->from || !conn->to) return FALSE;
+
+  int x1, y1, x2, y2;
+  element_get_connection_point(conn->from, conn->from_point, &x1, &y1);
+  element_get_connection_point(conn->to, conn->to_point, &x2, &y2);
+
+  double distance;
+
+  if (conn->connection_type == CONNECTION_TYPE_STRAIGHT) {
+    // For straight arrows, check distance to the single line segment
+    distance = point_to_segment_distance(x, y, x1, y1, x2, y2);
+  } else {
+    // For parallel arrows, check distance to all three segments
+    Vec2 start = {x1, y1};
+    Vec2 end = {x2, y2};
+    Vec2 mid1, mid2;
+    connection_parallel_arrow_mid(start, end, conn->from_point, conn->to_point, &mid1, &mid2);
+
+    double dist1 = point_to_segment_distance(x, y, start.x, start.y, mid1.x, mid1.y);
+    double dist2 = point_to_segment_distance(x, y, mid1.x, mid1.y, mid2.x, mid2.y);
+    double dist3 = point_to_segment_distance(x, y, mid2.x, mid2.y, end.x, end.y);
+
+    distance = fmin(fmin(dist1, dist2), dist3);
+  }
+
+  return distance <= threshold;
+}
+

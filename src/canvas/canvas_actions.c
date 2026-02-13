@@ -742,6 +742,10 @@ void canvas_update_toolbar_colors_from_selection(CanvasData *data) {
     return; // Only sync for single selection
   }
 
+  if (!data->text_color_button || !data->stroke_color_button || !data->drawing_color_button) {
+    return;
+  }
+
   Element *el = (Element*)data->selected_elements->data;
 
   // Update drawing color only for freehand drawings

@@ -1956,6 +1956,148 @@ static void shape_get_connection_point(Element *element, int point, int *cx, int
   }
 }
 
+// Helper function to calculate distance from a point to a line segment
+static double point_to_segment_distance_shape(double px, double py,
+                                                double x1, double y1,
+                                                double x2, double y2) {
+  double dx = x2 - x1;
+  double dy = y2 - y1;
+  double len_sq = dx * dx + dy * dy;
+
+  if (len_sq < 1e-10) {
+    dx = px - x1;
+    dy = py - y1;
+    return sqrt(dx * dx + dy * dy);
+  }
+
+  double t = ((px - x1) * dx + (py - y1) * dy) / len_sq;
+  t = fmax(0.0, fmin(1.0, t));
+
+  double closest_x = x1 + t * dx;
+  double closest_y = y1 + t * dy;
+
+  dx = px - closest_x;
+  dy = py - closest_y;
+  return sqrt(dx * dx + dy * dy);
+}
+
+// Helper to approximate distance to bezier curve by sampling
+static double point_to_bezier_distance(double px, double py,
+                                        double p0_x, double p0_y,
+                                        double p1_x, double p1_y,
+                                        double p2_x, double p2_y,
+                                        double p3_x, double p3_y) {
+  double min_dist = INFINITY;
+  const int samples = 20;  // Number of line segments to approximate curve
+
+  double prev_x = p0_x;
+  double prev_y = p0_y;
+
+  for (int i = 1; i <= samples; i++) {
+    double t = (double)i / samples;
+    double t1 = 1.0 - t;
+
+    // Cubic bezier formula
+    double curr_x = t1*t1*t1*p0_x + 3*t1*t1*t*p1_x + 3*t1*t*t*p2_x + t*t*t*p3_x;
+    double curr_y = t1*t1*t1*p0_y + 3*t1*t1*t*p1_y + 3*t1*t*t*p2_y + t*t*t*p3_y;
+
+    double dist = point_to_segment_distance_shape(px, py, prev_x, prev_y, curr_x, curr_y);
+    min_dist = fmin(min_dist, dist);
+
+    prev_x = curr_x;
+    prev_y = curr_y;
+  }
+
+  return min_dist;
+}
+
+// Helper to check if shape is line-based
+gboolean shape_is_line_based(Element *element) {
+  if (!element || element->type != ELEMENT_SHAPE) return FALSE;
+
+  Shape *shape = (Shape*)element;
+  return (shape->shape_type == SHAPE_LINE ||
+          shape->shape_type == SHAPE_ARROW ||
+          shape->shape_type == SHAPE_BEZIER ||
+          shape->shape_type == SHAPE_CURVED_ARROW);
+}
+
+// Check if a point is close to line-based shapes
+gboolean shape_contains_point(Element *element, int x, int y, double threshold) {
+  Shape *shape = (Shape*)element;
+
+  // Only apply special hit detection for line-based shapes
+  if (shape->shape_type != SHAPE_LINE &&
+      shape->shape_type != SHAPE_ARROW &&
+      shape->shape_type != SHAPE_BEZIER &&
+      shape->shape_type != SHAPE_CURVED_ARROW) {
+    return FALSE;  // Use normal bounding box hit detection
+  }
+
+  // Handle rotation - transform click point to unrotated space
+  double rotated_x = x;
+  double rotated_y = y;
+  if (element->rotation_degrees != 0.0) {
+    double center_x = element->x + element->width / 2.0;
+    double center_y = element->y + element->height / 2.0;
+    double dx = x - center_x;
+    double dy = y - center_y;
+    double angle_rad = -element->rotation_degrees * M_PI / 180.0;
+    rotated_x = center_x + dx * cos(angle_rad) - dy * sin(angle_rad);
+    rotated_y = center_y + dx * sin(angle_rad) + dy * cos(angle_rad);
+  }
+
+  double distance;
+
+  if (shape->shape_type == SHAPE_LINE || shape->shape_type == SHAPE_ARROW) {
+    // Line and arrow shapes
+    double start_u = shape->has_line_points ? shape->line_start_u : 0.0;
+    double start_v = shape->has_line_points ? shape->line_start_v : 0.0;
+    double end_u = shape->has_line_points ? shape->line_end_u : 1.0;
+    double end_v = shape->has_line_points ? shape->line_end_v : 1.0;
+
+    double start_x = element->x + start_u * element->width;
+    double start_y = element->y + start_v * element->height;
+    double end_x = element->x + end_u * element->width;
+    double end_y = element->y + end_v * element->height;
+
+    distance = point_to_segment_distance_shape(rotated_x, rotated_y, start_x, start_y, end_x, end_y);
+  } else {
+    // Bezier and curved arrow shapes
+    double p0_u = shape->has_bezier_points ? shape->bezier_p0_u : 0.0;
+    double p0_v = shape->has_bezier_points ? shape->bezier_p0_v : 0.5;
+    double p1_u = shape->has_bezier_points ? shape->bezier_p1_u : 0.33;
+    double p1_v = shape->has_bezier_points ? shape->bezier_p1_v : 0.0;
+    double p2_u = shape->has_bezier_points ? shape->bezier_p2_u : 0.67;
+    double p2_v = shape->has_bezier_points ? shape->bezier_p2_v : 1.0;
+    double p3_u = shape->has_bezier_points ? shape->bezier_p3_u : 1.0;
+    double p3_v = shape->has_bezier_points ? shape->bezier_p3_v : 0.5;
+
+    if (shape->shape_type == SHAPE_CURVED_ARROW && !shape->has_bezier_points) {
+      // Default for curved arrow if points not set
+      p0_u = 0.0; p0_v = 1.0;
+      p1_u = 0.25; p1_v = 0.5;
+      p2_u = 0.75; p2_v = 0.5;
+      p3_u = 1.0; p3_v = 0.0;
+    }
+
+    double p0_x = element->x + p0_u * element->width;
+    double p0_y = element->y + p0_v * element->height;
+    double p1_x = element->x + p1_u * element->width;
+    double p1_y = element->y + p1_v * element->height;
+    double p2_x = element->x + p2_u * element->width;
+    double p2_y = element->y + p2_v * element->height;
+    double p3_x = element->x + p3_u * element->width;
+    double p3_y = element->y + p3_v * element->height;
+
+    distance = point_to_bezier_distance(rotated_x, rotated_y,
+                                        p0_x, p0_y, p1_x, p1_y,
+                                        p2_x, p2_y, p3_x, p3_y);
+  }
+
+  return distance <= threshold;
+}
+
 static void shape_draw(Element *element, cairo_t *cr, gboolean is_selected) {
   Shape *shape = (Shape*)element;
 

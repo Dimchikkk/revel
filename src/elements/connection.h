@@ -58,5 +58,6 @@ void connection_determine_optimal_points(ConnectionRect from_rect,
                                          int *from_point,
                                          int *to_point);
 void connection_update_bounds(Element *element);
+gboolean connection_contains_point(Element *element, int x, int y, double threshold);
 
 #endif

@@ -94,4 +94,7 @@ void shape_render_text_outline_sample(cairo_t *cr,
                                       double stroke_b,
                                       double stroke_a);
 
+gboolean shape_is_line_based(Element *element);
+gboolean shape_contains_point(Element *element, int x, int y, double threshold);
+
 #endif

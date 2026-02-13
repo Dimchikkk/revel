@@ -320,7 +320,22 @@ static Element* canvas_pick_element_internal(CanvasData *data, int x, int y, gbo
 
     gboolean inside = FALSE;
 
-    if (element->type == ELEMENT_MEDIA_FILE) {
+    if (element->type == ELEMENT_CONNECTION) {
+      // For connections/arrows, use precise line-based hit detection instead of bounding box
+      inside = connection_contains_point(element, x, y, 8.0);  // 8 pixel threshold
+    } else if (element->type == ELEMENT_SHAPE) {
+      // Check if it's a line-based shape
+      if (shape_is_line_based(element)) {
+        // For line-based shapes, ONLY use precise hit detection (no bounding box fallback)
+        inside = shape_contains_point(element, x, y, 8.0);
+      } else {
+        // For other shapes (circle, rectangle, etc.), use normal bounding box check
+        if (rotated_x >= element->x && rotated_x <= element->x + element->width &&
+            rotated_y >= element->y && rotated_y <= element->y + element->height) {
+          inside = TRUE;
+        }
+      }
+    } else if (element->type == ELEMENT_MEDIA_FILE) {
       MediaNote *media_note = (MediaNote*)element;
       int bounds_x, bounds_y, bounds_w, bounds_h;
       media_note_get_visible_bounds(media_note, &bounds_x, &bounds_y, &bounds_w, &bounds_h);
